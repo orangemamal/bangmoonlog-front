@@ -1,5 +1,5 @@
 {
-  "buildCommand": "yarn build:web",
+  "buildCommand": "npm install && npm run build:web",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
