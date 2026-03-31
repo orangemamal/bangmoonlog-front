@@ -9,20 +9,26 @@
     <meta name="referrer" content="unsafe-url" />
     <title>Weekly ToDo React</title>
     <script>
-      // 1. 전역 플래그 설정
-      window.isAit = true;
-      window.__IS_AIT_WDS = true;
+      (function() {
+        console.log("🚀 Toss Mock Script Loading...");
+        window.isAit = true;
+        window.__IS_AIT_WDS = true;
 
-      // 2. User Agent에 "Toss" 강제 삽입 (라이브러리 체크 우회)
-      Object.defineProperty(navigator, 'userAgent', {
-        get: function () { return "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 Toss/5.32.0 AIT/1.0.0"; },
-        configurable: true
-      });
+        try {
+          Object.defineProperty(navigator, 'userAgent', {
+            get: function () { return "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 Toss/5.32.0 AIT/1.0.0"; },
+            configurable: true
+          });
+          console.log("✅ UserAgent Mocked");
+        } catch (e) {
+          console.warn("⚠️ UserAgent Mocking Failed (Normal in some browsers):", e);
+        }
 
-      // 3. ReactNativeWebView 객체 미리 생성
-      window.ReactNativeWebView = {
-        postMessage: function(msg) { console.log("Mocked Tag PostMessage:", msg); }
-      };
+        window.ReactNativeWebView = {
+          postMessage: function(msg) { console.log("📲 Mocked WebView Message:", msg); }
+        };
+        console.log("✨ Toss Mock Script Ready!");
+      })();
     </script>
   </head>
   <body>
