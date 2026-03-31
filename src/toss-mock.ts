@@ -1,5 +1,10 @@
 export function setupTossMock() {
   if (typeof window === 'undefined') return;
+  
+  // 강력한 우회용 플래그
+  (window as any).isAit = true;
+  (window as any).__IS_AIT_WDS = true;
+
   if ((window as any).ReactNativeWebView) return; // 이미 모바일 환경이면 무시
 
   const listeners: Record<string, Function[]> = {};
