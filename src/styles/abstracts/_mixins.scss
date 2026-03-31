@@ -1,0 +1,40 @@
+// ============================================================
+// abstracts/_mixins.scss
+// 재사용 SCSS 믹스인
+// ============================================================
+
+// 텍스트 라인 클램프
+@mixin line-clamp($lines) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// 카드 그림자
+@mixin card-shadow($opacity: 0.04) {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, $opacity);
+}
+
+// 플렉스 센터
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+// 아이콘 컨테이너
+@mixin icon-box($size, $bg, $radius: 50%) {
+  width: $size;
+  height: $size;
+  background-color: $bg;
+  border-radius: $radius;
+  @include flex-center;
+  flex-shrink: 0;
+}

@@ -1,0 +1,55 @@
+// ============================================================
+// base/_reset.scss
+// CSS 리셋 & html/body 기본값
+// ============================================================
+
+// 토스 TDS 컬러 토큰 (CSS 파일이므로 @import 사용 - @use 불가)
+@import '@toss/tds-colors/colors.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-family);
+  color: var(--color-text-main);
+  background-color: var(--color-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6, p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+// 폼 요소는 브라우저 기본값으로 font-family를 상속하지 않음 → 명시 필요
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+#root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}

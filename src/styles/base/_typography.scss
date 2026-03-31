@@ -1,0 +1,31 @@
+// ============================================================
+// base/_typography.scss
+// 공통 타이포그래피 클래스
+// ============================================================
+
+.text-title {
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-title);
+  color: var(--color-text-main);
+}
+
+.text-body {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-body);
+  color: var(--color-text-main);
+}
+
+.text-caption {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-caption);
+  color: var(--color-text-caption);
+}
+
+.text-sub {
+  font-size: var(--font-size-body);
+  color: var(--color-text-sub);
+}
+
+.keep-all {
+  word-break: keep-all;
+}

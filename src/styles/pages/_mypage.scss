@@ -1,0 +1,204 @@
+// ============================================================
+// pages/_mypage.scss
+// 내 정보 페이지
+// ============================================================
+@use '../abstracts/mixins' as *;
+
+.mypage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg);
+  overflow-y: auto;
+
+  // 비로그인 상태
+  &--guest {
+    background-color: var(--color-surface);
+  }
+
+  // 로그인 유도 화면
+  &__login-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background-color: var(--color-surface);
+    padding: 0 var(--padding-h);
+    text-align: center;
+    box-sizing: border-box;
+
+    &-icon {
+      width: 80px;
+      height: 80px;
+      background-color: var(--color-bg);
+      border-radius: 50%;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h2 {
+      font-size: var(--font-size-title);
+      font-weight: var(--font-weight-title);
+      color: var(--color-text-main);
+      margin: 0 0 8px;
+      line-height: 1.4;
+    }
+
+    p {
+      font-size: var(--font-size-body);
+      color: var(--color-text-caption);
+      margin-bottom: 32px;
+      line-height: 1.5;
+      word-break: keep-all;
+    }
+  }
+
+  &__login-btn {
+    width: 100%;
+    background-color: var(--color-primary);
+    color: white;
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(49, 130, 246, 0.3);
+    transition: transform 0.1s;
+    font-family: var(--font-family);
+
+    &:active { transform: scale(0.98); }
+  }
+
+  // 프로필 섹션
+  &__profile {
+    background-color: var(--color-surface);
+    padding: 40px 24px 24px;
+    border-bottom-left-radius: var(--radius-xl);
+    border-bottom-right-radius: var(--radius-xl);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+  }
+
+  &__profile-row {
+    @include flex-between;
+    margin-bottom: 24px;
+  }
+
+  &__profile-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  &__avatar {
+    @include icon-box(64px, #E8F3FF);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  &__name {
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-title);
+    color: var(--color-text-main);
+  }
+
+  &__email {
+    font-size: 13px;
+    color: var(--color-text-disabled);
+    margin-top: 4px;
+  }
+
+  &__edit-btn {
+    padding: 6px 12px;
+    background-color: var(--color-bg);
+    color: var(--color-text-sub);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+  }
+
+  // 스탯
+  &__stats {
+    display: flex;
+    gap: 12px;
+  }
+
+  &__stat-card {
+    flex: 1;
+    background-color: #F9FAFB;
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__stat-icon {
+    @include icon-box(40px, var(--color-primary-dim));
+  }
+
+  &__stat-label {
+    font-size: 12px;
+    color: var(--color-text-caption);
+    margin-bottom: 2px;
+  }
+
+  &__stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text-main);
+  }
+
+  // 메뉴
+  &__menu-section {
+    flex: 1;
+    margin-top: 12px;
+    background-color: var(--color-surface);
+    padding: 24px 24px 0;
+  }
+
+  &__menu-heading {
+    font-size: var(--font-size-body);
+    font-weight: 700;
+    color: var(--color-text-main);
+    margin-bottom: 8px;
+    padding: 0 8px;
+  }
+
+  &__menu-item {
+    @include flex-between;
+    width: 100%;
+    padding: 16px 8px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background-color 0.15s;
+    font-family: var(--font-family);
+
+    &:hover { background-color: #F9FAFB; }
+
+    &-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    &-label {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--color-text-sub);
+    }
+
+    &-chevron { color: var(--color-border); }
+  }
+
+  &__spacer { height: 16px; }
+}

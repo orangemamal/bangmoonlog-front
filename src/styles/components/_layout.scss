@@ -1,0 +1,88 @@
+// ============================================================
+// components/_layout.scss
+// 앱 레이아웃 & 바텀 내비게이션
+// ============================================================
+@use '../abstracts/mixins' as *;
+
+// 앱 전체 래퍼 (Layout.tsx)
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+  background-color: var(--color-bg);
+  color: var(--color-text-main);
+  font-family: var(--font-family);
+  position: relative;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  width: 100%;
+
+  &.has-bottom-nav {
+    padding-bottom: var(--bottom-nav-height);
+  }
+}
+
+// 바텀 내비게이션
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  height: var(--bottom-nav-height);
+  background-color: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 8px;
+  z-index: 50;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+// 내비게이션 아이템
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 64px;
+  height: 100%;
+  position: relative;
+  text-decoration: none;
+  color: var(--color-text-caption);
+  transition: color 0.15s ease;
+
+  &.active {
+    color: var(--color-primary);
+  }
+
+  &__icon {
+    position: relative;
+    display: flex;
+  }
+
+  &__label {
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  &__badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    background-color: var(--color-danger);
+    border-radius: 50%;
+    border: 2px solid white;
+    display: block;
+  }
+}

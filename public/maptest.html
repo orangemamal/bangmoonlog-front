@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Naver Map Test</title>
+    <!-- React, Rsbuild 영향을 완전히 배제한 순수 HTML + JS 통신 테스트 -->
+    <script type="text/javascript"
+        src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dj5vfj5th7&submodules=geocoder"></script>
+</head>
+
+<body>
+    <h1>Naver Maps Pure HTML Test</h1>
+    <div id="map" style="width: 100%; height: 400px; background-color: #EEE;"></div>
+    <script>
+        window.onload = function () {
+            if (window.naver && window.naver.maps) {
+                var map = new naver.maps.Map('map', {
+                    center: new naver.maps.LatLng(37.3595704, 127.105399),
+                    zoom: 10
+                });
+                console.log("NAVER MAPS SUCCESS!!");
+            } else {
+                console.error("NAVER MAPS FAILED TO LOAD OBJECT.");
+            }
+        }
+    </script>
+</body>
+
+</html>
