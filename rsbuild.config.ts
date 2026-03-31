@@ -14,5 +14,8 @@ export default defineConfig({
     entry: {
       index: './src/index.tsx',
     },
+    alias: {
+      '@toss/tds-mobile': './mock-tds.js',
+    },
   },
 });
