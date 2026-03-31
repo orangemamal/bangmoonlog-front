@@ -18,7 +18,11 @@
         window.__GRANITE_BRIDGE_STATUS = 'ready';
         window.__GRANITE_VERSION = '1.0.0';
 
-        // 2. 환경 변수 강제 조작 (이게 핵심일 확률 높음!)
+        // 2. React Refresh 에러 방지용 (Development 빌드 부작용 제거)
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+
+        // 3. 환경 변수 강제 조작
         window.process = { 
           env: { NODE_ENV: 'development' },
           version: 'v18.0.0',
