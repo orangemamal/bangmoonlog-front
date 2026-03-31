@@ -1,5 +1,5 @@
 {
-  "buildCommand": "yarn build:web",
+  "buildCommand": "corepack enable && yarn build:web",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
