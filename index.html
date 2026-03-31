@@ -10,30 +10,36 @@
     <title>Weekly ToDo React</title>
     <script>
       (function() {
-        console.log("🚀 Toss Mock Script Loading...");
+        console.log("🚀 Toss Mock Script Loading (Mega-Fix)...");
+        
+        // 1. 전역 플래그
         window.isAit = true;
         window.__IS_AIT_WDS = true;
+        window.__GRANITE_BRIDGE_STATUS = 'ready';
+        window.__GRANITE_VERSION = '1.0.0';
+
+        // 2. 환경 변수 강제 조작 (이게 핵심일 확률 높음!)
+        window.process = { 
+          env: { NODE_ENV: 'development' },
+          version: 'v18.0.0',
+          platform: 'win32'
+        };
 
         try {
-          // AIT 시뮬레이터 상태 강제 주입
-          window.__GRANITE_BRIDGE_STATUS = 'ready';
-          window.__GRANITE_VERSION = '1.0.0';
-          window.isAit = true;
-          window.__IS_AIT_WDS = true;
-
+          // 3. User Agent 조작
           Object.defineProperty(navigator, 'userAgent', {
             get: function () { return "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 Toss/5.32.0 AIT/1.0.0"; },
             configurable: true
           });
-          console.log("✅ UserAgent Mocked");
+          console.log("✅ UserAgent Mocked (Total)");
         } catch (e) {
-          console.warn("⚠️ UserAgent Mocking Failed (Normal in some browsers):", e);
+          console.warn("⚠️ UserAgent Mocking Failed:", e);
         }
 
         window.ReactNativeWebView = {
           postMessage: function(msg) { console.log("📲 Mocked WebView Message:", msg); }
         };
-        console.log("✨ Toss Mock Script Ready!");
+        console.log("✨ Mega-Mock Ready!");
       })();
     </script>
   </head>
