@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
-import { getPlatformOS } from '@apps-in-toss/web-framework';
 
 export function DeviceViewport() {
-  const isIOS = getPlatformOS() === 'ios';
+  const isIOS = false; // Vercel 배포 시에는 web으로 고정하여 TDS 에러 방지
 
   useEffect(() => {
     const styles = {
