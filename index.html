@@ -15,6 +15,12 @@
         window.__IS_AIT_WDS = true;
 
         try {
+          // AIT 시뮬레이터 상태 강제 주입
+          window.__GRANITE_BRIDGE_STATUS = 'ready';
+          window.__GRANITE_VERSION = '1.0.0';
+          window.isAit = true;
+          window.__IS_AIT_WDS = true;
+
           Object.defineProperty(navigator, 'userAgent', {
             get: function () { return "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 Toss/5.32.0 AIT/1.0.0"; },
             configurable: true
