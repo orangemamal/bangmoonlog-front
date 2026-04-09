@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Camera, Star, CheckCircle2, Heart, Eye, MapPin, MoreVertical, ArrowLeft, MessageSquare, Plus, Search } from "lucide-react";
+import DaumPostcodeEmbed from "react-daum-postcode";
 // TDS 제외
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db } from '../services/firebase';

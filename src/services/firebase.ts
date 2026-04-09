@@ -15,6 +15,10 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
+if (!firebaseConfig.projectId) {
+  console.error("❌ Firebase Project ID is missing. Please set environment variables in Vercel Dashboard (Project Settings > Environment Variables).");
+}
+
 const app = initializeApp(firebaseConfig);
 const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 const db = getFirestore(app);
