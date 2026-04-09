@@ -23,6 +23,10 @@
           isAit: true,
           ready: function(cb) { cb && cb(); }
         };
+
+        // React Refresh Mock (개발 모드 빌드 대응)
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
         
         console.log("🚀 Toss Inline Mock Active");
       } catch (e) {

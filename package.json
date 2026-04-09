@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:web": "rsbuild dev",
-    "build:web": "rsbuild build --mode development",
+    "build:web": "rsbuild build --mode production",
     "dev": "granite dev",
     "build": "granite build",
     "preview": "rsbuild preview",
