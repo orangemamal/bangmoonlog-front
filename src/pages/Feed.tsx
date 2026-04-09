@@ -1,9 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Heart, Eye, MapPin, MoreVertical, ArrowLeft, ChevronRight, MessageSquare, Star } from "lucide-react";
+import { db } from "../services/firebase";
+import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
+import { useAccessControl } from "../hooks/useAccessControl";
 
 interface Post {
-  id: number;
+  id: string;
   type: "hot" | "local";
   tag: string;
   tagBg: string;
@@ -24,49 +27,56 @@ export function Feed() {
   const addressParam = searchParams.get("address");
   const [activeTab, setActiveTab] = useState<"hot" | "local">("hot");
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { canRead, incrementReadCount, watchAd, isAdShowing } = useAccessControl();
 
-  const mockData: Post[] = useMemo(() => [
-    {
-      id: 1, type: "hot", tag: "#빌런집주인", tagBg: "#FFF0F0", tagColor: "#E84040",
-      date: "2026.03.30", location: "광진구 자양동", author: "자양동요정",
-      content: "진짜 역대급 빌런 집주인 만났습니다. 보일러 고장난 거 3주째 안 고쳐주고, 월세만 꼬박꼬박 받아가네요. 겨울인데 너무 추워서 매일 밤 전기장판에만 의지하고 있습니다. 절대 이 건물 오지 마세요.",
-      image: "https://images.unsplash.com/photo-1566699270403-3f7e3f340664?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400&q=80",
-      likes: 124, views: 3400,
-      ratings: { light: 1, noise: 2, water: 4 }
-    },
-    {
-      id: 2, type: "hot", tag: "#인테리어자랑", tagBg: "#E8F3FF", tagColor: "#3182F6",
-      date: "2026.03.28", location: "성동구 성수동 45-2", author: "성수러버",
-      content: "성수동 옥탑방 리모델링 후기입니다! 처음엔 진짜 폐가 수준이었는데, 바닥 공사하고 벽지 뜯어내고 화이트 톤으로 다 맞추니까 환골탈태했어요. 채광이 너무 좋아서 낮에는 불 안 켜도 환해요. 근처 카페거리도 가깝고 위치가 사기입니다.",
-      image: "https://images.unsplash.com/photo-1600592858560-9fef0f602f40?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400&q=80",
-      likes: 89, views: 1205,
-      ratings: { light: 5, noise: 4, water: 5 }
-    },
-    {
-      id: 3, type: "local", tag: "#수압체크필수", tagBg: "#F3F4F6", tagColor: "#6B7684",
-      date: "2026.03.29", location: "강남구 역삼동", author: "퇴근하고싶다",
-      content: "역삼동 오피스텔인데, 수압이 정말 약해요. 샤워기 물줄기가 너무 가늘어서 머리 감는데 한참 걸립니다. ㅠㅠ 입주하실 분들은 수압 꼭 확인하고 계약하세요.",
-      image: "https://images.unsplash.com/photo-1512845296467-183ccf124347?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400&q=80",
-      likes: 45, views: 670,
-      ratings: { light: 3, noise: 3, water: 1 }
-    },
-    {
-      id: 4, type: "local", tag: "#방음맛집", tagBg: "#E6F8F3", tagColor: "#00A968",
-      date: "2026.03.27", location: "마포구 서교동", author: "힙한거시름",
-      content: "여기 방음 진짜 잘돼요. 옆집에서 뭘 하는지 하나도 안 들림. 층간소음도 없고 완전 쾌적하게 살고 있습니다. 홍대 근처인데도 조용해서 너무 좋아요!",
-      image: "https://images.unsplash.com/photo-1563261515-5bfbfe4b0173?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400&q=80",
-      likes: 12, views: 300,
-      ratings: { light: 4, noise: 5, water: 4 }
-    },
-  ], []);
+  useEffect(() => {
+    const fetchPosts = async () => {
+      setIsLoading(true);
+      try {
+        let q = query(collection(db, "reviews"), orderBy("createdAt", "desc"));
+        
+        // 주소 파라미터가 있는 경우 필터링
+        if (addressParam) {
+          q = query(collection(db, "reviews"), where("address", "==", addressParam), orderBy("createdAt", "desc"));
+        }
+
+        const snap = await getDocs(q);
+        const list: Post[] = [];
+        snap.forEach(doc => {
+          const data = doc.data();
+          list.push({
+            id: doc.id,
+            type: data.likes > 50 ? "hot" : "local",
+            tag: data.tags?.[0] || "#채광맛집",
+            tagBg: data.likes > 50 ? "#FFF0F0" : "#E8F3FF",
+            tagColor: data.likes > 50 ? "#E84040" : "#3182F6",
+            date: data.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(data.createdAt.toDate()) : "2026.04.09",
+            location: data.address,
+            content: data.content,
+            image: data.images?.[0] || "https://images.unsplash.com/photo-1600592858560-9fef0f602f40?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400&q=80",
+            likes: data.likes || 0,
+            views: data.views || 0,
+            ratings: data.ratings,
+            author: data.author || "익명 방문자"
+          });
+        });
+        setPosts(list);
+      } catch (e) {
+        console.error("Feed fetch error:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPosts();
+  }, [addressParam]);
 
   const filteredData = useMemo(() => {
-    if (addressParam) {
-      // 주소가 있는 경우 해당 주소와 유사한 위치 데이터만 필터링 (데모용)
-      return mockData.filter(p => addressParam.includes(p.location) || p.location.includes(addressParam) || p.id === 2);
-    }
-    return activeTab === "hot" ? mockData : mockData.filter(p => p.type === "local");
-  }, [activeTab, addressParam, mockData]);
+    if (addressParam) return posts;
+    return activeTab === "hot" ? posts.filter(p => p.type === "hot" || p.likes > 20) : posts;
+  }, [activeTab, posts, addressParam]);
 
   return (
     <div className={`feed ${selectedPost ? "feed--detail-active" : ""}`}>
@@ -187,9 +197,22 @@ export function Feed() {
 
       {/* 피드 리스트 */}
       <div className="feed__list">
-        {filteredData.length > 0 ? (
+        {isLoading ? (
+          <div className="loading-state">방문록을 불러오는 중...</div>
+        ) : filteredData.length > 0 ? (
           filteredData.map(post => (
-            <div key={post.id} className="feed__card" onClick={() => setSelectedPost(post)}>
+            <div key={post.id} className="feed__card" onClick={async () => {
+              if (!canRead) {
+                if (confirm("더 많은 방문록을 읽으려면 간단한 광고 시청이 필요합니다. 보시겠습니까?")) {
+                  await watchAd();
+                  setSelectedPost(post);
+                  incrementReadCount();
+                }
+              } else {
+                setSelectedPost(post);
+                incrementReadCount();
+              }
+            }}>
               <div className="feed__card-header">
                 <div className="feed__card-meta">
                   <span
@@ -239,6 +262,15 @@ export function Feed() {
           </div>
         )}
       </div>
+      {/* 광고 오버레이 */}
+      {isAdShowing && (
+        <div className="ad-overlay">
+          <div className="ad-content">
+            <div className="ad-timer">광고 시청 중... (2초)</div>
+            <div className="ad-placeholder">🏢 깨끗한 방 찾을 땐? 방문LOG</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
