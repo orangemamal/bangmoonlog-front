@@ -3,15 +3,14 @@ import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// Your web app's Firebase configuration
 // Your web app's Firebase configuration (Hardcoded for easy deployment)
 const firebaseConfig = {
-  apiKey: "AIzaSyCStgKsQCStgKsQCStgKsQCStgKsQC",
-  authDomain: "bangmoonlog-front.firebaseapp.com",
-  projectId: "bangmoonlog-front",
-  storageBucket: "bangmoonlog-front.firebasestorage.app",
-  messagingSenderId: "483483483483",
-  appId: "1:483483483483:web:786786786786",
+  apiKey: "AIzaSyCStgKsQCZb8kJucanxCF0aanKZkM13HpE",
+  authDomain: "bangmoonlog-bdf9a.firebaseapp.com",
+  projectId: "bangmoonlog-bdf9a",
+  storageBucket: "bangmoonlog-bdf9a.firebasestorage.app",
+  messagingSenderId: "710804951424",
+  appId: "1:710804951424:web:eb09a6f70908b501c5f165",
   measurementId: "G-XNJX23Y2MP",
 };
 
