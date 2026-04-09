@@ -1,11 +1,32 @@
 export function setupTossMock() {
   if (typeof window === 'undefined') return;
   
-  // 강력한 우회용 플래그
+  // 1. 강력한 우회용 플래그
   (window as any).isAit = true;
   (window as any).__IS_AIT_WDS = true;
 
-  if ((window as any).ReactNativeWebView) return; // 이미 모바일 환경이면 무시
+  // 2. UserAgent 스푸핑 (가장 중요: @toss/tds-mobile 체크 우회)
+  const originalUserAgent = navigator.userAgent;
+  const mockUserAgent = `${originalUserAgent} Toss TossMobileAit`;
+  
+  try {
+    Object.defineProperty(navigator, 'userAgent', {
+      get: () => mockUserAgent,
+      configurable: true
+    });
+  } catch (e) {
+    console.warn('UA spoofing failed, attempting alternative...');
+  }
+
+  // 3. Toss Bridge Mock
+  if (!(window as any).Toss) {
+    (window as any).Toss = {
+      isAit: true,
+      ready: (cb: any) => cb && cb(),
+    };
+  }
+
+  if ((window as any).ReactNativeWebView) return;
 
   const listeners: Record<string, Function[]> = {};
 
@@ -49,7 +70,6 @@ export function setupTossMock() {
               localStorage.setItem(args[0], args[1]);
               emit(`${functionName}/resolve/${eventId}`, null);
             } else {
-              // haptic 등 다른 bridge method 들에 대해서 문제없이 resolve 처리
               emit(`${functionName}/resolve/${eventId}`, null);
             }
           }, 0);
@@ -59,4 +79,6 @@ export function setupTossMock() {
       }
     },
   };
+
+  console.log("🚀 Toss Environment Mocked (UA: " + navigator.userAgent + ")");
 }

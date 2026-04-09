@@ -14,8 +14,8 @@
 @use 'base/typography';
 
 // 3. 컴포넌트
-@use 'components/layout';
-@use 'components/bottom-sheet';
+@use 'components/common/layout';
+@use 'components/common/bottom-sheet';
 
 // 4. 페이지
 @use 'pages/home';

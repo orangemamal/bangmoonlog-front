@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DeviceViewport } from './utils/DeviceViewport';
 import { TDSMobileAITProvider } from '@toss/tds-mobile-ait';
-import { Layout } from './components/Layout';
+import { Layout } from './components/common/Layout';
 import { Home } from './pages/Home';
 import { Feed } from './pages/Feed';
 import { Notifications } from './pages/Notifications';

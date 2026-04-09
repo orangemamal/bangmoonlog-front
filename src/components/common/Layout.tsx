@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { Map, List, Bell, User } from "lucide-react";
+import { HouseHeart, BookMarked, BellRing, SquareUserRound } from "lucide-react";
 
 export function Layout() {
   const location = useLocation();
@@ -12,10 +12,10 @@ export function Layout() {
       </main>
 
       <nav className="bottom-nav">
-        <NavItem to="/"             icon={<Map  size={24} />} label="홈" />
-        <NavItem to="/feed"         icon={<List size={24} />} label="방문록" />
-        <NavItem to="/notifications" icon={<Bell size={24} />} label="알림" hasUnread />
-        <NavItem to="/mypage"       icon={<User size={24} />} label="내 정보" />
+        <NavItem to="/" icon={<HouseHeart size={24} />} label="홈" />
+        <NavItem to="/feed" icon={<BookMarked size={24} />} label="방문록" />
+        <NavItem to="/notifications" icon={<BellRing size={24} />} label="알림" hasUnread />
+        <NavItem to="/mypage" icon={<SquareUserRound size={24} />} label="내 정보" />
       </nav>
     </div>
   );

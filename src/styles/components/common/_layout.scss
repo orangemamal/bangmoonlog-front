@@ -2,7 +2,7 @@
 // components/_layout.scss
 // 앱 레이아웃 & 바텀 내비게이션
 // ============================================================
-@use '../abstracts/mixins' as *;
+@use '../../abstracts/mixins' as *;
 
 // 앱 전체 래퍼 (Layout.tsx)
 .app-layout {
@@ -70,7 +70,7 @@
   }
 
   &__label {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 500;
   }
 

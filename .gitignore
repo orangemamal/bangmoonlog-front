@@ -38,3 +38,10 @@ test.js
 
 # Design assets (large folder, not needed for deployment)
 Design System and App Flow/
+
+.vercel
+
+# Env and secrets
+.env
+.env.local
+.env.*.local
