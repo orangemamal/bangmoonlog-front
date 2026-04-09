@@ -18,14 +18,14 @@
   position: absolute;
   top: 20px;
   width: calc(100% - 48px);
+  height: 56px;
   max-width: 448px;
   background-color: #fff;
   border-radius: 9999px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  padding: 8px 24px 8px;
+  padding: 8px 8px 8px 24px;
   display: flex;
   align-items: center;
-  gap: 4px;
   z-index: 10;
   transition: box-shadow 0.3s;
 

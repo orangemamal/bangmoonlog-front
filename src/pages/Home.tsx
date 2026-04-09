@@ -64,10 +64,11 @@ export function Home() {
   const tags = ["#바퀴벌레지옥", "#채광맛집", "#집주인천사", "#수압짱", "#방음안됨", "#뷰맛집"];
 
   useEffect(() => {
-    window.__openReadList = async (address: string) => { 
-      setSelectedAddress(address); 
+    window.__openReadList = async (address: string) => {
+      setSelectedAddress(address);
       setReadListOpen(true);
-      
+      if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
+
       // 해당 주소의 리뷰 가져오기
       setIsLoadingReviews(true);
       try {
@@ -97,6 +98,13 @@ export function Home() {
       } finally {
         setIsLoadingReviews(false);
       }
+    };
+
+    window.__openWriteSheet = (address: string, lat?: number, lng?: number) => {
+      setSelectedAddress(address);
+      if (lat && lng) setSelectedCoord({ lat, lng });
+      setSheetOpen(true);
+      if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
     };
 
     const initializeMap = () => {
@@ -165,15 +173,7 @@ export function Home() {
           const snapshot = await getDocs(collection(db, "locations"));
           let data: any[] = [];
           snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-          
-          if (data.length === 0) {
-            // 초기 데이터가 아예 없는 경우에만 셋팅 (데모용)
-            data = [
-              { lat: 37.5385, lng: 127.0694, address: "서울특별시 광진구 아차산로30길 19-6 길린빌", rating: 4.5, count: 12 },
-              { lat: 37.5402, lng: 127.0685, address: "서울특별시 광진구 동일로18길 10 한영해시안아파트", rating: 3.8, count: 8 },
-              { lat: 37.5450, lng: 127.0700, address: "서울특별시 광진구 자양번영로1길 12", rating: 4.2, count: 5 }
-            ];
-          }
+
 
           const markers = data.map(loc => {
             const m: any = new window.naver.maps.Marker({
@@ -220,7 +220,7 @@ export function Home() {
                     </div>
                     <div class="iw-button-group">
                       <button class="iw-button iw-button--read" onclick="window.__openReadList('${loc.address}')">방문록 보기</button>
-                      <button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${loc.address}')">방문록 쓰기</button>
+                      <button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${loc.address}', ${loc.lat}, ${loc.lng})">방문록 쓰기</button>
                     </div>
                     <div class="iw-arrow"></div>
                   </div>
@@ -299,7 +299,7 @@ export function Home() {
                 <div class="iw-title">방문록 쓰기</div>
                 <div class="iw-address"><span>📍</span><span>${address}</span></div>
                 <div class="iw-button-group">
-                  <button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${address}')">방문록 쓰기</button>
+                  <button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${address}', ${clickedPos.lat()}, ${clickedPos.lng()})">방문록 쓰기</button>
                 </div>
                 <div class="iw-arrow"></div>
               </div>
@@ -340,7 +340,7 @@ export function Home() {
   };
   const handleSubmitReview = async () => {
     if (!selectedAddress || !selectedCoord) { alert("주소 정보가 없습니다."); return; }
-    
+
     // 토스 로그인 체크
     if (!isLoggedIn) {
       if (confirm("방문록을 작성하려면 토스 로그인이 필요합니다. 로그인하시겠습니까?")) {
@@ -355,7 +355,7 @@ export function Home() {
       const reviewData = {
         address: selectedAddress, lat: selectedCoord.lat, lng: selectedCoord.lng,
         content: comment, ratings, tags: selectedTags, images: selectedImages,
-        createdAt: serverTimestamp(), author: user?.name || "익명 방문자", 
+        createdAt: serverTimestamp(), author: user?.name || "익명 방문자",
         authorId: user?.id, likes: 0, views: 0
       };
       await addDoc(collection(db, "reviews"), reviewData);
@@ -385,12 +385,12 @@ export function Home() {
         });
       }
 
-      alert("방문록이 등록되었습니다!"); 
+      alert("방문록이 등록되었습니다!");
       setSheetOpen(false); setComment(""); setSelectedTags([]); setSelectedImages([]);
       // 마커 갱신을 위해 새로고침 또는 마커 다시 불러오기 로직 필요 (여기선 얼럿 후 종료로 간소화)
-    } catch (e) { 
+    } catch (e) {
       console.error(e);
-      alert("오류 발생"); 
+      alert("오류 발생");
     }
   };
 
@@ -398,7 +398,7 @@ export function Home() {
     <div className="page-home">
       <div className="home-search-bar">
         {!searchQuery && <span className="home-search-icon"><Search size={20} color="#8B95A1" style={{ display: 'block', margin: '14px' }} /></span>}
-        <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsAddressSelected(false); }} onKeyDown={e => e.key === "Enter" && setPostcodeOpen(true)} placeholder="주소를 입력해 방문록을 찾아보세요" className="home-search-input" />
+        <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsAddressSelected(false); }} onKeyDown={e => e.key === "Enter" && setPostcodeOpen(true)} placeholder="주소로 방문록 찾기" className="home-search-input" />
         {searchQuery.length > 0 && <span className="home-search-submit"><button onClick={() => setPostcodeOpen(true)} style={{ background: 'none', border: 'none', padding: '14px', cursor: 'pointer' }}><Search size={20} color="#3182F6" /></button></span>}
       </div>
 
