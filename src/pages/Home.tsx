@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Star, CheckCircle2, Heart, Eye, MapPin, MoreVertical, ArrowLeft, MessageSquare, Plus } from "lucide-react";
-import DaumPostcodeEmbed from "react-daum-postcode";
-import { IconButton } from "@toss/tds-mobile";
+import { Camera, Star, CheckCircle2, Heart, Eye, MapPin, MoreVertical, ArrowLeft, MessageSquare, Plus, Search } from "lucide-react";
+// TDS 제외
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db } from '../services/firebase';
 import { collection, getDocs, addDoc, serverTimestamp, query, where, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
@@ -397,9 +396,9 @@ export function Home() {
   return (
     <div className="page-home">
       <div className="home-search-bar">
-        {!searchQuery && <span className="home-search-icon"><IconButton src="https://static.toss.im/icons/svg/icon-search-bold-mono.svg" variant="clear" iconSize={20} /></span>}
+        {!searchQuery && <span className="home-search-icon"><Search size={20} color="#8B95A1" style={{ display: 'block', margin: '14px' }} /></span>}
         <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsAddressSelected(false); }} onKeyDown={e => e.key === "Enter" && setPostcodeOpen(true)} placeholder="주소를 입력해 방문록을 찾아보세요" className="home-search-input" />
-        {searchQuery.length > 0 && <span className="home-search-submit"><IconButton src="https://static.toss.im/icons/svg/icon-search-bold-mono.svg" variant="fill" iconSize={20} onClick={() => setPostcodeOpen(true)} /></span>}
+        {searchQuery.length > 0 && <span className="home-search-submit"><button onClick={() => setPostcodeOpen(true)} style={{ background: 'none', border: 'none', padding: '14px', cursor: 'pointer' }}><Search size={20} color="#3182F6" /></button></span>}
       </div>
 
       <div ref={mapElement} className="home-map-container" />

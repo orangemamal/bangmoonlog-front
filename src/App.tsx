@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DeviceViewport } from './utils/DeviceViewport';
-import { TDSMobileAITProvider } from '@toss/tds-mobile-ait';
+// TDS 제거
+
 import { Layout } from './components/common/Layout';
 import { Home } from './pages/Home';
 import { Feed } from './pages/Feed';
@@ -9,7 +10,7 @@ import { MyPage } from './pages/MyPage';
 
 function App() {
   return (
-    <TDSMobileAITProvider>
+    <>
       <DeviceViewport />
       <BrowserRouter>
         <Routes>
@@ -22,7 +23,7 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
-    </TDSMobileAITProvider>
+    </>
   );
 }
 

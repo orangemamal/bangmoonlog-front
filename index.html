@@ -8,26 +8,26 @@
   <title>방문LOG</title>
   <script>
     // TDS 환경 체크 우회 (인라인 스크립트가 모듈 로드보다 먼저 실행됨)
-    (function() {
+    (function () {
       try {
         window.isAit = true;
         window.__IS_AIT_WDS = true;
-        
+
         const mockUA = navigator.userAgent + " Toss TossMobileAit";
         Object.defineProperty(navigator, 'userAgent', {
-          get: function() { return mockUA; },
+          get: function () { return mockUA; },
           configurable: true
         });
 
         window.Toss = {
           isAit: true,
-          ready: function(cb) { cb && cb(); }
+          ready: function (cb) { cb && cb(); }
         };
 
         // React Refresh Mock (개발 모드 빌드 대응)
-        window.$RefreshReg$ = () => {};
+        window.$RefreshReg$ = () => { };
         window.$RefreshSig$ = () => (type) => type;
-        
+
         console.log("🚀 Toss Inline Mock Active");
       } catch (e) {
         console.warn("Inline mock failed", e);
