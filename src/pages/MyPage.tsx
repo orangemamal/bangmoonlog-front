@@ -135,7 +135,7 @@ export function MyPage() {
       <div className="mypage__menu-section">
         <h3 className="mypage__menu-heading">나의 활동</h3>
         <MenuItem icon={<Edit3  size={20} color="#333D4B" />} title="내가 쓴 방문록" />
-        <MenuItem icon={<Bookmark size={20} color="#333D4B" />} title="저장한 건물" />
+        <MenuItem icon={<Bookmark size={20} color="#333D4B" />} title="관심 지역 및 건물 관리" />
         <MenuItem icon={<Clock  size={20} color="#333D4B" />} title="최근 본 방문록" />
 
         <div className="mypage__spacer" />
@@ -145,11 +145,17 @@ export function MyPage() {
         <MenuItem icon={<Share2 size={20} color="#333D4B" />} title="방문Log 공유하기" />
 
         <div className="mypage__spacer" />
-        <h3 className="mypage__menu-heading">고객센터</h3>
+        <h3 className="mypage__menu-heading">서비스 설정</h3>
+        <div className="mypage__menu-item">
+          <div className="mypage__menu-item-left">
+            <Settings size={20} color="#333D4B" />
+            <span className="mypage__menu-item-label">서비스 알림 설정</span>
+          </div>
+          <ToggleButton initialValue={true} />
+        </div>
         <MenuItem icon={<MessageSquare size={20} color="#333D4B" />} title="1:1 문의하기" />
         <MenuItem icon={<HelpCircleIcon size={20} color="#333D4B" />} title="자주 묻는 질문" />
-        <MenuItem icon={<Settings size={20} color="#333D4B" />} title="알림 설정 (관심 지역)" />
-        <MenuItem icon={<HelpCircle  size={20} color="#333D4B" />} title="사업자 등록 문의" />
+        <MenuItem icon={<HelpCircle  size={20} color="#333D4B" />} title="제휴 문의" />
       </div>
 
       {/* 칭호 안내 모달 */}
@@ -240,6 +246,32 @@ function MenuItem({ icon, title }: { icon: React.ReactNode; title: string }) {
         <span className="mypage__menu-item-label">{title}</span>
       </div>
       <ChevronRight size={20} className="mypage__menu-item-chevron" />
+    </button>
+  );
+}
+
+function ToggleButton({ initialValue }: { initialValue: boolean }) {
+  const [isOn, setIsOn] = useState(initialValue);
+  return (
+    <button 
+      onClick={() => setIsOn(!isOn)}
+      className={`toggle-btn ${isOn ? 'on' : 'off'}`}
+      style={{
+        width: '48px', height: '24px', borderRadius: '12px',
+        backgroundColor: isOn ? '#3182F6' : '#E5E8EB',
+        position: 'relative', border: 'none', cursor: 'pointer',
+        transition: 'background-color 0.2s'
+      }}
+    >
+      <motion.div 
+        animate={{ x: isOn ? 26 : 2 }}
+        initial={false}
+        style={{
+          width: '20px', height: '20px', borderRadius: '50%',
+          backgroundColor: 'white', position: 'absolute', top: '2px'
+        }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      />
     </button>
   );
 }
