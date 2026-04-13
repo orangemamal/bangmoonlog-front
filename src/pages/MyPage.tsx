@@ -1,13 +1,19 @@
 import { useState, useEffect } from "react";
-import { Award, Heart, ChevronRight, Bookmark, Clock, Edit3, Settings, HelpCircle } from "lucide-react";
+import { 
+  Award, Heart, ChevronRight, Bookmark, Clock, Edit3, Settings, 
+  HelpCircle, Megaphone, Share2, Smartphone, MessageSquare, HelpCircleIcon,
+  X, CheckCircle2
+} from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { db } from "../services/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { getUserTitle } from "../utils/titleSystem";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function MyPage() {
   const { isLoggedIn, login, logout, user } = useAuth();
   const [stats, setStats] = useState({ likes: 0, reviews: 0 });
+  const [showTitleInfo, setShowTitleInfo] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -64,6 +70,14 @@ export function MyPage() {
 
   const authorTitle = getUserTitle(stats.reviews);
 
+  const titleSteps = [
+    { count: 1, title: "초보 방문객", icon: "🚶‍♂️" },
+    { count: 5, title: "동네 탐험가", icon: "🏃‍♂️" },
+    { count: 20, title: "로컬 가이드", icon: "👟" },
+    { count: 50, title: "프로 발품러", icon: "🥾" },
+    { count: 100, title: "방문록의 신", icon: "👑" },
+  ];
+
   return (
     <div className="mypage">
       {/* 프로필 */}
@@ -73,10 +87,16 @@ export function MyPage() {
             <div className="mypage__avatar">{user?.name ? user.name.slice(0, 1) : "오"}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {authorTitle && (
-                <div style={{ display: 'flex' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                    <span style={{ fontSize: '12px', background: '#E8F3FF', padding: '2px 8px', borderRadius: '100px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 'bold', color: '#1B64DA' }}>
                     {authorTitle.icon} {authorTitle.title}
                   </span>
+                  <button 
+                    onClick={() => setShowTitleInfo(true)}
+                    style={{ background: 'none', border: 'none', padding: 0, display: 'flex', opacity: 0.5, cursor: 'pointer' }}
+                  >
+                    <HelpCircle size={14} color="#1B64DA" />
+                  </button>
                 </div>
               )}
               <h1 className="mypage__name" style={{ margin: 0 }}>
@@ -119,10 +139,95 @@ export function MyPage() {
         <MenuItem icon={<Clock  size={20} color="#333D4B" />} title="최근 본 방문록" />
 
         <div className="mypage__spacer" />
-        <h3 className="mypage__menu-heading">설정 및 도움말</h3>
-        <MenuItem icon={<Settings    size={20} color="#333D4B" />} title="알림 설정 (관심 지역 설정)" />
+        <h3 className="mypage__menu-heading">앱 설정 및 정보</h3>
+        <MenuItem icon={<Megaphone size={20} color="#333D4B" />} title="공지사항" />
+        <MenuItem icon={<Smartphone size={20} color="#333D4B" />} title="홈 화면에 추가" />
+        <MenuItem icon={<Share2 size={20} color="#333D4B" />} title="방문Log 공유하기" />
+
+        <div className="mypage__spacer" />
+        <h3 className="mypage__menu-heading">고객센터</h3>
+        <MenuItem icon={<MessageSquare size={20} color="#333D4B" />} title="1:1 문의하기" />
+        <MenuItem icon={<HelpCircleIcon size={20} color="#333D4B" />} title="자주 묻는 질문" />
+        <MenuItem icon={<Settings size={20} color="#333D4B" />} title="알림 설정 (관심 지역)" />
         <MenuItem icon={<HelpCircle  size={20} color="#333D4B" />} title="사업자 등록 문의" />
       </div>
+
+      {/* 칭호 안내 모달 */}
+      <AnimatePresence>
+        {showTitleInfo && (
+          <>
+            <motion.div 
+              className="modal-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTitleInfo(false)}
+              style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, WebkitBackdropFilter: 'blur(4px)', backdropFilter: 'blur(4px)' }}
+            />
+            <motion.div 
+              className="mypage__title-modal"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              style={{ 
+                position: 'fixed', bottom: 0, left: 0, right: 0, 
+                backgroundColor: 'white', borderTopLeftRadius: '24px', borderTopRightRadius: '24px',
+                padding: '32px 24px 48px', zIndex: 1001, maxHeight: '80vh', overflowY: 'auto'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#333D4B', margin: 0 }}>칭호 시스템 안내</h2>
+                <button 
+                  onClick={() => setShowTitleInfo(false)}
+                  style={{ background: '#F2F4F6', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                >
+                  <X size={20} color="#4E5968" />
+                </button>
+              </div>
+              
+              <div style={{ backgroundColor: '#F9FAFB', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
+                <p style={{ fontSize: '15px', color: '#4E5968', margin: 0, lineHeight: 1.6 }}>
+                  방문Log를 작성할수록 더 높은 등급의 칭호를 획득할 수 있습니다. <br />
+                  꾸준한 활동으로 <strong>방문록의 신</strong>에 도전해보세요!
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {titleSteps.map((step) => (
+                  <div 
+                    key={step.title}
+                    style={{ 
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '16px', borderRadius: '16px', border: '1px solid #F2F4F6',
+                      backgroundColor: stats.reviews >= step.count ? '#E8F3FF' : 'white'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '24px' }}>{step.icon}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#333D4B' }}>{step.title}</span>
+                        <span style={{ fontSize: '13px', color: '#6B7684' }}>누적 방문록 {step.count}회 이상</span>
+                      </div>
+                    </div>
+                    {stats.reviews >= step.count && (
+                      <CheckCircle2 size={24} color="#3182F6" />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                className="mypage__login-btn" 
+                style={{ marginTop: '32px', boxShadow: 'none' }}
+                onClick={() => setShowTitleInfo(false)}
+              >
+                닫기
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

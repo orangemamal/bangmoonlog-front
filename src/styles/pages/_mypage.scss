@@ -165,40 +165,61 @@
   }
 
   &__menu-heading {
-    font-size: var(--font-size-body);
-    font-weight: 700;
-    color: var(--color-text-main);
-    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-caption);
+    margin: 24px 0 8px;
     padding: 0 8px;
   }
 
   &__menu-item {
     @include flex-between;
     width: 100%;
-    padding: 16px 8px;
+    padding: 12px 8px;
     background: none;
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: background-color 0.15s;
+    transition: background-color 0.1s;
     font-family: var(--font-family);
 
-    &:hover { background-color: #F9FAFB; }
+    &:active { background-color: #F2F4F6; }
 
     &-left {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
     }
 
     &-label {
       font-size: 16px;
       font-weight: 500;
-      color: var(--color-text-sub);
+      color: var(--color-text-main);
     }
 
-    &-chevron { color: var(--color-border); }
+    &-chevron { color: #D1D6DB; }
   }
 
-  &__spacer { height: 16px; }
+  &__spacer { 
+    height: 1px;
+    background-color: var(--color-border-light);
+    margin: 8px 8px;
+  }
+
+  // 칭호 모달 스타일 (모바일 친화적 바텀 시트)
+  &__title-modal {
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.1);
+    
+    &::before {
+      content: '';
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 40px;
+      height: 4px;
+      background-color: var(--color-border);
+      border-radius: 2px;
+    }
+  }
 }
