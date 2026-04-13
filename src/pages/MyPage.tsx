@@ -257,19 +257,20 @@ function ToggleButton({ initialValue }: { initialValue: boolean }) {
       onClick={() => setIsOn(!isOn)}
       className={`toggle-btn ${isOn ? 'on' : 'off'}`}
       style={{
-        width: '48px', height: '24px', borderRadius: '12px',
+        width: '40px', height: '22px', borderRadius: '11px',
         backgroundColor: isOn ? '#3182F6' : '#E5E8EB',
         position: 'relative', border: 'none', cursor: 'pointer',
-        transition: 'background-color 0.2s'
+        transition: 'background-color 0.2s',
+        flexShrink: 0
       }}
     >
       <motion.div 
-        animate={{ x: isOn ? 26 : 2 }}
+        animate={{ x: isOn ? 20 : 2 }}
         initial={false}
         style={{
-          width: '20px', height: '20px', borderRadius: '50%',
+          width: '18px', height: '18px', borderRadius: '50%',
           backgroundColor: 'white', position: 'absolute', top: '2px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+          boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
         }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
       />
