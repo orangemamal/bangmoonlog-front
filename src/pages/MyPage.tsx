@@ -155,7 +155,7 @@ export function MyPage() {
         </div>
         <MenuItem icon={<MessageSquare size={20} color="#333D4B" />} title="1:1 문의하기" />
         <MenuItem icon={<HelpCircleIcon size={20} color="#333D4B" />} title="자주 묻는 질문" />
-        <MenuItem icon={<HelpCircle  size={20} color="#333D4B" />} title="제휴 문의" />
+        <MenuItem icon={<Settings size={20} color="#333D4B" />} title="제휴 문의" />
       </div>
 
       {/* 칭호 안내 모달 */}
@@ -268,7 +268,8 @@ function ToggleButton({ initialValue }: { initialValue: boolean }) {
         initial={false}
         style={{
           width: '20px', height: '20px', borderRadius: '50%',
-          backgroundColor: 'white', position: 'absolute', top: '2px'
+          backgroundColor: 'white', position: 'absolute', top: '2px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
         }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
       />
