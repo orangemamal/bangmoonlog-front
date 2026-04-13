@@ -70,19 +70,20 @@
   }
 
   &__label {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
   }
 
   &__badge {
     position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 6px;
-    height: 6px;
-    background-color: var(--color-danger);
+    top: -8px;
+    right: -8px;
+    width: 13px;
+    height: 13px;
+    background-color: #F04452;
     border-radius: 50%;
     border: 2px solid white;
     display: block;
+    box-shadow: 0 0 5px rgba(240, 68, 82, 0.4);
   }
 }

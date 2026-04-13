@@ -1,10 +1,10 @@
-# 🏠 방문LOG (Bangmoon Log)
+# 🏠 방문Log (Bangmoon Log)
 
 ![Toss App](https://img.shields.io/badge/Toss-Mini%20App-blue)
 ![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB)
 
-**방문LOG**는 주소지에 기반한 실생생한 방문 후기를 공유하는 서비스입니다. 
+**방문Log**는 주소지에 기반한 실생생한 방문 후기를 공유하는 서비스입니다. 
 토스 인증을 통한 신뢰할 수 있는 익명 커뮤니티를 지향하며, 지도 기반으로 집을 구하기 전 필수 정보를 확인하고 서로의 경험을 나눌 수 있습니다.
 
 ## ✨ 주요 기능

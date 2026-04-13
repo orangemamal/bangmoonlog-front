@@ -13,7 +13,7 @@ export default defineConfig({
   permissions: [],
   outdir: 'dist',
   brand: {
-    displayName: '방문LOG',
+    displayName: '방문Log',
     icon: 'https://static.toss.im/appsintoss/73/10550764-5ac1-44e2-9ff3-ad78d8d2e71a.png',
     primaryColor: '#3B70E3',
     bridgeColorMode: 'inverted',

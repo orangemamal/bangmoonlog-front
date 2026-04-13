@@ -5,9 +5,7 @@ export function useAccessControl() {
     return Number(sessionStorage.getItem('read_count')) || 0;
   });
   
-  const [hasWatchedAd, setHasWatchedAd] = useState<boolean>(() => {
-    return sessionStorage.getItem('has_watched_ad') === 'true';
-  });
+  const [hasWatchedAd, setHasWatchedAd] = useState<boolean>(false);
 
   const [isAdShowing, setIsAdShowing] = useState(false);
 
@@ -15,15 +13,12 @@ export function useAccessControl() {
     sessionStorage.setItem('read_count', String(readCount));
   }, [readCount]);
 
-  useEffect(() => {
-    sessionStorage.setItem('has_watched_ad', String(hasWatchedAd));
-  }, [hasWatchedAd]);
+
 
   const canRead = useCallback(() => {
-    // 1회까지는 무료, 그 이후엔 광고 시청 필수
-    if (readCount < 1) return true;
+    // 광고 시청 여부가 최종 권한을 결정함
     return hasWatchedAd;
-  }, [readCount, hasWatchedAd]);
+  }, [hasWatchedAd]);
 
   const incrementReadCount = useCallback(() => {
     setReadCount(prev => prev + 1);

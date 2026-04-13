@@ -45,3 +45,5 @@ Design System and App Flow/
 .env
 .env.local
 .env.*.local
+
+.vercel

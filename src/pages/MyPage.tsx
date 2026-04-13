@@ -1,8 +1,37 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Award, Heart, ChevronRight, Bookmark, Clock, Edit3, Settings, HelpCircle } from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
+import { db } from "../services/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { getUserTitle } from "../utils/titleSystem";
 
 export function MyPage() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { isLoggedIn, login, logout, user } = useAuth();
+  const [stats, setStats] = useState({ likes: 0, reviews: 0 });
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchStats = async () => {
+      try {
+        const q = query(collection(db, "reviews"), where("authorId", "==", user.id));
+        const snap = await getDocs(q);
+        
+        let totalLikes = 0;
+        const totalReviews = snap.size;
+
+        snap.forEach((doc: any) => {
+          totalLikes += (doc.data().likes || 0);
+        });
+
+        setStats({ likes: totalLikes, reviews: totalReviews });
+      } catch (e) {
+        console.error("MyPage stats error:", e);
+      }
+    };
+
+    fetchStats();
+  }, [user?.id]);
 
   if (!isLoggedIn) {
     return (
@@ -13,13 +42,27 @@ export function MyPage() {
           </div>
           <h2>리얼한 거주 후기,<br />지금 바로 확인해보세요!</h2>
           <p>로그인하고 전국 방방곡곡의 솔직 담백한<br />방문록을 구경해보세요.</p>
-          <button className="mypage__login-btn" onClick={() => setIsLoggedIn(true)}>
-            토스로 3초 만에 시작하기
-          </button>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '16px', width: '100%', maxWidth: '300px' }}>
+            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0 }} onClick={() => login({ id: 'test_a', name: '이민수' })}>
+              이민수로 로그인
+            </button>
+            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0, backgroundColor: '#FFF0F0', color: '#F04452' }} onClick={() => login({ id: 'test_b', name: '김지영' })}>
+              김지영로 로그인
+            </button>
+            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0, backgroundColor: '#E7F9F1', color: '#00A968' }} onClick={() => login({ id: 'test_c', name: '박태환' })}>
+              박태환로 로그인
+            </button>
+            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0, backgroundColor: '#F2F4F6', color: '#4E5968' }} onClick={() => login({ id: 'test_d', name: '최소연' })}>
+              최소연로 로그인
+            </button>
+          </div>
         </div>
       </div>
     );
   }
+
+  const authorTitle = getUserTitle(stats.reviews);
 
   return (
     <div className="mypage">
@@ -27,13 +70,22 @@ export function MyPage() {
       <div className="mypage__profile">
         <div className="mypage__profile-row">
           <div className="mypage__profile-info">
-            <div className="mypage__avatar">오</div>
-            <div>
-              <h1 className="mypage__name">오종민 님</h1>
-              <p className="mypage__email">ojongmin@toss.im</p>
+            <div className="mypage__avatar">{user?.name ? user.name.slice(0, 1) : "오"}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {authorTitle && (
+                <div style={{ display: 'flex' }}>
+                   <span style={{ fontSize: '12px', background: '#E8F3FF', padding: '2px 8px', borderRadius: '100px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 'bold', color: '#1B64DA' }}>
+                    {authorTitle.icon} {authorTitle.title}
+                  </span>
+                </div>
+              )}
+              <h1 className="mypage__name" style={{ margin: 0 }}>
+                {user?.name || "오종민"} 님
+              </h1>
+              <p className="mypage__email" style={{ marginTop: '2px' }}>{user?.id ? `${user.id.slice(0, 8)}@toss.im` : "ojongmin@toss.im"}</p>
             </div>
           </div>
-          <button className="mypage__edit-btn">프로필 수정</button>
+          <button className="mypage__logout-btn" onClick={logout}>로그아웃</button>
         </div>
 
         {/* 스탯 */}
@@ -44,7 +96,7 @@ export function MyPage() {
             </div>
             <div>
               <p className="mypage__stat-label">발도장 뱃지</p>
-              <p className="mypage__stat-value">12개</p>
+              <p className="mypage__stat-value">{stats.reviews}개</p>
             </div>
           </div>
           <div className="mypage__stat-card">
@@ -52,8 +104,8 @@ export function MyPage() {
               <Heart size={20} style={{ fill: "#F04452", color: "#F04452" }} />
             </div>
             <div>
-              <p className="mypage__stat-label">도움돼요 누적</p>
-              <p className="mypage__stat-value">840개</p>
+              <p className="mypage__stat-label">공감받은 횟수</p>
+              <p className="mypage__stat-value">{stats.likes}개</p>
             </div>
           </div>
         </div>
