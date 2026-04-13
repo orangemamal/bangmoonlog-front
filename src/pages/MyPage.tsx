@@ -155,7 +155,7 @@ export function MyPage() {
         </div>
         <MenuItem icon={<MessageSquare size={20} color="#333D4B" />} title="1:1 문의하기" />
         <MenuItem icon={<HelpCircleIcon size={20} color="#333D4B" />} title="자주 묻는 질문" />
-        <MenuItem icon={<Settings size={20} color="#333D4B" />} title="제휴 문의" />
+        <MenuItem icon={<Award size={20} color="#333D4B" />} title="제휴 문의" />
       </div>
 
       {/* 칭호 안내 모달 */}
