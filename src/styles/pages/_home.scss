@@ -22,12 +22,13 @@
   max-width: 448px;
   background-color: #fff;
   border-radius: 9999px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0px 8px rgba(27, 100, 218, 0.2);
   padding: 4px 4px 4px 20px;
   display: flex;
   align-items: center;
   z-index: 10;
   transition: box-shadow 0.3s;
+  border: 1px solid $color-text-caption;
 
   &--selected {
     cursor: pointer; // 주소 선택 완료 시 전체 바 클릭 가능
@@ -99,12 +100,12 @@
   font-size: 15px;
   outline: none;
   border: none;
-  color: var(--color-text-main);
+  color: $color-text-main;
   background: transparent;
-  font-family: var(--font-family);
+  font-family: $font-family;
 
   &::placeholder {
-    color: var(--color-text-disabled);
+    color: $color-text-disabled;
   }
 
   &--readonly {
@@ -119,7 +120,7 @@
 .postcode-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200; // 네이버 지도, 바텀시트 전부 위
+  z-index: 2000; // 네이버 지도, 바텀시트 전부 위
 }
 
 .postcode-backdrop {
@@ -135,12 +136,22 @@
   right: 0;
   height: 85vh;
   background: #fff;
-  border-top-left-radius: var(--radius-xl);
-  border-top-right-radius: var(--radius-xl);
+  border-top-left-radius: $radius-xl;
+  border-top-right-radius: $radius-xl;
   display: flex;
   flex-direction: column;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.15);
   animation: slideUp 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+  z-index: 2100;
+  pointer-events: auto; // 포커스 유실 방지
+
+  iframe {
+    flex: 1;
+    width: 100% !important;
+    height: 100% !important;
+    border: none;
+    pointer-events: auto !important;
+  }
 }
 
 @keyframes slideUp {
@@ -164,14 +175,14 @@
 .postcode-title {
   font-size: 20px;
   font-weight: 700;
-  color: var(--color-text-main);
+  color: $color-text-main;
 }
 
 .postcode-close {
   background: none;
   border: none;
   font-size: 20px;
-  color: var(--color-text-caption);
+  color: $color-text-caption;
   cursor: pointer;
   padding: 4px 8px;
   line-height: 1;
@@ -195,21 +206,22 @@
 // 내 위치로 이동 버튼
 .home-location-btn {
   position: fixed;
-  bottom: calc(72px + 16px); // 하단 네비게이션(72px) + 여백
+  bottom: calc(72px + 32px); // 하단 네비게이션(72px) + 여백
   right: 16px;
   width: 48px;
   height: 48px;
   border-radius: 50%;
   background: white;
   border: none;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 12px rgba(27, 100, 218, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 500;
+  z-index: 200;
   color: #3182F6;
   transition: transform 0.15s, box-shadow 0.15s;
+  border: 1px solid $color-text-caption;
 
   &:active {
     transform: scale(0.92);
@@ -275,7 +287,7 @@
   border-radius: 50%;
   box-shadow: 0 4px 12px rgba(49, 130, 246, 0.4);
   color: #fff;
-  font-weight: 800;
+  font-weight: 600;
   font-family: inherit;
   transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
 
@@ -514,7 +526,7 @@
 
   &.active {
     svg {
-       filter: drop-shadow(0 0 4px rgba(255, 212, 59, 0.4));
+      filter: drop-shadow(0 0 4px rgba(255, 212, 59, 0.4));
     }
   }
 }
@@ -538,6 +550,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+  flex-direction: column;
 }
 
 .badge-verify {
@@ -556,20 +569,27 @@
 .address-text {
   font-size: 16px;
   font-weight: 700;
-  color: var(--color-text-main);
+  color: $color-text-main;
 }
 
 .address-desc {
   font-size: 13px;
-  color: var(--color-text-caption);
+  color: $color-text-caption;
   margin: 0;
 }
 
 .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 700;
-  color: var(--color-text-main);
+  color: #191F28;
   margin: 0 0 12px;
+
+  span {
+    line-height: 1;
+  }
 }
 
 .photo-button {
@@ -577,13 +597,13 @@
   width: calc((100% - 24px) / 3); // 3개씩 노출되도록 반응형 설정
   aspect-ratio: 1 / 1;
   border-radius: 12px;
-  border: 1.5px dashed var(--color-border);
+  border: 1.5px dashed $color-border;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: var(--color-text-disabled);
+  color: $color-text-disabled;
   background-color: #F9FAFB;
   cursor: pointer;
   transition: all 0.2s;
@@ -594,7 +614,7 @@
   }
 
   &:hover {
-    background-color: var(--color-border);
+    background-color: $color-border;
   }
 }
 
@@ -649,7 +669,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--color-bg);
+  background-color: $color-bg;
   z-index: 1000; // 탭바보다 높게
   display: flex;
   flex-direction: column;
@@ -661,14 +681,14 @@
     align-items: center;
     padding: 0 16px;
     gap: 12px;
-    background-color: var(--color-surface);
-    border-bottom: 1px solid var(--color-border-light);
+    background-color: $color-surface;
+    border-bottom: 1px solid $color-border-light;
 
     .back-btn {
       background: none;
       border: none;
       padding: 8px;
-      color: var(--color-text-main);
+      color: $color-text-main;
       cursor: pointer;
     }
 
@@ -681,7 +701,7 @@
 
       p {
         font-size: 12px;
-        color: var(--color-text-sub);
+        color: $color-text-sub;
       }
     }
   }
@@ -697,7 +717,7 @@
   }
 
   .review-card {
-    background-color: var(--color-surface);
+    background-color: $color-surface;
     border-radius: 16px;
     padding: 16px;
     @include card-shadow;
@@ -784,7 +804,7 @@
         flex: 1;
         font-size: 15px;
         line-height: 1.5;
-        color: var(--color-text-main);
+        color: $color-text-main;
         @include line-clamp(3);
       }
 
@@ -814,10 +834,10 @@
 
     .card-footer {
       @include flex-between;
-      color: var(--color-text-disabled);
+      color: $color-text-disabled;
       font-size: 12px;
       padding-top: 12px;
-      border-top: 1px solid var(--color-border-light);
+      border-top: 1px solid $color-border-light;
 
       .stats {
         display: flex;
@@ -839,7 +859,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--color-surface);
+  background-color: $color-surface;
   z-index: 1001;
   display: flex;
   flex-direction: column;
@@ -851,7 +871,7 @@
     align-items: center;
     padding: 0 16px;
     gap: 12px;
-    border-bottom: 1px solid var(--color-border-light);
+    border-bottom: 1px solid $color-border-light;
 
     .back-btn {
       background: none;
@@ -920,7 +940,7 @@
 
         .date {
           font-size: 12px;
-          color: var(--color-text-disabled);
+          color: $color-text-disabled;
         }
       }
 
@@ -929,7 +949,7 @@
         align-items: center;
         gap: 6px;
         font-size: 14px;
-        color: var(--color-text-sub);
+        color: $color-text-sub;
         margin-bottom: 24px;
         padding: 12px;
         background: #F8F9FA;
@@ -956,7 +976,7 @@
 
           .label {
             font-size: 14px;
-            color: var(--color-text-sub);
+            color: $color-text-sub;
           }
 
           .stars {
@@ -969,7 +989,7 @@
       .content-box {
         font-size: 16px;
         line-height: 1.6;
-        color: var(--color-text-main);
+        color: $color-text-main;
         white-space: pre-wrap;
       }
     }
@@ -981,7 +1001,7 @@
     display: flex;
     align-items: center;
     gap: 24px;
-    border-top: 1px solid var(--color-border-light);
+    border-top: 1px solid $color-border-light;
 
     .action {
       background: none;
@@ -1301,7 +1321,7 @@
 
 .rating-label {
   font-size: 15px;
-  color: var(--color-text-sub);
+  color: $color-text-sub;
   width: 48px;
 }
 
@@ -1342,22 +1362,22 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
-  font-family: var(--font-family);
+  font-family: $font-family;
 
   &.unselected {
-    background-color: var(--color-bg);
-    color: var(--color-text-sub);
+    background-color: $color-bg;
+    color: $color-text-sub;
     border: 1px solid transparent;
 
     &:hover {
-      background-color: var(--color-border);
+      background-color: $color-border;
     }
   }
 
   &.selected {
-    background-color: var(--color-primary-dim);
-    color: var(--color-primary);
-    border: 1px solid var(--color-primary);
+    background-color: $color-primary-dim;
+    color: $color-primary;
+    border: 1px solid $color-primary;
   }
 }
 
@@ -1726,7 +1746,9 @@
 
   .card-body,
   .card-footer,
-  .card-top {
+  .card-top,
+  .card-address,
+  .card-bottom-tags {
     filter: blur(14px);
     opacity: 0.5;
     transition: all 0.4s ease;
@@ -1840,87 +1862,6 @@
   }
 }
 
-//  Toss 스타일 알림 모달 (Alert Modal) 
-.tds-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  padding: 24px;
-}
-
-.tds-modal-content {
-  width: 100%;
-  max-width: 320px;
-  background: #FFFFFF;
-  border-radius: 28px;
-  padding: 32px 24px 24px;
-  text-align: center;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-  animation: tdsModalScale 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-
-  .toss-face-icon {
-    font-size: 48px;
-    margin-bottom: 20px;
-    line-height: 1;
-  }
-
-  .tds-modal-title {
-    font-size: 19px;
-    font-weight: 700;
-    color: #191F28;
-    margin-bottom: 8px;
-    letter-spacing: -0.4px;
-  }
-
-  .tds-modal-desc {
-    font-size: 15px;
-    font-weight: 400;
-    color: #4E5968;
-    margin-bottom: 28px;
-    line-height: 1.5;
-  }
-
-  .tds-btn-primary {
-    width: 100%;
-    height: 54px;
-    background: #3182F6;
-    color: #FFFFFF;
-    border: none;
-    border-radius: 16px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-
-    &:hover {
-      background: #1b64da;
-    }
-
-    &:active {
-      transform: scale(0.97);
-    }
-  }
-}
-
-@keyframes tdsModalScale {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 
 /* ---------------------------------------------------------
    Visitor Verification System (Premium Styling)
@@ -1931,12 +1872,12 @@
   background: #F9FAFB;
   border-radius: 16px;
   padding: 16px 20px;
-  margin-bottom: 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid #E5E8EB;
+  border: 1px solid $color-border;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 12px;
 
   &.verified {
     background: linear-gradient(135deg, #E8F3FF 0%, #F5F9FF 100%);
@@ -1949,7 +1890,7 @@
 
     .address-header {
       display: flex;
-      align-items: center;
+      align-items: start;
       gap: 8px;
       margin-bottom: 4px;
 
@@ -2005,6 +1946,54 @@
 
     .spin {
       animation: spin 1s linear infinite;
+    }
+  }
+}
+
+// 2. Experience Type Selection (Chip Group)
+.experience-section {
+  margin-top: 24px;
+  margin-bottom: 24px;
+
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #191f28;
+    margin-bottom: 12px;
+  }
+
+  .experience-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .experience-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    background: #f2f4f6;
+    color: #4e5968;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    .icon {
+      font-size: 16px;
+    }
+
+    &.active {
+      background: #e8f3ff;
+      color: #3182f6;
+      box-shadow: 0 4px 12px rgba(49, 130, 246, 0.12);
+    }
+
+    &:active {
+      transform: scale(0.96);
     }
   }
 }

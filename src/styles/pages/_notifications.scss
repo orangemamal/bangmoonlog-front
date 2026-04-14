@@ -2,6 +2,7 @@
 // pages/_notifications.scss
 // 알림 페이지
 // ============================================================
+@use '../abstracts/variables' as *;
 @use '../abstracts/mixins' as *;
 
 .notifications {
@@ -9,28 +10,28 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--color-surface);
+  background-color: $color-surface;
 
   &__header {
-    padding: 24px var(--padding-h) 16px;
-    background-color: var(--color-surface);
-    border-bottom: 1px solid var(--color-border-light);
+    padding: 24px $padding-h 16px;
+    background-color: $color-surface;
+    border-bottom: 1px solid $color-border-light;
     display: flex;
     justify-content: space-between;
     align-items: center;
 
     h1 {
-      font-size: 24px; // TDS 스타일 큰 타이틀
-      font-weight: 800;
-      color: var(--color-text-main);
-      letter-spacing: -0.5px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #333d4b;
+      margin-bottom: 16px;
     }
   }
 
   &__read-all {
     font-size: 14px;
     font-weight: 600;
-    color: var(--color-primary);
+    color: $color-primary;
     background: none;
     border: none;
     cursor: pointer;
@@ -46,26 +47,26 @@
   &__list {
     flex: 1;
     overflow-y: auto;
-    padding-bottom: var(--bottom-nav-height);
+    padding-bottom: $bottom-nav-height;
   }
 
   &__item {
-    padding: 20px var(--padding-h);
+    padding: 20px $padding-h;
     display: flex;
     gap: 16px;
     cursor: pointer;
     transition: background-color 0.2s;
     position: relative;
-    background-color: var(--color-surface);
+    background-color: $color-surface;
 
     &::after { // TDS 특유의 얇은 구분선
       content: '';
       position: absolute;
       bottom: 0;
-      left: var(--padding-h);
-      right: var(--padding-h);
+      left: $padding-h;
+      right: $padding-h;
       height: 1px;
-      background-color: var(--color-border-light);
+      background-color: $color-border-light;
     }
 
     &:last-child::after { display: none; }
@@ -95,7 +96,7 @@
   &__text {
     font-size: 15px;
     font-weight: 500;
-    color: var(--color-text-main);
+    color: $color-text-main;
     line-height: 1.5;
     margin: 0 0 4px;
     word-break: keep-all;
@@ -107,23 +108,23 @@
 
   &__time {
     font-size: 13px;
-    color: var(--color-text-caption);
+    color: $color-text-caption;
     font-weight: 400;
   }
 
   &__dot {
     position: absolute;
     top: 24px;
-    right: var(--padding-h);
+    right: $padding-h;
     width: 6px;
     height: 6px;
-    background-color: var(--color-primary);
+    background-color: $color-primary;
     border-radius: 50%;
     box-shadow: 0 0 0 2px #fff;
   }
 
   &__empty {
-    padding: 120px var(--padding-h);
+    padding: 120px $padding-h;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -140,13 +141,13 @@
     h3 {
       font-size: 18px;
       font-weight: 700;
-      color: var(--color-text-main);
+      color: $color-text-main;
       margin: 0 0 8px;
     }
 
     p {
       font-size: 15px;
-      color: var(--color-text-caption);
+      color: $color-text-caption;
       line-height: 1.6;
       margin: 0;
     }
@@ -154,8 +155,8 @@
     &-spinner {
       width: 24px;
       height: 24px;
-      border: 3px solid var(--color-border-light);
-      border-top-color: var(--color-primary);
+      border: 3px solid $color-border-light;
+      border-top-color: $color-primary;
       border-radius: 50%;
       margin-bottom: 16px;
       animation: spin 0.8s linear infinite;

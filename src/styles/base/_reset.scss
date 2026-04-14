@@ -1,3 +1,4 @@
+@use '../abstracts/variables' as *;
 // ============================================================
 // base/_reset.scss
 // CSS 리셋 & html/body 기본값
@@ -20,9 +21,9 @@ body {
 }
 
 body {
-  font-family: var(--font-family);
-  color: var(--color-text-main);
-  background-color: var(--color-surface);
+  font-family: $font-family;
+  color: $color-text-main;
+  background-color: $color-surface;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -53,3 +54,4 @@ a {
   display: flex;
   flex-direction: column;
 }
+

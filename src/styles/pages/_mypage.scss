@@ -2,6 +2,7 @@
 // pages/_mypage.scss
 // 내 정보 페이지
 // ============================================================
+@use '../abstracts/variables' as *;
 @use '../abstracts/mixins' as *;
 
 .mypage {
@@ -9,12 +10,12 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--color-bg);
+  background-color: $color-bg;
   overflow-y: auto;
 
   // 비로그인 상태
   &--guest {
-    background-color: var(--color-surface);
+    background-color: $color-surface;
   }
 
   // 로그인 유도 화면
@@ -24,15 +25,15 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    background-color: var(--color-surface);
-    padding: 0 var(--padding-h);
+    background-color: $color-surface;
+    padding: 0 $padding-h;
     text-align: center;
     box-sizing: border-box;
 
     &-icon {
       width: 80px;
       height: 80px;
-      background-color: var(--color-bg);
+      background-color: $color-bg;
       border-radius: 50%;
       margin-bottom: 24px;
       display: flex;
@@ -41,16 +42,16 @@
     }
 
     h2 {
-      font-size: var(--font-size-title);
-      font-weight: var(--font-weight-title);
-      color: var(--color-text-main);
+      font-size: $font-size-title;
+      font-weight: $font-weight-title;
+      color: $color-text-main;
       margin: 0 0 8px;
       line-height: 1.4;
     }
 
     p {
-      font-size: var(--font-size-body);
-      color: var(--color-text-caption);
+      font-size: $font-size-body;
+      color: $color-text-caption;
       margin-bottom: 32px;
       line-height: 1.5;
       word-break: keep-all;
@@ -59,9 +60,9 @@
 
   &__login-btn {
     width: 100%;
-    background-color: var(--color-primary);
+    background-color: $color-primary;
     color: white;
-    border-radius: var(--radius-lg);
+    border-radius: $radius-lg;
     padding: 16px;
     font-size: 16px;
     font-weight: 700;
@@ -69,17 +70,17 @@
     cursor: pointer;
     box-shadow: 0 4px 16px rgba(49, 130, 246, 0.3);
     transition: transform 0.1s;
-    font-family: var(--font-family);
+    font-family: $font-family;
 
     &:active { transform: scale(0.98); }
   }
 
   // 프로필 섹션
   &__profile {
-    background-color: var(--color-surface);
+    background-color: $color-surface;
     padding: 40px 24px 24px;
-    border-bottom-left-radius: var(--radius-xl);
-    border-bottom-right-radius: var(--radius-xl);
+    border-bottom-left-radius: $radius-xl;
+    border-bottom-right-radius: $radius-xl;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
   }
 
@@ -98,26 +99,26 @@
     @include icon-box(64px, #E8F3FF);
     font-size: 24px;
     font-weight: 700;
-    color: var(--color-primary);
+    color: $color-primary;
   }
 
   &__name {
-    font-size: var(--font-size-title);
-    font-weight: var(--font-weight-title);
-    color: var(--color-text-main);
+    font-size: $font-size-title;
+    font-weight: $font-weight-title;
+    color: $color-text-main;
   }
 
   &__email {
     font-size: 13px;
-    color: var(--color-text-disabled);
+    color: $color-text-disabled;
     margin-top: 4px;
   }
 
   &__logout-btn {
     padding: 6px 12px;
-    background-color: var(--color-bg);
-    color: var(--color-text-sub);
-    border-radius: var(--radius-sm);
+    background-color: $color-bg;
+    color: $color-text-sub;
+    border-radius: $radius-sm;
     font-size: 13px;
     font-weight: 600;
     border: none;
@@ -133,7 +134,7 @@
   &__stat-card {
     flex: 1;
     background-color: #F9FAFB;
-    border-radius: var(--radius-lg);
+    border-radius: $radius-lg;
     padding: 16px;
     display: flex;
     align-items: center;
@@ -141,33 +142,33 @@
   }
 
   &__stat-icon {
-    @include icon-box(40px, var(--color-primary-dim));
+    @include icon-box(40px, $color-primary-dim);
   }
 
   &__stat-label {
     font-size: 12px;
-    color: var(--color-text-caption);
+    color: $color-text-caption;
     margin-bottom: 2px;
   }
 
   &__stat-value {
     font-size: 16px;
     font-weight: 700;
-    color: var(--color-text-main);
+    color: $color-text-main;
   }
 
   // 메뉴
   &__menu-section {
     flex: 1;
     margin-top: 12px;
-    background-color: var(--color-surface);
+    background-color: $color-surface;
     padding: 24px 24px 0;
   }
 
   &__menu-heading {
     font-size: 13px;
     font-weight: 600;
-    color: var(--color-text-caption);
+    color: $color-text-caption;
     margin: 24px 0 8px;
     padding: 0 8px;
   }
@@ -178,10 +179,10 @@
     padding: 12px 8px;
     background: none;
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: $radius-md;
     cursor: pointer;
     transition: background-color 0.1s;
-    font-family: var(--font-family);
+    font-family: $font-family;
 
     &:active { background-color: #F2F4F6; }
 
@@ -194,7 +195,7 @@
     &-label {
       font-size: 16px;
       font-weight: 500;
-      color: var(--color-text-main);
+      color: $color-text-main;
     }
 
     &-chevron { color: #D1D6DB; }
@@ -202,7 +203,7 @@
 
   &__spacer { 
     height: 1px;
-    background-color: var(--color-border-light);
+    background-color: $color-border-light;
     margin: 8px 8px;
   }
 
@@ -218,7 +219,7 @@
       transform: translateX(-50%);
       width: 40px;
       height: 4px;
-      background-color: var(--color-border);
+      background-color: $color-border;
       border-radius: 2px;
     }
   }
@@ -405,7 +406,7 @@
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    font-family: var(--font-family);
+    font-family: $font-family;
     transition: background-color 0.1s;
 
     &:active { background-color: #E5E8EB; }
@@ -421,7 +422,7 @@
     font-size: 15px;
     font-weight: 700;
     cursor: pointer;
-    font-family: var(--font-family);
+    font-family: $font-family;
     transition: background-color 0.1s;
 
     &:active { background-color: #1B64DA; }
@@ -454,7 +455,7 @@
     border-bottom: 1px solid #E5E8EB;
     padding: 12px 0;
     font-size: 16px;
-    font-family: var(--font-family);
+    font-family: $font-family;
     outline: none;
     background: transparent;
     transition: border-color 0.2s;
@@ -464,7 +465,7 @@
     }
 
     &:focus {
-      border-bottom: 2px solid var(--color-primary);
+      border-bottom: 2px solid $color-primary;
     }
   }
 
@@ -491,7 +492,7 @@
     border-radius: 16px;
     padding: 24px;
     font-size: 16px;
-    font-family: var(--font-family);
+    font-family: $font-family;
     resize: none;
     outline: none;
     line-height: 1.6;
@@ -520,7 +521,7 @@
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
-    font-family: var(--font-family);
+    font-family: $font-family;
     margin-top: 16px;
 
     &:not(:disabled):active {
@@ -658,7 +659,7 @@
     font-size: 17px;
     font-weight: 700;
     cursor: pointer;
-    font-family: var(--font-family);
+    font-family: $font-family;
     margin-top: 20px;
     box-shadow: 0 8px 24px rgba(49, 130, 246, 0.3);
 

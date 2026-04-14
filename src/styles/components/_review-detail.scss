@@ -4,7 +4,7 @@
 .review-detail-overlay {
   position: fixed;
   inset: 0;
-  background-color: var(--color-surface);
+  background-color: $color-surface;
   z-index: 3000;
   display: flex;
   flex-direction: column;
@@ -16,7 +16,7 @@
     display: flex;
     align-items: center;
     padding: 0 16px;
-    border-bottom: 1px solid var(--color-border-light);
+    border-bottom: 1px solid $color-border-light;
     flex-shrink: 0;
     position: relative; // 중앙 정렬 기준점
 
@@ -24,7 +24,7 @@
       background: none;
       border: none;
       padding: 8px;
-      color: var(--color-text-main);
+      color: $color-text-main;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -40,7 +40,7 @@
       text-align: center;
       font-size: 17px;
       font-weight: 700;
-      color: var(--color-text-main);
+      color: $color-text-main;
       pointer-events: none; // 뒤쪽 버튼 클릭 방해 방지
     }
   }
@@ -85,7 +85,7 @@
       &.no-image {
         flex-direction: column;
         gap: 8px;
-        color: var(--color-text-disabled);
+        color: $color-text-disabled;
         .icon { font-size: 40px; }
       }
     }
@@ -145,7 +145,7 @@
           gap: 6px;
           margin-bottom: 2px;
 
-          .name { font-size: 16px; font-weight: 700; color: var(--color-text-main); }
+          .name { font-size: 16px; font-weight: 700; color: $color-text-main; }
           .badge-verified {
             display: flex;
             align-items: center;
@@ -158,7 +158,7 @@
             font-weight: 700;
           }
         }
-        .date { font-size: 12px; color: var(--color-text-disabled); }
+        .date { font-size: 12px; color: $color-text-disabled; }
       }
     }
 
@@ -172,14 +172,14 @@
       margin-bottom: 24px;
       font-size: 14px;
 
-      .address { flex: 1; color: var(--color-text-sub); font-weight: 500; }
+      .address { flex: 1; color: $color-text-sub; font-weight: 500; }
       .distance { color: #3182F6; font-weight: 600; }
     }
 
     .content-box {
       font-size: 16px;
       line-height: 1.6;
-      color: var(--color-text-main);
+      color: $color-text-main;
       white-space: pre-wrap;
       margin-bottom: 32px;
     }
@@ -190,7 +190,7 @@
       .rating-grid { display: flex; flex-direction: column; gap: 12px; }
       .rating-item {
         display: flex; justify-content: space-between; align-items: center;
-        .label { font-size: 14px; color: var(--color-text-sub); }
+        .label { font-size: 14px; color: $color-text-sub; }
         .stars { display: flex; gap: 2px; }
       }
     }
@@ -198,7 +198,7 @@
 
   // 댓글 섹션
   .comments-section {
-    border-top: 1px solid var(--color-border-light);
+    border-top: 1px solid $color-border-light;
     padding-top: 24px;
     padding-bottom: 100px; // 푸터 높이만큼 여백
 
@@ -224,8 +224,8 @@
           align-items: center;
           gap: 8px;
           margin-bottom: 4px;
-          .author { font-size: 14px; font-weight: 600; color: var(--color-text-main); }
-          .date { font-size: 11px; color: var(--color-text-disabled); }
+          .author { font-size: 14px; font-weight: 600; color: $color-text-main; }
+          .date { font-size: 11px; color: $color-text-disabled; }
         }
         .content { font-size: 14px; line-height: 1.5; color: #4E5968; }
       }
@@ -235,7 +235,7 @@
       padding: 40px 0;
       text-align: center;
       font-size: 14px;
-      color: var(--color-text-disabled);
+      color: $color-text-disabled;
     }
   }
 
@@ -246,8 +246,8 @@
     left: 0;
     right: 0;
     height: 72px;
-    background-color: var(--color-surface);
-    border-top: 1px solid var(--color-border-light);
+    background-color: $color-surface;
+    border-top: 1px solid $color-border-light;
     display: flex;
     align-items: center;
     padding: 0 16px;
@@ -288,7 +288,7 @@
         border: none;
         outline: none;
         font-size: 14px;
-        color: var(--color-text-main);
+        color: $color-text-main;
         &::placeholder { color: #ADB5BD; }
       }
 
@@ -313,14 +313,14 @@
 .detail-loading {
   position: fixed;
   inset: 0;
-  background-color: var(--color-surface);
+  background-color: $color-surface;
   z-index: 3000;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
   font-weight: 600;
-  color: var(--color-text-disabled);
+  color: $color-text-disabled;
 }
 
 @keyframes slideInUp {

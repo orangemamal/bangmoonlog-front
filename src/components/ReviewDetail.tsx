@@ -8,6 +8,9 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  User,
+  Home as HomeIcon,
+  Search
 } from "lucide-react";
 import {
   doc,
@@ -43,7 +46,7 @@ interface Comment {
   createdAt: any;
 }
 
-export function ReviewDetail({ reviewId, onClose, onLoginRequired }: ReviewDetailProps) {
+export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDelete }: ReviewDetailProps) {
   const { user, isLoggedIn } = useAuth();
   const [review, setReview] = useState<any>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -109,7 +112,7 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired }: ReviewDetai
       const q = query(collection(db, "reviews"), where("authorId", "==", review.authorId));
       getDocs(q).then((snap: QuerySnapshot<DocumentData>) => {
         setAuthorTitle(getUserTitle(snap.size));
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [review?.authorId]);
 
@@ -123,21 +126,21 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired }: ReviewDetai
       // 1. 낙관적 업데이트 (Optimistic UI Update) - 즉각적인 붉은색 토글 적용
       const previousIsLiked = isLiked;
       const previousLikes = review.likes || 0;
-      
+
       setIsLiked(!previousIsLiked);
-      setReview({ 
-        ...review, 
-        likes: previousIsLiked ? Math.max(0, previousLikes - 1) : previousLikes + 1 
+      setReview({
+        ...review,
+        likes: previousIsLiked ? Math.max(0, previousLikes - 1) : previousLikes + 1
       });
 
       // 2. 실제 DB 업데이트 (작성자 이름과 리뷰 작성자 ID 추가 전달)
       const success = await toggleLike(
-        reviewId, 
-        user.id, 
-        review.authorId || "", 
+        reviewId,
+        user.id,
+        review.authorId || "",
         user.name || "익명 사용자"
       );
-      
+
       // 3. 실패 시 롤백 (원래 상태로 복구)
       if (!success) {
         setIsLiked(previousIsLiked);
@@ -156,17 +159,17 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired }: ReviewDetai
     if (!newComment.trim()) return;
 
     const success = await addComment(
-      reviewId, 
-      user!.id, 
-      user!.name || "익명 사용자", 
+      reviewId,
+      user!.id,
+      user!.name || "익명 사용자",
       newComment,
       review?.authorId
     );
-    
+
     if (success) {
       setNewComment("");
     }
-  }, [isLoggedIn, newComment, reviewId, user, onLoginRequired]);
+  }, [isLoggedIn, newComment, reviewId, user, onLoginRequired, review?.authorId]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const idx = Math.round(e.currentTarget.scrollLeft / e.currentTarget.offsetWidth);
@@ -181,7 +184,7 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired }: ReviewDetai
       <div className="review-detail-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button className="back-btn" onClick={onClose}><ArrowLeft size={24} /></button>
         <span className="title" style={{ flex: 1, textAlign: 'center' }}>방문록 상세보기</span>
-        
+
         {user?.id === review?.authorId ? (
           <div style={{ position: 'relative' }}>
             <button className="back-btn" onClick={() => setShowMenuPopup(prev => !prev)}>
@@ -189,14 +192,14 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired }: ReviewDetai
             </button>
             {showMenuPopup && (
               <div style={{ position: 'absolute', right: 0, top: '40px', background: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, display: 'flex', flexDirection: 'column', padding: '4px', minWidth: '120px' }}>
-                <button 
+                <button
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}
                   onClick={() => { setShowMenuPopup(false); onEdit?.(); }}
                 >
                   <Pencil size={18} /> 수정하기
                 </button>
                 <div style={{ height: '1px', background: '#F2F4F6', margin: '0 4px' }} />
-                <button 
+                <button
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#E84040' }}
                   onClick={() => { setShowMenuPopup(false); onDelete?.(); }}
                 >
@@ -249,6 +252,17 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired }: ReviewDetai
             <div className="meta">
               <div className="name-row">
                 <span className="name">{review.author}</span>
+                {(() => {
+                  const displayType = review.experienceType || "단순 방문";
+                  return (
+                    <div className={`experience-badge ${displayType === '거주 경험' ? 'resident' : displayType === '매물 투어' ? 'visit' : ''}`}>
+                      <span className="icon">
+                        {displayType === '거주 경험' ? <HomeIcon size={12} /> : displayType === '매물 투어' ? <Search size={12} /> : <MapPin size={12} />}
+                      </span>
+                      <span>{displayType}</span>
+                    </div>
+                  );
+                })()}
                 {authorTitle && (
                   <span style={{ fontSize: '12px', background: '#F2F4F6', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>
                     {authorTitle.icon} {authorTitle.title}

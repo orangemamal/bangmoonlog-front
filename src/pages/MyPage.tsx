@@ -220,6 +220,38 @@ export function MyPage() {
             <div className="mypage__spacer" />
           </div>
         ))}
+        {/* [임시] 데이터 마이그레이션 도구 */}
+        <div style={{ padding: '0 20px 40px' }}>
+          <button
+            onClick={async () => {
+              if (window.confirm("기존 데이터에 방문 유형(단순 방문)을 일괄 적용할까요?")) {
+                const { migrateExperienceType } = await import("../utils/migration");
+                const res = await migrateExperienceType();
+                if (res.success) {
+                  alert(`마이그레이션 완료! ${res.count}개의 문서가 업데이트 되었습니다.`);
+                } else {
+                  alert("마이그레이션 도중 오류가 발생했습니다.");
+                }
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '16px',
+              backgroundColor: '#F2F4F6',
+              color: '#8B95A1',
+              border: 'none',
+              borderRadius: '16px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            🔄 데이터 정규화 및 동기화 실행
+          </button>
+          <p style={{ fontSize: '12px', color: '#B0B8C1', textAlign: 'center', marginTop: '8px' }}>
+            새로 추가된 '방문 유형' 필드를 기존 데이터에 일괄 반영합니다.
+          </p>
+        </div>
       </div>
 
       {/* 공통 슬라이드 업 모달 (내가 쓴 방문록, 최근 본 목록, 공지사항 등) */}

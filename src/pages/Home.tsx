@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, User, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db } from '../services/firebase';
@@ -26,6 +26,7 @@ import { useRecentLogs } from "../hooks/useRecentLogs";
 import { useAccessControl } from "../hooks/useAccessControl";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { deleteReview } from "../services/reviewService";
+import { WelcomeModal } from "../components/home/WelcomeModal";
 
 interface Review {
   id: string;
@@ -44,6 +45,7 @@ interface Review {
   createdAt?: Timestamp;
   isVerified?: boolean;
   distance?: number;
+  experienceType?: string;
 }
 
 
@@ -139,6 +141,7 @@ export function Home() {
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [isPostcodeOpen, setPostcodeOpen] = useState(false);
   const [isReadListOpen, setReadListOpen] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
   const [ratings, setRatings] = useState({ light: 3, noise: 3, water: 3 });
   const [comment, setComment] = useState("");
@@ -152,6 +155,19 @@ export function Home() {
   const unsubscribeReadListRef = useRef<(() => void) | null>(null);
   const clusterRef = useRef<any>(null);
   const allMarkersRef = useRef<any[]>([]);
+
+  // [환영 모달] 첫 방문 시 노출 여부 체크
+  useEffect(() => {
+    const expiry = localStorage.getItem("welcome_modal_expiry");
+    const sessionSeen = sessionStorage.getItem("welcome_modal_seen");
+    const now = new Date().getTime();
+
+    // 24시간 만료 체크 + 현재 세션 노출 여부 체크
+    if ((!expiry || now > parseInt(expiry)) && !sessionSeen) {
+      setShowWelcomeModal(true);
+      sessionStorage.setItem("welcome_modal_seen", "true");
+    }
+  }, []);
 
   // 수정 파라미터 감지 및 로드
   useEffect(() => {
@@ -172,10 +188,13 @@ export function Home() {
             if (r.lat && r.lng) {
               setSelectedCoord({ lat: r.lat, lng: r.lng });
             }
+            setExperienceType(r.experienceType || "단순 방문");
+            setReadListOpen(false);
+            setSelectedReview(null);
             setSheetOpen(true);
           }
-        } catch(e) {}
-        
+        } catch (e) { }
+
         // Remove param so it doesn't loop
         searchParams.delete("edit");
         setSearchParams(searchParams, { replace: true });
@@ -273,28 +292,29 @@ export function Home() {
 
           // [개선] 찜하기 상태 확인 로직 추가
           const checkBookmark = async () => {
-             let isBookmarked = false;
-             if (isLoggedIn && user) {
-               const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", loc.address));
-               const bsnap = await getDocs(bq);
-               isBookmarked = !bsnap.empty;
-             }
-             
-             const isRes = checkIsResidential(loc.address);
-             infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-             infoWindowInstance.current.setContent(`
+            let isBookmarked = false;
+            if (isLoggedIn && user) {
+              const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", loc.address));
+              const bsnap = await getDocs(bq);
+              isBookmarked = !bsnap.empty;
+            }
+
+            const isRes = checkIsResidential(loc.address);
+            infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+            infoWindowInstance.current.setContent(`
                <div class="iw-container marker">
                  <div class="iw-card">
                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                      <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                     ${isRes ? `
                      <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${loc.address}', ${loc.lat}, ${loc.lng})">
                        <svg width="24" height="24" viewBox="0 0 24 24" 
                          fill="${isBookmarked ? '#FFD43B' : 'none'}" 
-                         stroke="${isBookmarked ? '#FFD43B' : '#E5E8EB'}" 
+                         stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                        </svg>
-                     </button>
+                     </button>` : ''}
                    </div>
                    <div class="iw-address"><span>📍</span><span>${loc.address}</span></div>
                    <div class="iw-stats">
@@ -314,7 +334,7 @@ export function Home() {
                  </div>
                </div>
              `);
-             infoWindowInstance.current.open(mapInstance.current, latLng);
+            infoWindowInstance.current.open(mapInstance.current, latLng);
           };
           checkBookmark();
         });
@@ -323,15 +343,15 @@ export function Home() {
 
       clusterRef.current = new window.MarkerClustering({
         minClusterSize: 2,
-        maxZoom: 15,
+        maxZoom: 18,
         map: mapInstance.current,
         markers: markers,
         disableClickZoom: false,
-        gridSize: 120,
+        gridSize: 180,
         icons: [
-          { content: '<div class="cluster cluster-s"><div></div></div>', size: new window.naver.maps.Size(40, 40), anchor: new window.naver.maps.Point(20, 20) },
-          { content: '<div class="cluster cluster-m"><div></div></div>', size: new window.naver.maps.Size(50, 50), anchor: new window.naver.maps.Point(25, 25) },
-          { content: '<div class="cluster cluster-l"><div></div></div>', size: new window.naver.maps.Size(60, 60), anchor: new window.naver.maps.Point(30, 30) },
+          { content: '<div class="cluster cluster-s"><div></div></div>', size: new window.naver.maps.Size(52, 52), anchor: new window.naver.maps.Point(26, 26) },
+          { content: '<div class="cluster cluster-m"><div></div></div>', size: new window.naver.maps.Size(60, 60), anchor: new window.naver.maps.Point(30, 30) },
+          { content: '<div class="cluster cluster-l"><div></div></div>', size: new window.naver.maps.Size(72, 72), anchor: new window.naver.maps.Point(36, 36) },
         ],
         stylingFunction: (clusterMarker: any, count: number) => {
           const el = clusterMarker.getElement();
@@ -370,7 +390,9 @@ export function Home() {
     setSelectedCoord({ lat: review.lat || 37.5, lng: review.lng || 127.0 });
     setComment(review.content);
     setSelectedTags(review.tags || []);
+    setExperienceType(review.experienceType || "단순 방문");
     setReadListOpen(false);
+    setSelectedReview(null); // 수정 진입 시 상세 보기 팝업 닫기 (이중 모달 방지)
     setSheetOpen(true);
   }, []);
 
@@ -421,7 +443,8 @@ export function Home() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // [수정 연동] 제거됨 (마커 클릭 시 목록 보기를 방해함)
+  // [방문 유형]
+  const [experienceType, setExperienceType] = useState("단순 방문");
 
   // 시트 진입 시 위치 검증 함수
   const verifyLocation = useCallback((targetLat?: number, targetLng?: number) => {
@@ -481,7 +504,20 @@ export function Home() {
   };
 
   const neighborhoodTags = ["#채광맛집", "#방음주의", "#수압짱", "#집주인천사", "#편의점가깝", "#언덕주의"];
-  const tags = ["#바퀴벌레지옥", "#채광맛집", "#집주인천사", "#수압짱", "#방음안됨", "#뷰맛집"];
+  const tags = [
+    // ✨ 숨은 매력 장점 (발견하면 좋은 안심 태그)
+    "#채광맛집", "#방음잘됨", "#수압짱", "#수납넉넉", "#벌레청정구역",
+    "#단열잘됨", "#주차여유", "#하자보수빠름", "#집주인천사", "#분리수거편함",
+
+    // 🚨 치명적인 단점 (입주 전 필수 체크)
+    "#층간소음심함", "#벽간소음", "#외부소음", "#결로곰팡이", "#수압약함",
+    "#벌레출몰주의", "#바퀴벌레지옥", "#외풍심함", "#녹물나옴", "#환기안됨",
+    "#주차공간부족", "#관리비폭탄", "#집주인간섭", "#분리수거불편",
+
+    // 🏘️ 동네 인프라 및 환경 (라이프스타일)
+    "#편의점코앞", "#치안좋음", "#언덕심함", "#초역세권", "#뷰맛집",
+    "#산책로있음", "#버스정류장가깝"
+  ];
 
 
   useEffect(() => {
@@ -524,7 +560,8 @@ export function Home() {
               ratings: data.ratings || { light: 3, noise: 3, water: 3 },
               createdAt: data.createdAt,
               isVerified: data.isVerified || false,
-              distance: data.distance || 0
+              distance: data.distance || 0,
+              experienceType: data.experienceType || "단순 방문"
             });
           }
         });
@@ -564,7 +601,7 @@ export function Home() {
         showConfirm("로그인 필요", () => login(), "찜하기 기능은 로그인 후 이용 가능합니다.", "🔒");
         return;
       }
-      
+
       try {
         const q = query(collection(db, "bookmarks"), where("userId", "==", user?.id), where("address", "==", address));
         const snap = await getDocs(q);
@@ -581,7 +618,7 @@ export function Home() {
           });
           showAlert("찜 완료!", "이 건물의 새로운 방문록 알림을 보내드릴게요. 🔔", "🏠");
         }
-        
+
         // [개선] 현재 열린 InfoWindow의 UI를 실시간으로 즉시 업데이트 (DOM 직접 조작)
         const btn = document.querySelector(".iw-bookmark-icon-btn");
         if (btn) {
@@ -590,7 +627,7 @@ export function Home() {
             btn.classList.remove("active");
             if (svg) {
               svg.setAttribute("fill", "none");
-              svg.setAttribute("stroke", "#E5E8EB");
+              svg.setAttribute("stroke", "#A8AFB5");
             }
           } else {
             btn.classList.add("active");
@@ -600,7 +637,7 @@ export function Home() {
             }
           }
         }
-        
+
         // 인포윈도우 상태 갱신을 위해 현재 열린 정보창 다시 그리기 (백그라운드 동기화)
         if (infoWindowInstance.current?.getMap()) {
           refreshMarkers();
@@ -611,8 +648,8 @@ export function Home() {
     const initializeMap = () => {
       if (!window.naver?.maps || !mapElement.current || mapInstance.current) return;
 
-      // 초기 서울 중심 위치
-      const initialCenter = new window.naver.maps.LatLng(37.5385, 127.0694);
+      // 초기 서울 중심 위치 - 시청/광장 (가장 표준적인 선택)
+      const initialCenter = new window.naver.maps.LatLng(37.5665, 126.9780);
 
       mapInstance.current = new window.naver.maps.Map(mapElement.current, {
         center: initialCenter,
@@ -732,14 +769,15 @@ export function Home() {
                   <div class="iw-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                       <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                      ${isResidential ? `
                       <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${address}', ${existingLoc.lat}, ${existingLoc.lng})">
                         <svg width="24" height="24" viewBox="0 0 24 24" 
                           fill="${isBookmarked ? '#FFD43B' : 'none'}" 
-                          stroke="${isBookmarked ? '#FFD43B' : '#E5E8EB'}" 
+                          stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                         </svg>
-                      </button>
+                      </button>` : ''}
                     </div>
                     <div class="iw-address"><span>📍</span><span>${address}</span></div>
                     <div class="iw-stats">
@@ -760,6 +798,7 @@ export function Home() {
                 </div>
               `);
               infoWindowInstance.current.open(mapInstance.current, finalPos);
+              mapInstance.current.panTo(finalPos, { duration: 300, easing: "linear" });
             };
             checkBookmark();
             return;
@@ -787,14 +826,15 @@ export function Home() {
                   <div class="iw-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                       <div class="iw-title" style="margin-bottom:0;">방문록 쓰기</div>
+                      ${isResidential ? `
                       <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${address}', ${finalPos.lat()}, ${finalPos.lng()})">
                         <svg width="24" height="24" viewBox="0 0 24 24" 
                           fill="${isBookmarked ? '#FFD43B' : 'none'}" 
-                          stroke="${isBookmarked ? '#FFD43B' : '#E5E8EB'}" 
+                          stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                         </svg>
-                      </button>
+                      </button>` : ''}
                     </div>
                     <div class="iw-address"><span>📍</span><span>${address}</span></div>
                     ${isKorea ? (
@@ -810,6 +850,7 @@ export function Home() {
                 </div>
               `);
               infoWindowInstance.current.open(mapInstance.current, finalPos);
+              mapInstance.current.panTo(finalPos, { duration: 300, easing: "linear" });
             };
             checkBookmarkNone();
           });
@@ -884,6 +925,7 @@ export function Home() {
         ratings,
         tags: selectedTags,
         images: imageUrls,
+        experienceType,
         updatedAt: Timestamp.now()
       };
 
@@ -902,31 +944,32 @@ export function Home() {
         reviewData.lng = selectedCoord.lng;
         reviewData.isVerified = isVerified;
         reviewData.distance = verificationDistance || 0;
+        reviewData.experienceType = experienceType;
 
         const docRef = await addDoc(collection(db, "reviews"), reviewData);
-        
+
         // 칭호 체크 로직
         if (user?.id) {
           const q = query(collection(db, "reviews"), where("authorId", "==", user.id));
           const snap = await getDocs(q);
           const totalAfter = snap.size; // 방금 쓴 것 포함
           const totalBefore = totalAfter - 1;
-          
+
           const newBadge = checkEligibleForNewTitle(totalBefore, totalAfter);
-          
+
           if (newBadge) {
-             await addDoc(collection(db, "notifications"), {
-               toUserId: user.id,
-               type: "system",
-               content: `축하합니다! 방문록 ${totalAfter}회 작성을 달성하여 '${newBadge.title}' 뱃지를 획득했습니다. ${newBadge.icon}`,
-               reviewId: docRef.id,
-               createdAt: Timestamp.now(),
-               isRead: false
-             });
-             showAlert("🎖️ 새로운 칭호 획득!", `방문록 ${totalAfter}회 작성 기념으로 '${newBadge.title}' 뱃지를 얻었습니다.`, "🏆");
+            await addDoc(collection(db, "notifications"), {
+              toUserId: user.id,
+              type: "system",
+              content: `축하합니다! 방문록 ${totalAfter}회 작성을 달성하여 '${newBadge.title}' 뱃지를 획득했습니다. ${newBadge.icon}`,
+              reviewId: docRef.id,
+              createdAt: Timestamp.now(),
+              isRead: false
+            });
+            showAlert("🎖️ 새로운 칭호 획득!", `방문록 ${totalAfter}회 작성 기념으로 '${newBadge.title}' 뱃지를 얻었습니다.`, "🏆");
           }
         }
-        
+
         // 원래 뱃지 로직
         if (isVerified && user?.id) {
           await addDoc(collection(db, "notifications"), {
@@ -938,29 +981,30 @@ export function Home() {
             isRead: false
           });
         }
-        
+
         showAlert("등록 완료", "소중한 방문록이 지도에 기록되었습니다.", "🥳");
 
         // [추가] 찜한 사용자들에게 알림 발송
         const bq = query(collection(db, "bookmarks"), where("address", "==", selectedAddress));
         const bsnap = await getDocs(bq);
         bsnap.forEach(async (bdoc) => {
-           const bm = bdoc.data();
-           if (bm.userId !== user?.id) { // 본인 제외
-              await addDoc(collection(db, "notifications"), {
-                toUserId: bm.userId,
-                type: "local",
-                content: `찜한 건물 '${selectedAddress.split(' ').slice(-1)}'에 새로운 방문록이 올라왔어요!`,
-                reviewId: docRef.id,
-                createdAt: Timestamp.now(),
-                isRead: false
-              });
-           }
+          const bm = bdoc.data();
+          if (bm.userId !== user?.id) { // 본인 제외
+            await addDoc(collection(db, "notifications"), {
+              toUserId: bm.userId,
+              type: "local",
+              content: `찜한 건물 '${selectedAddress.split(' ').slice(-1)}'에 새로운 방문록이 올라왔어요!`,
+              reviewId: docRef.id,
+              createdAt: Timestamp.now(),
+              isRead: false
+            });
+          }
         });
       }
 
       setSheetOpen(false); setComment(""); setSelectedTags([]); setSelectedImages([]);
       setEditingReviewId(null); setIsVerified(false); setVerificationDistance(null);
+      setExperienceType("단순 방문");
       refreshMarkers();
     } catch (e) {
       console.error(e);
@@ -975,7 +1019,7 @@ export function Home() {
     <div className="page-home">
       <div className="home-search-bar">
         {!searchQuery && <span className="home-search-icon"><Search size={24} color="#8B95A1" /></span>}
-        <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsAddressSelected(false); }} onKeyDown={e => e.key === "Enter" && setPostcodeOpen(true)} placeholder="주소로 방문록 찾기" className="home-search-input" />
+        <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsAddressSelected(false); }} onKeyDown={e => e.key === "Enter" && setPostcodeOpen(true)} placeholder="어떤 집의 방문Log가 궁금하세요?" className="home-search-input" />
         {searchQuery.length > 0 && <span className="home-search-submit"><button className="icon-search-btn" onClick={() => setPostcodeOpen(true)}><Search size={24} color="#3182F6" /></button></span>}
       </div>
 
@@ -1034,24 +1078,35 @@ export function Home() {
         </div>
       )}
 
-      <BottomSheet isOpen={isSheetOpen} onClose={() => { setSheetOpen(false); setEditingReviewId(null); setComment(""); setSelectedTags([]); setSelectedImages([]); setIsVerified(false); setVerificationDistance(null); }} title={editingReviewId ? "방문록 수정하기" : "방문록 쓰기"}>
+      <BottomSheet 
+        isOpen={isSheetOpen} 
+        onClose={() => { setSheetOpen(false); setEditingReviewId(null); setComment(""); setSelectedTags([]); setSelectedImages([]); setIsVerified(false); setVerificationDistance(null); }} 
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {editingReviewId ? <Pencil size={20} color="#3182F6" /> : <Star size={20} color="#F5A623" fill="#F5A623" />}
+            <span>{editingReviewId ? "방문록 수정하기" : "방문록 쓰기"}</span>
+          </div>
+        }
+      >
         {/* 기존 디자인 그대로 복구 (불필요한 wrapper 및 h3 제거) */}
         <div className="sheet-content">
           <div className={`verification-banner ${isVerified ? 'verified' : ''}`}>
             <div className="banner-left">
               <div className="address-header">
-                <span className="address-text">{selectedAddress}</span>
                 {isVerified && <div className="badge-verify"><CheckCircle2 size={12} /><span>방문자 인증</span></div>}
+                <span className="address-text">{selectedAddress}</span>
               </div>
-              <p className="address-desc">
-                {isVerifying ? (
-                  "📍 위치 확인 중..."
-                ) : isVerified ? (
-                  `📍 장소와 ${verificationDistance}m 거리에 있어 방문 인증이 완료되었습니다.`
-                ) : (
-                  "📍 장소와 멀리 떨어져 있어 인증 마크를 달 수 없어요."
-                )}
-              </p>
+              {!editingReviewId && (
+                <p className="address-desc">
+                  {isVerifying ? (
+                    "📍 위치 확인 중..."
+                  ) : isVerified ? (
+                    `📍 장소와 ${verificationDistance}m 거리에 있어 방문 인증이 완료되었습니다.`
+                  ) : (
+                    "📍 장소와 멀리 떨어져 있어 인증 마크를 달 수 없어요."
+                  )}
+                </p>
+              )}
             </div>
             {!editingReviewId && (
               <button className="refresh-loc-btn" onClick={() => verifyLocation()}>
@@ -1060,8 +1115,35 @@ export function Home() {
             )}
           </div>
 
+          <div className="experience-section">
+            <div className="section-title">
+              <ClipboardCheck size={16} color="#3182F6" />
+              <span>방문 유형 선택</span>
+            </div>
+            <div className="experience-chips">
+              {[
+                { label: "단순 방문", icon: <MapPin size={14} /> },
+                { label: "거주 경험", icon: <HomeIcon size={14} /> },
+                { label: "매물 투어", icon: <Search size={14} /> }
+              ].map(type => (
+                <button
+                  key={type.label}
+                  type="button"
+                  className={`experience-chip ${experienceType === type.label ? 'active' : ''}`}
+                  onClick={() => setExperienceType(type.label)}
+                >
+                  <span className="icon">{type.icon}</span>
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
-            <div className="section-title">방문 사진</div>
+            <div className="section-title">
+              <ImageIcon size={16} color="#3182F6" />
+              <span>방문 사진</span>
+            </div>
             <div className="photo-section">
               <button className="photo-button" onClick={() => fileInputRef.current?.click()}>
                 <Camera size={24} />
@@ -1078,19 +1160,28 @@ export function Home() {
           </div>
 
           <div>
-            <div className="section-title">솔직한 방문 후기</div>
+            <div className="section-title">
+              <MessageSquare size={16} color="#3182F6" />
+              <span>솔직한 방문 후기</span>
+            </div>
             <textarea className="comment-textarea" placeholder="방문록을 작성해주세요.(5자 이상)" value={comment} onChange={e => setComment(e.target.value)} />
           </div>
 
           <div>
-            <div className="section-title">항목별 만족도</div>
+            <div className="section-title">
+              <Heart size={16} color="#F04452" fill="#F04452" />
+              <span>항목별 만족도</span>
+            </div>
             <RatingRow label="채광" value={ratings.light} onChange={v => setRatings(r => ({ ...r, light: v }))} />
             <RatingRow label="소음" value={ratings.noise} onChange={v => setRatings(r => ({ ...r, noise: v }))} />
             <RatingRow label="수압" value={ratings.water} onChange={v => setRatings(r => ({ ...r, water: v }))} />
           </div>
 
           <div>
-            <div className="section-title">태그</div>
+            <div className="section-title">
+              <Tag size={16} color="#3182F6" />
+              <span>태그</span>
+            </div>
             {selectedTags.length > 0 && (<div className="selected-tags-container">{selectedTags.map(t => (<button key={t} onClick={() => handleTagToggle(t)} className="tag-chip active">{t} <span className="delete-icon">✕</span></button>))}</div>)}
             <div className="custom-tag-field-wrapper"><span className="tag-prefix">#</span><input type="text" placeholder="태그 직접 입력" value={customTag} onChange={e => setCustomTag(e.target.value.replace('#', ''))} onKeyDown={e => e.key === "Enter" && (e.preventDefault(), handleAddCustomTag())} className="custom-tag-field-input" /><button className="tag-add-btn" onClick={handleAddCustomTag}><Plus size={20} /></button></div>
             <div className="recommend-tag-section"><p className="recommend-title">추천 태그</p><div className="tags-wrapper">{tags.filter(t => !selectedTags.includes(t)).map(t => (<button key={t} onClick={() => handleTagToggle(t)} className="tag-chip recommended">{t}</button>))}</div></div>
@@ -1147,19 +1238,17 @@ export function Home() {
                   }}>
                     <div className="card-top">
                       <div className="card-tags">
+                        <div className={`experience-badge ${review.experienceType === '거주 경험' ? 'resident' : review.experienceType === '매물 투어' ? 'visit' : ''}`}>
+                          <span className="icon">
+                            {review.experienceType === '거주 경험' ? <HomeIcon size={12} /> : review.experienceType === '매물 투어' ? <Search size={12} /> : <MapPin size={12} />}
+                          </span>
+                          <span>{review.experienceType || "단순 방문"}</span>
+                        </div>
                         {review.isVerified && (
                           <div className="card-verify-badge">
                             <CheckCircle2 size={12} />
-                            <span>인증됨</span>
+                            <span>방문자 인증</span>
                           </div>
-                        )}
-                        {review.tags && review.tags.length > 0 && (
-                          <>
-                            {review.tags.slice(0, 2).map((t: string, idx: number) => (
-                              <div key={`${t}-${idx}`} className="card-tag">{t}</div>
-                            ))}
-                            {review.tags.length > 2 && <div className="card-tag">+{review.tags.length - 2}</div>}
-                          </>
                         )}
                       </div>
                       {/* [복구] 본인 게시물인 경우에만 더보기 아이콘 표시 */}
@@ -1189,6 +1278,10 @@ export function Home() {
                         </div>
                       )}
                     </div>
+                    <div className="card-address" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8B95A1', marginBottom: '8px', padding: '0 4px' }}>
+                      <MapIcon size={12} color="#3182F6" />
+                      <span>{review.location}</span>
+                    </div>
                     <div className="card-body">
                       <p className="card-content">{review.content}</p>
                       <div className="card-thumb">
@@ -1199,6 +1292,14 @@ export function Home() {
                         )}
                       </div>
                     </div>
+                    {review.tags && review.tags.length > 0 && (
+                      <div className="card-bottom-tags">
+                        {review.tags.slice(0, 3).map((t: string, idx: number) => (
+                          <span key={`${t}-${idx}`} className="tag-text">#{t.replace(/^#/, '')}</span>
+                        ))}
+                        {review.tags.length > 3 && <span className="tag-more">+{review.tags.length - 3}</span>}
+                      </div>
+                    )}
                     <div className="card-footer">
                       <div className="stats">
                         <span className="stat-item"><Heart size={14} /> {review.likes}</span>
@@ -1298,6 +1399,7 @@ export function Home() {
           </div>
         </div>
       )}
+      {showWelcomeModal && <WelcomeModal onClose={() => setShowWelcomeModal(false)} />}
     </div>
   );
 }

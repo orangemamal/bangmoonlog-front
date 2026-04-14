@@ -1,3 +1,4 @@
+@use '../../abstracts/variables' as *;
 // ============================================================
 // components/_layout.scss
 // 앱 레이아웃 & 바텀 내비게이션
@@ -10,9 +11,9 @@
   flex-direction: column;
   height: 100dvh;
   width: 100%;
-  background-color: var(--color-bg);
-  color: var(--color-text-main);
-  font-family: var(--font-family);
+  background-color: $color-bg;
+  color: $color-text-main;
+  font-family: $font-family;
   position: relative;
   overflow: hidden;
 }
@@ -23,7 +24,7 @@
   width: 100%;
 
   &.has-bottom-nav {
-    padding-bottom: var(--bottom-nav-height);
+    padding-bottom: $bottom-nav-height;
   }
 }
 
@@ -32,16 +33,16 @@
   position: fixed;
   bottom: 0;
   width: 100%;
-  height: var(--bottom-nav-height);
-  background-color: var(--color-surface);
-  border-top: 1px solid var(--color-border);
+  height: $bottom-nav-height;
+  background-color: $color-surface;
+  border-top: 1px solid $color-border;
   display: flex;
   align-items: center;
   justify-content: space-around;
   padding: 0 8px;
   z-index: 50;
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
+  border-top-left-radius: $radius-lg;
+  border-top-right-radius: $radius-lg;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
   box-sizing: border-box;
 }
@@ -57,11 +58,11 @@
   height: 100%;
   position: relative;
   text-decoration: none;
-  color: var(--color-text-caption);
+  color: $color-text-caption;
   transition: color 0.15s ease;
 
   &.active {
-    color: var(--color-primary);
+    color: $color-primary;
   }
 
   &__icon {
@@ -76,10 +77,10 @@
 
   &__badge {
     position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 13px;
-    height: 13px;
+    top: -6px;
+    right: -6px;
+    width: 10px;
+    height: 10px;
     background-color: #F04452;
     border-radius: 50%;
     border: 2px solid white;

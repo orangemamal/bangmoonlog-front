@@ -1,0 +1,81 @@
+@use '../../abstracts/variables' as *;
+
+// 경험 유형 배지 (공통)
+.experience-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: #F2F4F6;
+  color: #4E5968;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1;
+
+  .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    
+    svg {
+      display: block;
+    }
+  }
+
+  &.resident {
+    background: #FFF8E1;
+    color: #FF9500;
+  }
+
+  &.visit {
+    background: #E8F3FF;
+    color: #3182F6;
+  }
+}
+
+// 방문자 인증 배지 (공통)
+.card-verify-badge {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: #3182F6;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// 카드 하단 태그 (공통 리모델링 스타일)
+.card-bottom-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  padding: 0 4px;
+
+  .tag-text {
+    color: #6B7684;
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  .tag-more {
+    color: #3182F6;
+    font-size: 11px;
+    font-weight: 600;
+    background: #E8F3FF;
+    padding: 1px 6px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

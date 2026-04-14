@@ -1,12 +1,16 @@
-import { 
-  Heart, 
-  Eye, 
-  MapPin, 
-  ArrowLeft, 
-  MoreHorizontal, 
-  Pencil, 
+import {
+  Heart,
+  Eye,
+  MapPin,
+  ArrowLeft,
+  MoreHorizontal,
+  Pencil,
   Trash2,
-  CheckCircle2
+  CheckCircle2,
+  User,
+  Home as HomeIcon,
+  Search,
+  Map as MapIcon
 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -33,6 +37,7 @@ interface Post {
   ratings?: { light: number; noise: number; water: number };
   author: string;
   authorId: string;
+  experienceType?: string;
 }
 
 export function Feed() {
@@ -94,7 +99,8 @@ export function Feed() {
           views: data.views || 0,
           ratings: data.ratings,
           author: data.author || "익명 방문자",
-          authorId: data.authorId || ""
+          authorId: data.authorId || "",
+          experienceType: data.experienceType || "단순 방문"
         });
       });
       setPosts(list);
@@ -144,9 +150,6 @@ export function Feed() {
   };
 
   const handleCloseDetail = useCallback(() => setIsDetailOpen(false), []);
-  const handleEditDetail = useCallback(() => {
-    setIsDetailOpen(false);
-  }, []);
 
   const handleDeletePost = useCallback(async (postId: string) => {
     showConfirm(
@@ -169,6 +172,10 @@ export function Feed() {
   const handleDeletePostDetail = useCallback((id: string) => {
     handleDeletePost(id);
   }, [handleDeletePost]);
+
+  useEffect(() => {
+    setActiveMenuId(null);
+  }, [activeTab]);
 
   const handleEditPost = (id: string) => {
     navigate(`/?edit=${id}`);
@@ -214,7 +221,7 @@ export function Feed() {
                   onClick={() => setActiveTab(tab)}
                   className={`feed__tab${activeTab === tab ? " feed__tab--active" : ""}`}
                 >
-                  {tab === "hot" ? "실시간 핫게시물" : "내 주변 소식"}
+                  {tab === "hot" ? "인기 방문록" : "내 주변 방문록"}
                 </button>
               ))}
             </div>
@@ -229,34 +236,25 @@ export function Feed() {
           filteredData.map(post => (
             <div key={post.id} className="feed__card" onClick={() => handlePostClick(post.id)}>
               <div className="feed__card-header">
-                <div className="feed__card-meta" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  {post.isVerified && (
-                     <div className="card-verify-badge" style={{ display: 'flex', alignItems: 'center', gap: '3px', background: '#3182F6', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
-                       <CheckCircle2 size={12} strokeWidth={3} />
-                       <span>인증됨</span>
-                     </div>
+                <div className="feed__card-meta">
+                  {post.experienceType && (
+                    <div className={`experience-badge ${post.experienceType === '거주 경험' ? 'resident' : post.experienceType === '매물 투어' ? 'visit' : ''}`}>
+                      <span className="icon">
+                        {post.experienceType === '거주 경험' ? <HomeIcon size={12} /> : post.experienceType === '매물 투어' ? <Search size={12} /> : <MapPin size={12} />}
+                      </span>
+                      <span>{post.experienceType}</span>
+                    </div>
                   )}
-                  {post.tags?.slice(0, 2).map((t, i) => (
-                    <span
-                      key={i}
-                      className="feed__card-tag"
-                      style={{ backgroundColor: post.tagBg, color: post.tagColor, padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}
-                    >
-                      {t}
-                    </span>
-                  ))}
-                  {post.tags && post.tags.length > 2 && (
-                    <span
-                      className="feed__card-tag"
-                      style={{ backgroundColor: post.tagBg, color: post.tagColor, padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}
-                    >
-                      +{post.tags.length - 2}
-                    </span>
+                  {post.isVerified && (
+                    <div className="card-verify-badge">
+                      <CheckCircle2 size={12} strokeWidth={3} />
+                      <span>방문자 인증</span>
+                    </div>
                   )}
                 </div>
                 {activeTab !== 'hot' && user && user.id === post.authorId && (
-                  <div className="feed__card-more-container" style={{ position: 'relative' }}>
-                    <button 
+                  <div className="feed__card-more-container">
+                    <button
                       className="feed__card-more-btn"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -282,7 +280,7 @@ export function Feed() {
               </div>
 
               <div className="feed__card-location">
-                <MapPin size={14} color="#3182F6" />
+                <MapIcon size={14} color="#3182F6" />
                 <span>{post.location}</span>
               </div>
 
@@ -296,6 +294,16 @@ export function Feed() {
                   )}
                 </div>
               </div>
+              {post.tags && post.tags.length > 0 && (
+                <div className="card-bottom-tags">
+                  {post.tags.slice(0, 3).map((t, i) => (
+                    <span key={i} className="tag-text">#{t.replace(/^#/, '')}</span>
+                  ))}
+                  {post.tags.length > 3 && (
+                    <span className="tag-more">+{post.tags.length - 3}</span>
+                  )}
+                </div>
+              )}
 
               <div className="feed__card-footer">
                 <div className="feed__card-stat">
@@ -306,7 +314,7 @@ export function Feed() {
                   <Eye size={16} color="#B0B8C1" />
                   <span>{post.views}</span>
                 </div>
-                <span className="feed__card-date" style={{ marginLeft: "auto", fontSize: "12px", color: "#8B95A1" }}>{post.date}</span>
+                <span className="feed__card-date">{post.date}</span>
               </div>
             </div>
           ))
@@ -333,20 +341,9 @@ export function Feed() {
             <div className="toss-face-icon">{modalConfig.icon}</div>
             <h2 className="tds-modal-title">{modalConfig.title}</h2>
             {modalConfig.desc && <p className="tds-modal-desc">{modalConfig.desc}</p>}
-            <div className="tds-modal-footer" style={{ display: 'flex', gap: '8px', width: '100%' }}>
+            <div className="tds-modal-footer">
               <button
                 className="tds-btn-secondary"
-                style={{
-                  flex: 1,
-                  height: '54px',
-                  background: '#F2F4F6',
-                  color: '#4E5968',
-                  border: 'none',
-                  borderRadius: '16px',
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
                 onClick={() => {
                   setModalConfig(prev => ({ ...prev, isOpen: false }));
                   if (modalConfig.onCancel) modalConfig.onCancel();
@@ -356,17 +353,6 @@ export function Feed() {
               </button>
               <button
                 className="tds-btn-primary"
-                style={{
-                  flex: 1,
-                  height: '54px',
-                  background: '#3182F6',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '16px',
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
                 onClick={() => {
                   setModalConfig(prev => ({ ...prev, isOpen: false }));
                   if (modalConfig.onConfirm) modalConfig.onConfirm();

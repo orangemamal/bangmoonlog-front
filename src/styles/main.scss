@@ -17,9 +17,12 @@
 @use 'components/common/layout';
 @use 'components/common/bottom-sheet';
 @use 'components/common/dropdown';
+@use 'components/common/modal';
+@use 'components/common/badge';
 @use 'components/review-detail';
 
 // 4. 페이지
+@use 'components/home/welcome-modal';
 @use 'pages/home';
 @use 'pages/feed';
 @use 'pages/notifications';
