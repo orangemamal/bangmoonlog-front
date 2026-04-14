@@ -131,10 +131,16 @@
     gap: 4px;
     margin-bottom: 8px;
     color: $color-text-sub;
+    overflow: hidden; // 넘침 방지
 
     span {
       font-size: 13px;
       font-weight: 500;
+      white-space: nowrap; // 한 줄 유지
+      overflow: hidden; // 넘침 숨김
+      text-overflow: ellipsis; // 말줄임표 표시
+      flex: 1; // 가용 공간 차지
+      min-width: 0; // flex 아이템의 최소 너비 해제 (생략 작동을 위해 필수)
     }
   }
 

@@ -20,6 +20,7 @@ import { collection, query, orderBy, where, onSnapshot, QuerySnapshot, QueryDocu
 import { useAccessControl } from "../hooks/useAccessControl";
 import { useAuth } from "../hooks/useAuth";
 import { ReviewDetail } from "../components/ReviewDetail";
+import { formatAddressDetail } from "../utils/addressUtils";
 
 interface Post {
   id: string;
@@ -30,6 +31,7 @@ interface Post {
   isVerified?: boolean;
   date: string;
   location: string;
+  addressDetail?: string;
   content: string;
   image: string;
   likes: number;
@@ -93,6 +95,7 @@ export function Feed() {
           isVerified: !!data.isVerified,
           date: data.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(data.createdAt.toDate()) : "2026.04.09",
           location: data.address,
+          addressDetail: data.addressDetail,
           content: data.content,
           image: data.images?.[0] || "",
           likes: data.likes || 0,
@@ -282,6 +285,11 @@ export function Feed() {
               <div className="feed__card-location">
                 <MapIcon size={14} color="#3182F6" />
                 <span>{post.location}</span>
+                {post.addressDetail && (
+                  <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '4px' }}>
+                    {formatAddressDetail(post.addressDetail)}
+                  </span>
+                )}
               </div>
 
               <div className="feed__card-body">

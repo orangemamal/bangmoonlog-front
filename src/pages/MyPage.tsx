@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import * as Icons from "lucide-react";
 import {
   Award, Heart, ChevronRight, X, CheckCircle2, Trash2, MapPin, HelpCircle,
-  Clock, Edit3, MoreHorizontal, Pencil
+  MoreHorizontal, Pencil, ArrowLeft
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { db } from "../services/firebase";
@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { ANNOUNCEMENTS, Announcement } from "../constants/announcements";
 import { MY_PAGE_MENU } from "../constants/myPage";
+import { formatAddressDetail } from "../utils/addressUtils";
 import { ReviewDetail } from "../components/ReviewDetail";
 
 export function MyPage() {
@@ -31,6 +32,7 @@ export function MyPage() {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [bookmarkDeleteTarget, setBookmarkDeleteTarget] = useState<{ id: string, address: string } | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
   // 1:1 문의 폼 상태
@@ -49,40 +51,65 @@ export function MyPage() {
 
   const navigate = useNavigate();
 
+  // 최근 본 목록 상세 로드 함수를 외부로 추출
+  const loadRecentDetails = useCallback(async () => {
+    const saved = localStorage.getItem("recent_logs");
+    if (saved) {
+      const ids = JSON.parse(saved) as string[];
+      const details = [];
+      for (const id of ids) {
+        const d = await getDoc(doc(db, "reviews", id));
+        if (d.exists()) {
+          const data = d.data();
+          details.push({ 
+            id: d.id, 
+            ...data,
+            date: data.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(data.createdAt.toDate()) : "2026.04.10"
+          });
+        }
+      }
+      setRecentLogs(details);
+    }
+  }, []);
+
   useEffect(() => {
     if (!user?.id) return;
 
     const qStats = query(collection(db, "reviews"), where("authorId", "==", user.id));
     const unsubStats = onSnapshot(qStats, (snap: any) => {
       let totalLikes = 0;
-      snap.forEach((doc: any) => { totalLikes += (doc.data().likes || 0); });
+      const reviewsList = snap.docs.map((d: any) => {
+        const data = d.data();
+        totalLikes += (data.likes || 0);
+        return {
+          id: d.id,
+          ...data,
+          date: data.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(data.createdAt.toDate()) : "2026.04.10"
+        };
+      }).sort((a: any, b: any) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
       setStats({ likes: totalLikes, reviews: snap.size });
-      setMyReviews(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
+      setMyReviews(reviewsList);
     });
 
     const qBookmarks = query(collection(db, "bookmarks"), where("userId", "==", user.id));
     const unsubBookmarks = onSnapshot(qBookmarks, (snap: any) => {
-      setBookmarks(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
+      const bList = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => {
+          const timeA = a.createdAt?.seconds || 0;
+          const timeB = b.createdAt?.seconds || 0;
+          return timeB - timeA;
+        });
+      setBookmarks(bList);
     });
-
-    // 최근 본 목록 상세 로드
-    const loadRecentDetails = async () => {
-      const saved = localStorage.getItem("recent_logs");
-      if (saved) {
-        const ids = JSON.parse(saved) as string[];
-        const details = [];
-        for (const id of ids) {
-          const d = await getDoc(doc(db, "reviews", id));
-          if (d.exists()) details.push({ id: d.id, ...d.data() });
-        }
-        setRecentLogs(details);
-      }
-    };
 
     if (activeModal === "recent") loadRecentDetails();
 
     return () => { unsubStats(); unsubBookmarks(); };
-  }, [user?.id, activeModal]);
+  }, [user?.id, activeModal, loadRecentDetails]);
 
   // 공유하기 기능
   const handleShare = () => {
@@ -209,7 +236,10 @@ export function MyPage() {
                     else if (item.path === "add-to-home") handleAddToHome();
                     else if (item.label === "찜한 리스트") setBookmarkModalOpen(true);
                     else if (item.label === "내가 쓴 방문록") setActiveModal("reviews");
-                    else if (item.label === "최근 본 방문록") setActiveModal("recent");
+                    else if (item.label === "최근 본 방문록") {
+                      loadRecentDetails();
+                      setActiveModal("recent");
+                    }
                     else if (item.label === "공지사항") setActiveModal("announcements");
                     else if (item.label === "자주 묻는 질문") setActiveModal("faq");
                   }}
@@ -220,38 +250,6 @@ export function MyPage() {
             <div className="mypage__spacer" />
           </div>
         ))}
-        {/* [임시] 데이터 마이그레이션 도구 */}
-        <div style={{ padding: '0 20px 40px' }}>
-          <button
-            onClick={async () => {
-              if (window.confirm("기존 데이터에 방문 유형(단순 방문)을 일괄 적용할까요?")) {
-                const { migrateExperienceType } = await import("../utils/migration");
-                const res = await migrateExperienceType();
-                if (res.success) {
-                  alert(`마이그레이션 완료! ${res.count}개의 문서가 업데이트 되었습니다.`);
-                } else {
-                  alert("마이그레이션 도중 오류가 발생했습니다.");
-                }
-              }
-            }}
-            style={{
-              width: '100%',
-              padding: '16px',
-              backgroundColor: '#F2F4F6',
-              color: '#8B95A1',
-              border: 'none',
-              borderRadius: '16px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            🔄 데이터 정규화 및 동기화 실행
-          </button>
-          <p style={{ fontSize: '12px', color: '#B0B8C1', textAlign: 'center', marginTop: '8px' }}>
-            새로 추가된 '방문 유형' 필드를 기존 데이터에 일괄 반영합니다.
-          </p>
-        </div>
       </div>
 
       {/* 공통 슬라이드 업 모달 (내가 쓴 방문록, 최근 본 목록, 공지사항 등) */}
@@ -421,11 +419,24 @@ export function MyPage() {
                         className="mypage__card"
                       >
                         <div className="mypage__card-left">
-                          <div className="mypage__card-icon recent">
-                            <Clock size={24} color="#3182F6" />
+                          <div className="mypage__card-icon recent" style={{ width: '48px', height: '48px', minWidth: '48px', overflow: 'hidden', padding: 0, borderRadius: '12px', backgroundColor: '#F2F4F6' }}>
+                            {r.images && r.images.length > 0 ? (
+                              <img src={r.images[0]} alt="thumb" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F4F6' }}>
+                                <Icons.Image size={24} color="#B0B8C1" />
+                              </div>
+                            )}
                           </div>
                           <div className="mypage__card-info">
-                            <div className="title">{r.location || r.address || "방문록 장소"}</div>
+                            <div className="title">
+                              {r.location || r.address || "방문록 장소"}
+                              {r.addressDetail && (
+                                <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '4px' }}>
+                                  {formatAddressDetail(r.addressDetail)}
+                                </span>
+                              )}
+                            </div>
                             <div className="date">{r.date}</div>
                           </div>
                         </div>
@@ -446,11 +457,24 @@ export function MyPage() {
                         className="mypage__card"
                       >
                         <div className="mypage__card-left">
-                          <div className="mypage__card-icon review">
-                            <Edit3 size={24} color="#3182F6" />
+                          <div className="mypage__card-icon review" style={{ width: '48px', height: '48px', minWidth: '48px', overflow: 'hidden', padding: 0, borderRadius: '12px', backgroundColor: '#F2F4F6' }}>
+                            {r.images && r.images.length > 0 ? (
+                              <img src={r.images[0]} alt="thumb" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F4F6' }}>
+                                <Icons.Image size={24} color="#B0B8C1" />
+                              </div>
+                            )}
                           </div>
                           <div className="mypage__card-info">
-                            <div className="title">{r.location || r.address || "방문록 장소"}</div>
+                            <div className="title">
+                              {r.location || r.address || "방문록 장소"}
+                              {r.addressDetail && (
+                                <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '4px' }}>
+                                  {formatAddressDetail(r.addressDetail)}
+                                </span>
+                              )}
+                            </div>
                             <div className="date">{r.date}</div>
                           </div>
                         </div>
@@ -639,9 +663,9 @@ export function MyPage() {
                       </div>
                     </div>
                     <button
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        try { await deleteDoc(doc(db, "bookmarks", bm.id)); } catch (err) { console.error(err); }
+                        setBookmarkDeleteTarget({ id: bm.id, address: bm.address });
                       }}
                       style={{ border: 'none', background: 'none', color: '#B0B8C1', padding: '8px', flexShrink: 0 }}
                     >
@@ -701,6 +725,56 @@ export function MyPage() {
                       setMyReviews(prev => prev.filter(x => x.id !== deleteTargetId));
                       setDeleteTargetId(null);
                     } catch (e) { console.error(e); }
+                  }}
+                >
+                  확인
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 찜한 리스트 삭제 확인 모달 */}
+      <AnimatePresence>
+        {bookmarkDeleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setBookmarkDeleteTarget(null)}
+            className="mypage__confirm-overlay"
+            style={{ zIndex: 3000 }} // 찜 리스트 모달(2000)보다 위에 표시
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="mypage__confirm-modal"
+            >
+              <div className="mypage__confirm-icon">🔖</div>
+              <h3 className="mypage__confirm-title">찜한 곳 삭제</h3>
+              <p className="mypage__confirm-desc" style={{ padding: '0 20px', wordBreak: 'keep-all' }}>
+                '{bookmarkDeleteTarget.address.split(' ').slice(-2).join(' ')}'을(를)<br />찜한 리스트에서 삭제하시겠습니까?
+              </p>
+              <div className="mypage__confirm-actions">
+                <button
+                  className="mypage__confirm-cancel"
+                  onClick={() => setBookmarkDeleteTarget(null)}
+                >
+                  취소
+                </button>
+                <button
+                  className="mypage__confirm-ok"
+                  onClick={async () => {
+                    try {
+                      await deleteDoc(doc(db, "bookmarks", bookmarkDeleteTarget.id));
+                      setBookmarkDeleteTarget(null);
+                    } catch (err) {
+                      console.error(err);
+                    }
                   }}
                 >
                   확인

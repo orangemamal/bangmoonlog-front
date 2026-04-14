@@ -27,6 +27,7 @@ import { useAccessControl } from "../hooks/useAccessControl";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { deleteReview } from "../services/reviewService";
 import { WelcomeModal } from "../components/home/WelcomeModal";
+import { normalizeAddressDetail, formatAddressDetail } from "../utils/addressUtils";
 
 interface Review {
   id: string;
@@ -36,6 +37,7 @@ interface Review {
   lng?: number;
   date: string;
   location: string;
+  addressDetail?: string;
   content: string;
   images: string[];
   likes: number;
@@ -144,6 +146,7 @@ export function Home() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
   const [ratings, setRatings] = useState({ light: 3, noise: 3, water: 3 });
+  const [addressDetail, setAddressDetail] = useState("");
   const [comment, setComment] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
@@ -300,41 +303,61 @@ export function Home() {
             }
 
             const isRes = checkIsResidential(loc.address);
-            infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-            infoWindowInstance.current.setContent(`
-               <div class="iw-container marker">
-                 <div class="iw-card">
-                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                     <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
-                     ${isRes ? `
-                     <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${loc.address}', ${loc.lat}, ${loc.lng})">
-                       <svg width="24" height="24" viewBox="0 0 24 24" 
-                         fill="${isBookmarked ? '#FFD43B' : 'none'}" 
-                         stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
-                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                         <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                       </svg>
-                     </button>` : ''}
-                   </div>
-                   <div class="iw-address"><span>📍</span><span>${loc.address}</span></div>
-                   <div class="iw-stats">
-                     <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(loc.avgRating || 0).toFixed(2)}</span></div></div>
-                     <div class="iw-divider"></div>
-                     <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${loc.count}건</span></div></div>
-                   </div>
-                   <div class="iw-button-group">
-                     <button class="iw-button iw-button--read" onclick="window.__openReadList('${loc.address}')">방문록 보기</button>
-                     ${isRes ? `<button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${loc.address}', ${loc.lat}, ${loc.lng})">방문록 쓰기</button>` : ''}
-                   </div>
-                   ${!isRes ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
-                        <span style="font-size:14px;">🏠</span>
-                        <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
-                      </div>` : ''}
-                   <div class="iw-arrow"></div>
-                 </div>
-               </div>
-             `);
-            infoWindowInstance.current.open(mapInstance.current, latLng);
+            
+            // [추가] 중복 작성 체크 후 말풍선 오픈
+            const openInfoWindow = async () => {
+              let hasWritten = false;
+              if (isLoggedIn && user?.id) {
+                const q = query(
+                  collection(db, "reviews"), 
+                  where("authorId", "==", user.id), 
+                  where("address", "==", loc.address)
+                );
+                const snap = await getDocs(q);
+                hasWritten = !snap.empty;
+              }
+
+              const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
+              const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
+
+              infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+              infoWindowInstance.current.setContent(`
+                <div class="iw-container marker">
+                  <div class="iw-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                      <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                      ${isRes ? `
+                      <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${loc.address}', ${loc.lat}, ${loc.lng})">
+                        <svg width="24" height="24" viewBox="0 0 24 24" 
+                          fill="${isBookmarked ? '#FFD43B' : 'none'}" 
+                          stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                      </button>` : ''}
+                    </div>
+                    <div class="iw-address"><span>📍</span><span>${loc.address}</span></div>
+                    <div class="iw-stats">
+                      <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(loc.avgRating || 0).toFixed(2)}</span></div></div>
+                      <div class="iw-divider"></div>
+                      <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${loc.count}건</span></div></div>
+                    </div>
+                    <div class="iw-button-group">
+                      <button class="iw-button iw-button--read" onclick="window.__openReadList('${loc.address}')">방문록 보기</button>
+                      ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${loc.address}', ${loc.lat}, ${loc.lng})">${buttonText}</button>` : ''}
+                    </div>
+                    ${!isRes ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
+                         <span style="font-size:14px;">🏠</span>
+                         <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
+                       </div>` : ''}
+                    <div class="iw-arrow"></div>
+                  </div>
+                </div>
+              `);
+              infoWindowInstance.current.open(mapInstance.current, latLng);
+            };
+
+            openInfoWindow();
           };
           checkBookmark();
         });
@@ -384,25 +407,41 @@ export function Home() {
     } catch (e) { console.error("Marker refresh error:", e); }
   }, [calculateAverageRating]);
 
+  const showAlert = useCallback((title: string, desc?: string, icon: string = "✅", onConfirm?: () => void) => {
+    setModalConfig({ isOpen: true, title, desc, icon, onConfirm, confirmText: "확인" });
+  }, []);
+
+  const showConfirm = useCallback((title: string, onConfirm: () => void, desc?: string, icon: string = "❓", onCancel?: () => void) => {
+    setModalConfig({
+      isOpen: true,
+      title,
+      desc,
+      icon,
+      onConfirm,
+      onCancel,
+      confirmText: "확인",
+      cancelText: "취소"
+    });
+  }, []);
+
   const handleEditReview = useCallback((review: any) => {
     setEditingReviewId(review.id);
     setSelectedAddress(review.location);
+    setAddressDetail(review.addressDetail || "");
     setSelectedCoord({ lat: review.lat || 37.5, lng: review.lng || 127.0 });
     setComment(review.content);
     setSelectedTags(review.tags || []);
     setExperienceType(review.experienceType || "단순 방문");
     setReadListOpen(false);
-    setSelectedReview(null); // 수정 진입 시 상세 보기 팝업 닫기 (이중 모달 방지)
+    setSelectedReview(null);
     setSheetOpen(true);
   }, []);
 
-  const handleEditDetail = useCallback((review: Review) => {
+  const handleEditDetail = useCallback((review: any) => {
     handleEditReview(review);
   }, [handleEditReview]);
 
-  // [삭제] 핸들러
   const handleDeleteReview = useCallback(async (id: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
     showConfirm(
       "방문록 삭제",
       async () => {
@@ -411,7 +450,6 @@ export function Home() {
           if (success) {
             setReviews(prev => prev.filter(r => r.id !== id));
             showAlert("삭제 완료", "방문록이 삭제되었습니다.", "🗑️");
-            // eslint-disable-next-line @typescript-eslint/no-use-before-define
             refreshMarkers();
           } else {
             showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
@@ -424,40 +462,32 @@ export function Home() {
       "정말 이 방문록을 삭제하시겠습니까? (영구 삭제)",
       "🗑️"
     );
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
-  }, [refreshMarkers]);
+  }, [refreshMarkers, showAlert, showConfirm]);
 
   const handleDeleteDetail = useCallback((id: string) => {
     handleDeleteReview(id);
   }, [handleDeleteReview]);
 
   const [showVerifiedOnly, setShowVerifiedOnly] = useState(false);
-
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [customTag, setCustomTag] = useState("");
   const [viewerImage, setViewerImage] = useState<string | null>(null);
 
-  // [인증] 방문자 인증 관련 상태
   const [isVerified, setIsVerified] = useState(false);
   const [verificationDistance, setVerificationDistance] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // [방문 유형]
   const [experienceType, setExperienceType] = useState("단순 방문");
 
-  // 시트 진입 시 위치 검증 함수
   const verifyLocation = useCallback((targetLat?: number, targetLng?: number) => {
     if (!navigator.geolocation) return;
-
     setIsVerifying(true);
     navigator.geolocation.getCurrentPosition((pos) => {
       const uLat = pos.coords.latitude;
       const uLng = pos.coords.longitude;
-
       const lat = targetLat || selectedCoord?.lat;
       const lng = targetLng || selectedCoord?.lng;
-
       if (lat && lng) {
         const dist = calculateDistance(uLat, uLng, lat, lng);
         setVerificationDistance(dist);
@@ -485,23 +515,6 @@ export function Home() {
     desc: "",
     icon: "🥳",
   });
-
-  const showAlert = (title: string, desc?: string, icon: string = "✅", onConfirm?: () => void) => {
-    setModalConfig({ isOpen: true, title, desc, icon, onConfirm, confirmText: "확인" });
-  };
-
-  const showConfirm = (title: string, onConfirm: () => void, desc?: string, icon: string = "❓", onCancel?: () => void) => {
-    setModalConfig({
-      isOpen: true,
-      title,
-      desc,
-      icon,
-      onConfirm,
-      onCancel,
-      confirmText: "확인",
-      cancelText: "취소"
-    });
-  };
 
   const neighborhoodTags = ["#채광맛집", "#방음주의", "#수압짱", "#집주인천사", "#편의점가깝", "#언덕주의"];
   const tags = [
@@ -561,7 +574,8 @@ export function Home() {
               createdAt: data.createdAt,
               isVerified: data.isVerified || false,
               distance: data.distance || 0,
-              experienceType: data.experienceType || "단순 방문"
+              experienceType: data.experienceType || "단순 방문",
+              addressDetail: data.addressDetail || ""
             });
           }
         });
@@ -785,6 +799,9 @@ export function Home() {
                       <div class="iw-divider"></div>
                       <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${liveCount}건</span></div></div>
                     </div>
+                    ${isResidential ? `<div style="margin-bottom:12px; font-size:11px; color:#3182F6; font-weight:600; display:flex; align-items:center; gap:4px;">
+                      <span>🏢</span> 상세 층/호수별 리뷰 정보 포함
+                    </div>` : ''}
                     <div class="iw-button-group">
                       <button class="iw-button iw-button--read" onclick="window.__openReadList('${address}')">방문록 보기</button>
                       ${isResidential ? `<button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${address}', ${existingLoc.lat}, ${existingLoc.lng})">방문록 쓰기</button>` : ''}
@@ -911,6 +928,24 @@ export function Home() {
     }
 
     try {
+      if (!user?.id) { login(); return; }
+
+      // 0. 매물 단위 중복 체크 (도로명 + 상세주소)
+      const normalizedDetail = normalizeAddressDetail(addressDetail);
+      if (!editingReviewId) {
+        const qDuplicate = query(
+          collection(db, "reviews"),
+          where("authorId", "==", user.id),
+          where("address", "==", selectedAddress),
+          where("addressDetail", "==", normalizedDetail)
+        );
+        const snapDuplicate = await getDocs(qDuplicate);
+        if (!snapDuplicate.empty) {
+          showAlert("중복 작성 제한", `이미 '${selectedAddress} ${addressDetail || "(상세없음)"}'에 대한 방문록을 작성하셨습니다. 기존 내용을 수정하거나 다른 상세주소를 입력해 주세요.`, "🚫");
+          return;
+        }
+      }
+
       // 0. 이미지 압축 및 Base64 변환 (Firestore 저장 방식)
       const imageUrls: string[] = [];
       for (const file of selectedImages) {
@@ -921,6 +956,7 @@ export function Home() {
       // 1. 리뷰 데이터 가공
       const reviewData: any = {
         address: selectedAddress,
+        addressDetail: normalizeAddressDetail(addressDetail),
         content: comment,
         ratings,
         tags: selectedTags,
@@ -1002,7 +1038,7 @@ export function Home() {
         });
       }
 
-      setSheetOpen(false); setComment(""); setSelectedTags([]); setSelectedImages([]);
+      setSheetOpen(false); setComment(""); setAddressDetail(""); setSelectedTags([]); setSelectedImages([]);
       setEditingReviewId(null); setIsVerified(false); setVerificationDistance(null);
       setExperienceType("단순 방문");
       refreshMarkers();
@@ -1066,10 +1102,45 @@ export function Home() {
             <DaumPostcodeEmbed onComplete={(data: any) => {
               const full = data.address;
               setSearchQuery(full); setIsAddressSelected(true); setPostcodeOpen(false);
-              window.naver.maps.Service.geocode({ query: full }, (s: any, r: any) => {
+              window.naver.maps.Service.geocode({ query: full }, async (s: any, r: any) => {
                 if (s === window.naver.maps.Service.Status.OK && r.v2.addresses.length > 0) {
                   const p = new window.naver.maps.LatLng(r.v2.addresses[0].y, r.v2.addresses[0].x);
                   mapInstance.current.setZoom(19); mapInstance.current.panTo(p);
+                  
+                  // [추가] 검색 결과에서도 중복 체크 수행
+                  let hasWritten = false;
+                    if (isLoggedIn && user?.id) {
+                      const qCheck = query(
+                        collection(db, "reviews"),
+                        where("authorId", "==", user.id),
+                        where("address", "==", full),
+                        where("addressDetail", "==", normalizeAddressDetail(addressDetail))
+                      );
+                      const snapCheck = await getDocs(qCheck);
+                      hasWritten = !snapCheck.empty;
+                    }
+
+                  // 칭호 기반 랭킹/카운트 로직 등 기존 데이터 기반 정보 Window 처리 루틴이 필요할 수 있으나,
+                  // 여기서는 단순 검색 결과이므로 중복 체크만 반영하여 오픈
+                  const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
+                  const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
+                  const isRes = checkIsResidential(full);
+
+                  infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+                  infoWindowInstance.current.setContent(`
+                    <div class="iw-container marker">
+                      <div class="iw-card">
+                        <div class="iw-title">이 공간의 방문록</div>
+                        <div class="iw-address"><span>📍</span><span>${full}</span></div>
+                        <div class="iw-button-group">
+                          <button class="iw-button iw-button--read" onclick="window.__openReadList('${full}')">방문록 보기</button>
+                          ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${full}', ${r.v2.addresses[0].y}, ${r.v2.addresses[0].x})">${buttonText}</button>` : ''}
+                        </div>
+                        <div class="iw-arrow"></div>
+                      </div>
+                    </div>
+                  `);
+
                   infoWindowInstance.current.open(mapInstance.current, p);
                 }
               });
@@ -1159,6 +1230,33 @@ export function Home() {
             </div>
           </div>
 
+          <div style={{ marginTop: '20px', marginBottom: '12px' }}>
+            <div className="section-title">
+              <MapPin size={16} color="#3182F6" />
+              <span>상세주소 (선택)</span>
+            </div>
+            <input 
+              type="text" 
+              className="comment-textarea" 
+              style={{ 
+                height: '52px', 
+                padding: '0 16px', 
+                fontSize: '15.5px',
+                borderRadius: '14px',
+                backgroundColor: '#F2F4F6',
+                border: 'none',
+                width: '100%',
+                outline: 'none'
+              }}
+              placeholder="예: 101동 201호, 2층 왼쪽, 반지하 등" 
+              value={addressDetail} 
+              onChange={e => setAddressDetail(e.target.value)} 
+            />
+            <p style={{ fontSize: '11px', color: '#8B95A1', marginTop: '6px', marginLeft: '4px' }}>
+              * 단독/다가구는 층수나 위치를 적어주시면 더 도움이 돼요.
+            </p>
+          </div>
+
           <div>
             <div className="section-title">
               <MessageSquare size={16} color="#3182F6" />
@@ -1235,6 +1333,7 @@ export function Home() {
                     }
                     addRecentLog(review.id);
                     setSelectedReview(review);
+                    setActiveMenuId(null);
                   }}>
                     <div className="card-top">
                       <div className="card-tags">
@@ -1281,6 +1380,11 @@ export function Home() {
                     <div className="card-address" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8B95A1', marginBottom: '8px', padding: '0 4px' }}>
                       <MapIcon size={12} color="#3182F6" />
                       <span>{review.location}</span>
+                      {review.addressDetail && (
+                        <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '2px' }}>
+                          {formatAddressDetail(review.addressDetail)}
+                        </span>
+                      )}
                     </div>
                     <div className="card-body">
                       <p className="card-content">{review.content}</p>
@@ -1313,23 +1417,24 @@ export function Home() {
               <div className="empty-state">아직 작성된 방문록이 없습니다.</div>
             )}
           </div>
-          {selectedReview && (
-            <ReviewDetail
-              reviewId={selectedReview.id}
-              onClose={handleCloseDetail}
-              onEdit={() => handleEditDetail(selectedReview)}
-              onDelete={() => handleDeleteDetail(selectedReview.id)}
-              onLoginRequired={() => {
-                showConfirm(
-                  "로그인 필요",
-                  () => login(),
-                  "공감 및 댓글 기능은 로그인 후 이용 가능합니다.",
-                  "🔒"
-                );
-              }}
-            />
-          )}
         </div>
+      )}
+
+      {selectedReview && (
+        <ReviewDetail
+          reviewId={selectedReview.id}
+          onClose={() => setSelectedReview(null)}
+          onEdit={() => handleEditDetail(selectedReview)}
+          onDelete={() => handleDeleteDetail(selectedReview.id)}
+          onLoginRequired={() => {
+            showConfirm(
+              "로그인 필요",
+              () => login(),
+              "공감 및 댓글 기능은 로그인 후 이용 가능합니다.",
+              "🔒"
+            );
+          }}
+        />
       )}
 
       {viewerImage && (

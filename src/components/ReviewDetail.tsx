@@ -29,6 +29,7 @@ import { useAuth } from "../hooks/useAuth";
 import { incrementViews, toggleLike, addComment } from "../services/reviewService";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getUserTitle } from "../utils/titleSystem";
+import { formatAddressDetail } from "../utils/addressUtils";
 
 interface ReviewDetailProps {
   reviewId: string;
@@ -281,7 +282,14 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
 
           <div className="location-box">
             <MapPin size={14} color="#3182F6" />
-            <span className="address">{review.address || review.location}</span>
+            <span className="address">
+              {review.address || review.location}
+              {review.addressDetail && (
+                <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '4px' }}>
+                  {formatAddressDetail(review.addressDetail)}
+                </span>
+              )}
+            </span>
             {review.isVerified && (
               <span className="distance">· {review.distance}m 거리</span>
             )}
