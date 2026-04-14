@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   updateDoc,
+  deleteDoc,
   Timestamp,
   onSnapshot,
   where,
@@ -21,6 +22,7 @@ import {
 import { useSearchParams } from "react-router-dom";
 import { checkEligibleForNewTitle } from "../utils/titleSystem";
 import { useAuth } from "../hooks/useAuth";
+import { useRecentLogs } from "../hooks/useRecentLogs";
 import { useAccessControl } from "../hooks/useAccessControl";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { deleteReview } from "../services/reviewService";
@@ -93,8 +95,9 @@ const checkIsResidential = (addr: string) => {
 declare global {
   interface Window {
     naver: any;
-    __openWriteSheet: (address: string) => void;
+    __openWriteSheet: (address: string, lat?: number, lng?: number) => void;
     __openReadList: (address: string) => void;
+    __toggleBookmark: (address: string, lat: number, lng: number) => void;
   }
 }
 // [유틸리티] 이미지 로컬 압축 및 Base64 변환 (Firestore 저장용)
@@ -128,6 +131,7 @@ export function Home() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+  const { addRecentLog } = useRecentLogs();
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [selectedCoord, setSelectedCoord] = useState<{ lat: number, lng: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -264,34 +268,55 @@ export function Home() {
           }
 
           // 줌 레벨 19 이상일 때만 모달 노출 로직 실행
+          // 줌 레벨 19 이상일 때만 모달 노출 로직 실행
           mapInstance.current.panTo(latLng, { duration: 300, easing: "linear" });
 
-          // 인포윈도우 노출 (기존 사용자가 세팅한 오프셋 및 위치 완벽 정렬)
-          const isRes = checkIsResidential(loc.address);
-          infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-          infoWindowInstance.current.setContent(`
-            <div class="iw-container marker">
-              <div class="iw-card">
-                <div class="iw-title">이 공간의 방문록</div>
-                <div class="iw-address"><span>📍</span><span>${loc.address}</span></div>
-                <div class="iw-stats">
-                  <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(loc.avgRating || 0).toFixed(2)}</span></div></div>
-                  <div class="iw-divider"></div>
-                  <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${loc.count}건</span></div></div>
-                </div>
-                <div class="iw-button-group">
-                  <button class="iw-button iw-button--read" onclick="window.__openReadList('${loc.address}')">방문록 보기</button>
-                  ${isRes ? `<button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${loc.address}', ${loc.lat}, ${loc.lng})">방문록 쓰기</button>` : ''}
-                </div>
-                ${!isRes ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
-                     <span style="font-size:14px;">🏠</span>
-                     <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
-                   </div>` : ''}
-                <div class="iw-arrow"></div>
-              </div>
-            </div>
-          `);
-          infoWindowInstance.current.open(mapInstance.current, latLng);
+          // [개선] 찜하기 상태 확인 로직 추가
+          const checkBookmark = async () => {
+             let isBookmarked = false;
+             if (isLoggedIn && user) {
+               const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", loc.address));
+               const bsnap = await getDocs(bq);
+               isBookmarked = !bsnap.empty;
+             }
+             
+             const isRes = checkIsResidential(loc.address);
+             infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+             infoWindowInstance.current.setContent(`
+               <div class="iw-container marker">
+                 <div class="iw-card">
+                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                     <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                     <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${loc.address}', ${loc.lat}, ${loc.lng})">
+                       <svg width="24" height="24" viewBox="0 0 24 24" 
+                         fill="${isBookmarked ? '#FFD43B' : 'none'}" 
+                         stroke="${isBookmarked ? '#FFD43B' : '#E5E8EB'}" 
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                         <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                       </svg>
+                     </button>
+                   </div>
+                   <div class="iw-address"><span>📍</span><span>${loc.address}</span></div>
+                   <div class="iw-stats">
+                     <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(loc.avgRating || 0).toFixed(2)}</span></div></div>
+                     <div class="iw-divider"></div>
+                     <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${loc.count}건</span></div></div>
+                   </div>
+                   <div class="iw-button-group">
+                     <button class="iw-button iw-button--read" onclick="window.__openReadList('${loc.address}')">방문록 보기</button>
+                     ${isRes ? `<button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${loc.address}', ${loc.lat}, ${loc.lng})">방문록 쓰기</button>` : ''}
+                   </div>
+                   ${!isRes ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
+                        <span style="font-size:14px;">🏠</span>
+                        <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
+                      </div>` : ''}
+                   <div class="iw-arrow"></div>
+                 </div>
+               </div>
+             `);
+             infoWindowInstance.current.open(mapInstance.current, latLng);
+          };
+          checkBookmark();
         });
         return m;
       });
@@ -534,6 +559,55 @@ export function Home() {
       if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
     };
 
+    window.__toggleBookmark = async (address: string, lat: number, lng: number) => {
+      if (!isLoggedIn) {
+        showConfirm("로그인 필요", () => login(), "찜하기 기능은 로그인 후 이용 가능합니다.", "🔒");
+        return;
+      }
+      
+      try {
+        const q = query(collection(db, "bookmarks"), where("userId", "==", user?.id), where("address", "==", address));
+        const snap = await getDocs(q);
+        const isDelete = !snap.empty;
+
+        if (isDelete) {
+          await deleteDoc(doc(db, "bookmarks", snap.docs[0].id));
+          showAlert("찜 해제", "관심 건물에서 삭제되었습니다.", "💔");
+        } else {
+          await addDoc(collection(db, "bookmarks"), {
+            userId: user?.id,
+            address, lat, lng,
+            createdAt: Timestamp.now()
+          });
+          showAlert("찜 완료!", "이 건물의 새로운 방문록 알림을 보내드릴게요. 🔔", "🏠");
+        }
+        
+        // [개선] 현재 열린 InfoWindow의 UI를 실시간으로 즉시 업데이트 (DOM 직접 조작)
+        const btn = document.querySelector(".iw-bookmark-icon-btn");
+        if (btn) {
+          const svg = btn.querySelector("svg");
+          if (isDelete) {
+            btn.classList.remove("active");
+            if (svg) {
+              svg.setAttribute("fill", "none");
+              svg.setAttribute("stroke", "#E5E8EB");
+            }
+          } else {
+            btn.classList.add("active");
+            if (svg) {
+              svg.setAttribute("fill", "#FFD43B");
+              svg.setAttribute("stroke", "#FFD43B");
+            }
+          }
+        }
+        
+        // 인포윈도우 상태 갱신을 위해 현재 열린 정보창 다시 그리기 (백그라운드 동기화)
+        if (infoWindowInstance.current?.getMap()) {
+          refreshMarkers();
+        }
+      } catch (e) { console.error(e); }
+    };
+
     const initializeMap = () => {
       if (!window.naver?.maps || !mapElement.current || mapInstance.current) return;
 
@@ -639,74 +713,105 @@ export function Home() {
           const existingLoc = allLocationsRef.current.find(loc => normalizeAddress(loc.address) === address);
 
           if (existingLoc) {
-            // 이미 등록된 장소라면 -> 마커 클릭과 동일한 인포윈도우 노출
+            // 이미 등록된 장소라면 -> 마커 클릭과 동일한 인포윈도우 노출 (찜하기 버튼 포함)
+            const checkBookmark = async () => {
+              let isBookmarked = false;
+              if (isLoggedIn && user) {
+                const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", address));
+                const bsnap = await getDocs(bq);
+                isBookmarked = !bsnap.empty;
+              }
 
-            // 기존 마커 클릭 핸들러에서 사용하던 로직 재사용을 위해 infoWindow 설정
-            // (직접 DOM을 조작하거나 해당 위치로 panTo 후 refreshMarkers 호출 시 생성된 마커를 프로그래밍적으로 클릭할 수 있음)
-            // 여기서는 UI 일관성을 위해 직접 Content를 생성하여 오픈
+              const liveRating = existingLoc.rating || 0;
+              const liveCount = existingLoc.count || 0;
+              const finalPos = new window.naver.maps.LatLng(existingLoc.lat, existingLoc.lng);
 
-            // 별점이 없을 수 있으므로 fetchRating 로직 필요하나 일단 state 활용
-            const liveRating = existingLoc.rating || 0;
-            const liveCount = existingLoc.count || 0;
-            const finalPos = new window.naver.maps.LatLng(existingLoc.lat, existingLoc.lng);
-
-            infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-            infoWindowInstance.current.setContent(`
-              <div class="iw-container marker">
-                <div class="iw-card">
-                  <div class="iw-title">이 공간의 방문록</div>
-                  <div class="iw-address"><span>📍</span><span>${existingLoc.address}</span></div>
-                  <div class="iw-stats">
-                    <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(liveRating).toFixed(2)}</span></div></div>
-                    <div class="iw-divider"></div>
-                    <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${liveCount}건</span></div></div>
+              infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+              infoWindowInstance.current.setContent(`
+                <div class="iw-container marker">
+                  <div class="iw-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                      <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                      <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${address}', ${existingLoc.lat}, ${existingLoc.lng})">
+                        <svg width="24" height="24" viewBox="0 0 24 24" 
+                          fill="${isBookmarked ? '#FFD43B' : 'none'}" 
+                          stroke="${isBookmarked ? '#FFD43B' : '#E5E8EB'}" 
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="iw-address"><span>📍</span><span>${address}</span></div>
+                    <div class="iw-stats">
+                      <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(liveRating).toFixed(2)}</span></div></div>
+                      <div class="iw-divider"></div>
+                      <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${liveCount}건</span></div></div>
+                    </div>
+                    <div class="iw-button-group">
+                      <button class="iw-button iw-button--read" onclick="window.__openReadList('${address}')">방문록 보기</button>
+                      ${isResidential ? `<button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${address}', ${existingLoc.lat}, ${existingLoc.lng})">방문록 쓰기</button>` : ''}
+                    </div>
+                    ${!isResidential ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
+                         <span style="font-size:14px;">🏠</span>
+                         <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
+                       </div>` : ''}
+                    <div class="iw-arrow"></div>
                   </div>
-                  <div class="iw-button-group">
-                    <button class="iw-button iw-button--read" onclick="window.__openReadList('${existingLoc.address}')">방문록 보기</button>
-                    ${isResidential
-                ? `<button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${existingLoc.address}', ${existingLoc.lat}, ${existingLoc.lng})">방문록 쓰기</button>`
-                : ''}
-                  </div>
-                  ${!isResidential ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
-                       <span style="font-size:14px;">🏠</span>
-                       <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
-                     </div>` : ''}
-                  <div class="iw-arrow"></div>
                 </div>
-              </div>
-            `);
-            infoWindowInstance.current.open(mapInstance.current, finalPos);
+              `);
+              infoWindowInstance.current.open(mapInstance.current, finalPos);
+            };
+            checkBookmark();
             return;
           }
 
-          // 신규 장소라면 -> "방문록 쓰기" 인포윈도우 (Snapping 적용)
+          // 신규 장소라면 -> "방문록 쓰기" 인포윈도우 (찜하기 버튼 포함)
           window.naver.maps.Service.geocode({ query: address }, (gStatus: any, gRes: any) => {
             let finalPos = clickedPos;
             if (gStatus === window.naver.maps.Service.Status.OK && gRes.v2.addresses.length > 0) {
               const addrItem = gRes.v2.addresses[0];
               finalPos = new window.naver.maps.LatLng(addrItem.y, addrItem.x);
-              console.log("📍 [좌표 보정 완료]:", address, "->", finalPos.lat(), finalPos.lng());
             }
 
-            infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-            infoWindowInstance.current.setContent(`
-              <div class="iw-container none-marker">
-                <div class="iw-card">
-                  <div class="iw-title">방문록 쓰기</div>
-                  <div class="iw-address"><span>📍</span><span>${address}</span></div>
-                  ${isKorea ? (
-                isResidential
-                  ? `<div class="iw-button-group"><button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${address}', ${finalPos.lat()}, ${finalPos.lng()})">방문록 쓰기</button></div>`
-                  : `<div style="background:#FFF0F0; padding:12px; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
-                         <span style="font-size:16px;">🏠</span>
-                         <p style="margin:0; font-size:12px; color:#F04452; font-weight:600; line-height:1.5;">거주용 건물이 아니어서<br/>방문록을 작성할 수 없습니다.</p>
-                       </div>`
-              ) : ''}
-                  <div class="iw-arrow"></div>
+            const checkBookmarkNone = async () => {
+              let isBookmarked = false;
+              if (isLoggedIn && user) {
+                const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", address));
+                const bsnap = await getDocs(bq);
+                isBookmarked = !bsnap.empty;
+              }
+
+              infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+              infoWindowInstance.current.setContent(`
+                <div class="iw-container none-marker">
+                  <div class="iw-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                      <div class="iw-title" style="margin-bottom:0;">방문록 쓰기</div>
+                      <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${address}', ${finalPos.lat()}, ${finalPos.lng()})">
+                        <svg width="24" height="24" viewBox="0 0 24 24" 
+                          fill="${isBookmarked ? '#FFD43B' : 'none'}" 
+                          stroke="${isBookmarked ? '#FFD43B' : '#E5E8EB'}" 
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="iw-address"><span>📍</span><span>${address}</span></div>
+                    ${isKorea ? (
+                  isResidential
+                    ? `<div class="iw-button-group"><button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${address}', ${finalPos.lat()}, ${finalPos.lng()})">방문록 쓰기</button></div>`
+                    : `<div style="background:#FFF0F0; padding:12px; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
+                           <span style="font-size:16px;">🏠</span>
+                           <p style="margin:0; font-size:12px; color:#F04452; font-weight:600; line-height:1.5;">거주용 건물이 아니어서<br/>방문록을 작성할 수 없습니다.</p>
+                         </div>`
+                ) : ''}
+                    <div class="iw-arrow"></div>
+                  </div>
                 </div>
-              </div>
-            `);
-            infoWindowInstance.current.open(mapInstance.current, finalPos);
+              `);
+              infoWindowInstance.current.open(mapInstance.current, finalPos);
+            };
+            checkBookmarkNone();
           });
         });
       });
@@ -835,6 +940,23 @@ export function Home() {
         }
         
         showAlert("등록 완료", "소중한 방문록이 지도에 기록되었습니다.", "🥳");
+
+        // [추가] 찜한 사용자들에게 알림 발송
+        const bq = query(collection(db, "bookmarks"), where("address", "==", selectedAddress));
+        const bsnap = await getDocs(bq);
+        bsnap.forEach(async (bdoc) => {
+           const bm = bdoc.data();
+           if (bm.userId !== user?.id) { // 본인 제외
+              await addDoc(collection(db, "notifications"), {
+                toUserId: bm.userId,
+                type: "local",
+                content: `찜한 건물 '${selectedAddress.split(' ').slice(-1)}'에 새로운 방문록이 올라왔어요!`,
+                reviewId: docRef.id,
+                createdAt: Timestamp.now(),
+                isRead: false
+              });
+           }
+        });
       }
 
       setSheetOpen(false); setComment(""); setSelectedTags([]); setSelectedImages([]);
@@ -858,6 +980,29 @@ export function Home() {
       </div>
 
       <div ref={mapElement} className="home-map-container" />
+
+      {/* 내 위치로 이동 버튼 */}
+      <button
+        className="home-location-btn"
+        onClick={() => {
+          if (!navigator.geolocation || !mapInstance.current) return;
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const userPos = new window.naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+              mapInstance.current.morph(userPos, 17, { duration: 400, easing: 'linear' });
+            },
+            (err) => console.warn('GPS 오류:', err),
+            { enableHighAccuracy: true }
+          );
+        }}
+        title="내 위치로 이동"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+          <circle cx="12" cy="12" r="8" strokeDasharray="2 2" strokeOpacity="0.4" />
+        </svg>
+      </button>
 
       {isAddressSelected && (
         <div className="neighborhood-tag-wrapper">
@@ -997,6 +1142,7 @@ export function Home() {
                       );
                       return;
                     }
+                    addRecentLog(review.id);
                     setSelectedReview(review);
                   }}>
                     <div className="card-top">

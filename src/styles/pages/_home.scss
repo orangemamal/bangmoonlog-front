@@ -192,6 +192,31 @@
   height: 100%;
 }
 
+// 내 위치로 이동 버튼
+.home-location-btn {
+  position: fixed;
+  bottom: calc(72px + 16px); // 하단 네비게이션(72px) + 여백
+  right: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 500;
+  color: #3182F6;
+  transition: transform 0.15s, box-shadow 0.15s;
+
+  &:active {
+    transform: scale(0.92);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+  }
+}
+
 // 개별 마커 디자인 (줌 레벨 16+ 전용)
 .marker-container {
   cursor: pointer;
@@ -468,6 +493,30 @@
   border-width: 10px 10px 0 10px;
   border-style: solid;
   border-color: #fff transparent transparent transparent;
+}
+
+// ── InfoWindow 북마크 아이콘 버튼 ──
+.iw-bookmark-icon-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  border-radius: 50%;
+
+  &:active {
+    background-color: #f2f4f6;
+    transform: scale(0.9);
+  }
+
+  &.active {
+    svg {
+       filter: drop-shadow(0 0 4px rgba(255, 212, 59, 0.4));
+    }
+  }
 }
 
 // ── 주소 검색 (DaumPostcode) ───────────────────────────────

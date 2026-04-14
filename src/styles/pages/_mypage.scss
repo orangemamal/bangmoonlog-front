@@ -222,4 +222,455 @@
       border-radius: 2px;
     }
   }
+
+  // 카드 리스트
+  &__card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__card {
+    background-color: #F9FAFB;
+    border-radius: 20px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.1s;
+
+    &:active {
+      background-color: #F2F4F6;
+    }
+  }
+
+  &__card-left {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  &__card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &.recent {
+      background-color: #E8F3FF;
+    }
+    
+    &.review {
+      background-color: #F0F7FF;
+    }
+  }
+
+  &__card-info {
+    display: flex;
+    flex-direction: column;
+    
+    .title {
+      font-weight: 600;
+      font-size: 16px;
+      color: #333D4B;
+      margin-bottom: 4px;
+    }
+
+    .date {
+      font-size: 13px;
+      color: #8B95A1;
+    }
+  }
+
+  &__card-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__card-more-btn {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__card-menu {
+    position: absolute;
+    right: 0;
+    top: 36px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    min-width: 120px;
+
+    button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border: none;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font-size: 14px;
+      color: #333D4B;
+
+      &.danger {
+        color: #E84040;
+      }
+
+      &:active {
+        background-color: #F2F4F6;
+        border-radius: 4px;
+      }
+    }
+  }
+
+  &__card-menu-divider {
+    height: 1px;
+    background-color: #F2F4F6;
+    margin: 0 4px;
+  }
+
+  // 삭제 확인 모달
+  &__confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 4000;
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  &__confirm-modal {
+    background: white;
+    border-radius: 24px;
+    padding: 32px 24px 24px;
+    z-index: 4001;
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  }
+
+  &__confirm-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  &__confirm-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #191F28;
+    margin: 0 0 8px;
+  }
+
+  &__confirm-desc {
+    font-size: 14px;
+    color: #8B95A1;
+    margin: 0 0 28px;
+    line-height: 1.5;
+  }
+
+  &__confirm-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+
+  &__confirm-cancel {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background-color: #F2F4F6;
+    color: #4E5968;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-family);
+    transition: background-color 0.1s;
+
+    &:active { background-color: #E5E8EB; }
+  }
+
+  &__confirm-ok {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background-color: #3182F6;
+    color: white;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: var(--font-family);
+    transition: background-color 0.1s;
+
+    &:active { background-color: #1B64DA; }
+  }
+
+  // 1:1 문의 폼
+  &__inquiry {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    padding: 8px 4px;
+    margin-bottom: 100px;
+  }
+
+  &__inquiry-field {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__inquiry-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: #333D4B;
+  }
+
+  &__inquiry-input {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #E5E8EB;
+    padding: 12px 0;
+    font-size: 16px;
+    font-family: var(--font-family);
+    outline: none;
+    background: transparent;
+    transition: border-color 0.2s;
+
+    &::placeholder {
+      color: #ADB5BD;
+    }
+
+    &:focus {
+      border-bottom: 2px solid var(--color-primary);
+    }
+  }
+
+  &__inquiry-select {
+    appearance: none;
+    cursor: pointer;
+    color: #333D4B;
+
+    &:invalid {
+      color: #ADB5BD;
+    }
+    
+    // 기본 선택 상태 텍스트 색상 대응
+    &[value=""] {
+      color: #ADB5BD;
+    }
+  }
+
+  &__inquiry-textarea {
+    width: 100%;
+    min-height: 280px;
+    background-color: #F2F4F8;
+    border: none;
+    border-radius: 16px;
+    padding: 24px;
+    font-size: 16px;
+    font-family: var(--font-family);
+    resize: none;
+    outline: none;
+    line-height: 1.6;
+
+    &::placeholder {
+      color: #ADB5BD;
+    }
+  }
+
+  &__inquiry-counter {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    font-size: 13px;
+    color: #8B95A1;
+  }
+
+  &__inquiry-submit {
+    width: 100%;
+    height: 56px;
+    background-color: #E8F3FF;
+    color: #3182F6;
+    border: none;
+    border-radius: 28px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font-family);
+    margin-top: 16px;
+
+    &:not(:disabled):active {
+      transform: scale(0.98);
+      background-color: #D0E6FF;
+    }
+
+    &:disabled {
+      background-color: #F2F4F6;
+      color: #B0B8C1;
+      cursor: not-allowed;
+    }
+
+    // 이미지는 제출버튼이 active 상태가 아닐 때도 약간 연한 파란색이므로 맞춰줌
+    &:not(:disabled) {
+      background-color: #E8F3FF;
+      color: #3182F6;
+    }
+  }
+
+  // 제휴 문의 브릿지 페이지
+  &__partnership {
+    padding: 24px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 40px;
+  }
+
+  &__partnership-slogan {
+    font-size: 18px;
+    font-weight: 700;
+    color: #333D4B;
+    line-height: 1.4;
+    word-break: keep-all;
+  }
+
+  &__partnership-card {
+    width: 100%;
+    aspect-ratio: 1.6 / 1;
+    background: linear-gradient(135deg, #191F28 0%, #333D4B 100%);
+    border-radius: 24px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-start;
+    text-align: left;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .card-logo {
+      font-size: 22px;
+      font-weight: 800;
+      color: white;
+      letter-spacing: -0.5px;
+      
+      span {
+        color: #3182F6;
+        font-weight: 600;
+        font-size: 16px;
+        margin-left: 4px;
+        vertical-align: middle;
+      }
+    }
+
+    .card-philosophy {
+      font-size: 15px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.8);
+      font-weight: 500;
+    }
+  }
+
+  &__partnership-values {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0 8px;
+
+    .value-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      text-align: left;
+    }
+
+    .value-icon {
+      width: 44px;
+      height: 44px;
+      background-color: #F9FAFB;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .value-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 13px;
+      color: #6B7684;
+
+      strong {
+        font-size: 15px;
+        color: #333D4B;
+        font-weight: 700;
+      }
+    }
+  }
+
+  &__partnership-submit {
+    width: 100%;
+    height: 60px;
+    background-color: #3182F6;
+    color: white;
+    border: none;
+    border-radius: 16px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: var(--font-family);
+    margin-top: 20px;
+    box-shadow: 0 8px 24px rgba(49, 130, 246, 0.3);
+
+    &.glow-btn {
+      position: relative;
+      animation: buttonGlow 2s infinite;
+    }
+  }
+}
+
+@keyframes buttonGlow {
+  0% { box-shadow: 0 8px 24px rgba(49, 130, 246, 0.3); }
+  50% { box-shadow: 0 8px 32px rgba(49, 130, 246, 0.6); }
+  100% { box-shadow: 0 8px 24px rgba(49, 130, 246, 0.3); }
 }
