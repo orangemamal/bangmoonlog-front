@@ -297,7 +297,6 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
 
         <div className="detail-info-section">
           <div className="profile-row">
-            {/* 
             <div className="avatar">
               {authorPhotoURL ? (
                 <img src={authorPhotoURL} alt="" className="avatar-img" />
@@ -305,7 +304,6 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
                 <span className="avatar-initial">{review.author?.slice(0, 1) ?? "?"}</span>
               )}
             </div>
-            */}
             <div className="meta">
               <div className="name-row">
                 <span className="name">{review.author}</span>
@@ -401,7 +399,6 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
               {comments.length > 0 ? (
                 comments.map((c) => (
                   <div key={c.id} className="comment-item">
-                    {/* 
                     <div className="comment-avatar">
                       {commentPhotoByUserId[c.userId] ? (
                         <img src={commentPhotoByUserId[c.userId]} alt="" className="comment-avatar-img" />
@@ -409,7 +406,6 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
                         <span className="comment-avatar-initial">{c.authorName?.slice(0, 1) ?? "?"}</span>
                       )}
                     </div>
-                    */}
                     <div className="comment-content-wrap">
                       <div className="comment-meta">
                         <span className="author">{c.authorName}</span>

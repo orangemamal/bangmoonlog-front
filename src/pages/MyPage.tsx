@@ -21,7 +21,7 @@ import { ProfileAvatarUpload } from "../components/mypage/ProfileAvatarUpload";
 import logoSvg from "../assets/images/bangmoonlog_logo.svg";
 
 /** Set true when Firebase Storage is ready — shows profile photo + upload UI. */
-const ENABLE_PROFILE_PHOTO_UPLOAD = false;
+const ENABLE_PROFILE_PHOTO_UPLOAD = true;
 
 export function MyPage() {
   const { isLoggedIn, login, logout, user, updateProfile } = useAuth();
