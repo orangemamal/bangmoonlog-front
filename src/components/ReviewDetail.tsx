@@ -8,12 +8,13 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  User,
   Home as HomeIcon,
-  Search
+  Search,
+  Image as ImageIcon
 } from "lucide-react";
 import {
   doc,
+  getDoc,
   getDocs,
   where,
   onSnapshot,
@@ -56,6 +57,8 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
   const [isLoading, setIsLoading] = useState(true);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [authorTitle, setAuthorTitle] = useState<{ title: string; icon: string } | null>(null);
+  const [authorPhotoURL, setAuthorPhotoURL] = useState<string | null>(null);
+  const [commentPhotoByUserId, setCommentPhotoByUserId] = useState<Record<string, string | undefined>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showMenuPopup, setShowMenuPopup] = useState(false);
 
@@ -116,6 +119,52 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
       }).catch(() => { });
     }
   }, [review?.authorId]);
+
+  // 작성자 프로필 사진: Firestore users 문서(마이페이지 업로드와 동일 소스)
+  useEffect(() => {
+    if (!review?.authorId) {
+      setAuthorPhotoURL(null);
+      return;
+    }
+    const userRef = doc(db, "users", review.authorId);
+    const unsub = onSnapshot(userRef, (snap) => {
+      if (snap.exists()) {
+        const url = snap.data().photoURL;
+        setAuthorPhotoURL(typeof url === "string" && url ? url : null);
+      } else {
+        setAuthorPhotoURL(null);
+      }
+    });
+    return () => unsub();
+  }, [review?.authorId]);
+
+  // 댓글 작성자 프로필 (users 컬렉션에서 조회)
+  useEffect(() => {
+    if (comments.length === 0) {
+      setCommentPhotoByUserId({});
+      return;
+    }
+    const ids = [...new Set(comments.map((c) => c.userId))];
+    let cancelled = false;
+    Promise.all(
+      ids.map((id) =>
+        getDoc(doc(db, "users", id)).then((snap) => ({
+          id,
+          url: snap.exists() ? (snap.data().photoURL as string | undefined) : undefined,
+        }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, string | undefined> = {};
+      results.forEach(({ id, url }) => {
+        next[id] = url;
+      });
+      setCommentPhotoByUserId(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [comments]);
 
   const handleLike = useCallback(async () => {
     if (!user || !isLoggedIn) {
@@ -230,8 +279,12 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
               ))
             ) : (
               <div className="detail-slider-item no-image">
-                <div className="icon">🖼️</div>
-                <div className="text">이미지 없음</div>
+                <div className="no-image-placeholder">
+                  <div className="placeholder-icon">
+                    <ImageIcon size={40} color="#B0B8C1" />
+                  </div>
+                  <span className="placeholder-text">등록된 사진이 없습니다.</span>
+                </div>
               </div>
             )}
           </div>
@@ -240,16 +293,19 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
               {currentSlideIndex + 1} / {review.images.length}
             </div>
           )}
-          <div className="detail-tags-overlay">
-            {review.tags?.map((t: string) => (
-              <div key={t} className="tag-chip">{t}</div>
-            ))}
-          </div>
         </div>
 
         <div className="detail-info-section">
           <div className="profile-row">
-            <div className="avatar"></div>
+            {/* 
+            <div className="avatar">
+              {authorPhotoURL ? (
+                <img src={authorPhotoURL} alt="" className="avatar-img" />
+              ) : (
+                <span className="avatar-initial">{review.author?.slice(0, 1) ?? "?"}</span>
+              )}
+            </div>
+            */}
             <div className="meta">
               <div className="name-row">
                 <span className="name">{review.author}</span>
@@ -329,6 +385,15 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
             {review.content}
           </div>
 
+          {/* 태그 영역 - 본문과 댓글 사이로 이동 */}
+          {review.tags && review.tags.length > 0 && (
+            <div className="detail-tags-section">
+              {review.tags.map((t: string) => (
+                <span key={t} className="tds-tag">#{t.replace(/^#/, '')}</span>
+              ))}
+            </div>
+          )}
+
           {/* 댓글 섹션 */}
           <div className="comments-section">
             <h4 className="title">댓글 {comments.length}</h4>
@@ -336,7 +401,15 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
               {comments.length > 0 ? (
                 comments.map((c) => (
                   <div key={c.id} className="comment-item">
-                    <div className="comment-avatar"></div>
+                    {/* 
+                    <div className="comment-avatar">
+                      {commentPhotoByUserId[c.userId] ? (
+                        <img src={commentPhotoByUserId[c.userId]} alt="" className="comment-avatar-img" />
+                      ) : (
+                        <span className="comment-avatar-initial">{c.authorName?.slice(0, 1) ?? "?"}</span>
+                      )}
+                    </div>
+                    */}
                     <div className="comment-content-wrap">
                       <div className="comment-meta">
                         <span className="author">{c.authorName}</span>

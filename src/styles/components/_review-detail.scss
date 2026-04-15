@@ -83,10 +83,32 @@
       }
 
       &.no-image {
-        flex-direction: column;
-        gap: 8px;
-        color: $color-text-disabled;
-        .icon { font-size: 40px; }
+        background-color: #F8F9FA;
+        
+        .no-image-placeholder {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+          
+          .placeholder-icon {
+            width: 80px;
+            height: 80px;
+            background-color: #FFFFFF;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+          }
+          
+          .placeholder-text {
+            font-size: 15px;
+            font-weight: 500;
+            color: #ADB5BD;
+            letter-spacing: -0.3px;
+          }
+        }
       }
     }
 
@@ -136,6 +158,25 @@
         height: 44px;
         border-radius: 50%;
         background: linear-gradient(135deg, #3182f6, #00d2ff);
+        overflow: hidden;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        .avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .avatar-initial {
+          font-size: 18px;
+          font-weight: 700;
+          color: #fff;
+          line-height: 1;
+        }
       }
 
       .meta {
@@ -181,7 +222,31 @@
       line-height: 1.6;
       color: $color-text-main;
       white-space: pre-wrap;
+      margin-bottom: 24px;
+    }
+
+    .detail-tags-section {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
       margin-bottom: 32px;
+      padding: 4px 0;
+
+      .tds-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 12px;
+        background-color: #F2F4F6;
+        color: #4E5968;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: background-color 0.2s;
+        
+        &:active {
+          background-color: #E5E8EB;
+        }
+      }
     }
 
     .rating-box {
@@ -213,8 +278,26 @@
         width: 32px;
         height: 32px;
         border-radius: 50%;
-        background-color: #F2F4F6;
+        background: linear-gradient(135deg, #e8eef5, #f2f4f6);
         flex-shrink: 0;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        .comment-avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .comment-avatar-initial {
+          font-size: 13px;
+          font-weight: 700;
+          color: #4e5968;
+          line-height: 1;
+        }
       }
 
       .comment-content-wrap {

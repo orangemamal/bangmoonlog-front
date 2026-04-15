@@ -7,7 +7,6 @@ import {
   Pencil,
   Trash2,
   CheckCircle2,
-  User,
   Home as HomeIcon,
   Search,
   Map as MapIcon
@@ -21,6 +20,8 @@ import { useAccessControl } from "../hooks/useAccessControl";
 import { useAuth } from "../hooks/useAuth";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { formatAddressDetail } from "../utils/addressUtils";
+import { calculateDistance } from "../utils/geoUtils";
+import { RefreshCw } from "lucide-react";
 
 interface Post {
   id: string;
@@ -40,13 +41,15 @@ interface Post {
   author: string;
   authorId: string;
   experienceType?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export function Feed() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const addressParam = searchParams.get("address");
-  const [activeTab, setActiveTab] = useState<"hot" | "local">("hot");
+  const [activeTab, setActiveTab] = useState<"hot" | "local" | "tag">("hot");
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -54,6 +57,17 @@ export function Feed() {
   const { canRead, incrementReadCount, watchAd, isAdShowing } = useAccessControl();
   const { login, user } = useAuth();
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // [추가] 태그 탭 관련 상태
+  const [selectedTag, setSelectedTag] = useState<string>("전체");
+  const CATEGORY_CHIPS = ["전체", "층간소음", "수압체크", "햇살맛집", "역세권", "관리비저렴", "치안좋음", "채광맛집", "외부소음", "외풍심함", "관리비폭탄", "뷰맛집"];
+
+  // [추가] GPS 위치 및 상태 관리
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'loading' | 'success' | 'error' | 'denied'>('loading');
+
+  // [추가] 내 주변 탭 세부 정렬 필터 상태
+  const [localSortType, setLocalSortType] = useState<'distance' | 'latest' | 'popular'>('distance');
 
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
@@ -73,6 +87,30 @@ export function Feed() {
   const showConfirm = useCallback((title: string, onConfirm: () => void, desc?: string, icon?: string, confirmText?: string, cancelText?: string) => {
     setModalConfig({ isOpen: true, title, onConfirm, desc, icon, confirmText, cancelText });
   }, []);
+
+  const fetchUserLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGpsStatus('error');
+      return;
+    }
+
+    setGpsStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsStatus('success');
+      },
+      (err) => {
+        if (err.code === 1) setGpsStatus('denied');
+        else setGpsStatus('error');
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    fetchUserLocation();
+  }, [fetchUserLocation]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -103,7 +141,9 @@ export function Feed() {
           ratings: data.ratings,
           author: data.author || "익명 방문자",
           authorId: data.authorId || "",
-          experienceType: data.experienceType || "단순 방문"
+          experienceType: data.experienceType || "단순 방문",
+          lat: data.lat,
+          lng: data.lng
         });
       });
       setPosts(list);
@@ -114,7 +154,7 @@ export function Feed() {
     });
 
     return () => unsubscribe();
-  }, [addressParam]);
+  }, [addressParam, activeTab]);
 
   const filteredData = useMemo(() => {
     let list = [...posts];
@@ -125,10 +165,47 @@ export function Feed() {
 
     if (activeTab === "hot") {
       return list.sort((a, b) => (b.likes * 1000 + b.views) - (a.likes * 1000 + a.views));
+    } else if (activeTab === "tag") {
+      if (selectedTag === "전체") {
+        return list.filter(p => p.image); // 사진이 있는 것만 우선 노출
+      }
+      return list.filter(p => p.tags.some(t => t.includes(selectedTag)) && p.image);
     } else {
+      // [개선] 내 주변 탭일 경우 200m 필터링 적용
+      if (userLocation) {
+        const nearbyList = list.filter(p => {
+          if (p.lat && p.lng) {
+            const dist = calculateDistance(userLocation.lat, userLocation.lng, p.lat, p.lng);
+            return dist <= 200; // 200m 이내
+          }
+          return false;
+        });
+
+        // 세부 정렬 적용
+        if (localSortType === 'distance') {
+          return nearbyList.sort((a, b) => {
+            const distA = a.lat && a.lng ? calculateDistance(userLocation.lat, userLocation.lng, a.lat, a.lng) : 999999;
+            const distB = b.lat && b.lng ? calculateDistance(userLocation.lat, userLocation.lng, b.lat, b.lng) : 999999;
+            return distA - distB;
+          });
+        } else if (localSortType === 'latest') {
+          return nearbyList.sort((a, b) => {
+            const timeA = (a as any).createdAt?.toMillis?.() || 0;
+            const timeB = (b as any).createdAt?.toMillis?.() || 0;
+            return timeB - timeA;
+          });
+        } else if (localSortType === 'popular') {
+          return nearbyList.sort((a, b) => {
+            const scoreA = (a.likes || 0) * 10 + (a.views || 0);
+            const scoreB = (b.likes || 0) * 10 + (b.views || 0);
+            return scoreB - scoreA;
+          });
+        }
+        return nearbyList;
+      }
       return list;
     }
-  }, [activeTab, posts, addressParam]);
+  }, [activeTab, posts, addressParam, userLocation, localSortType]);
 
   const handlePostClick = async (postId: string) => {
     if (!canRead) {
@@ -218,21 +295,113 @@ export function Feed() {
           <>
             <h1>방문록</h1>
             <div className="feed__tabs">
-              {(["hot", "local"] as const).map(tab => (
+              {(["hot", "local", "tag"] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`feed__tab${activeTab === tab ? " feed__tab--active" : ""}`}
                 >
-                  {tab === "hot" ? "인기 방문록" : "내 주변 방문록"}
+                  {tab === "hot" ? "인기 방문록" : tab === "local" ? "내 주변 방문록" : "#태그"}
                 </button>
               ))}
             </div>
+
+            {/* [추가] 태그 탭 전용 카테고리 칩 바 */}
+            {activeTab === 'tag' && (
+              <div className="feed__tag-scroll-bar">
+                {CATEGORY_CHIPS.map(chip => (
+                  <button
+                    key={chip}
+                    onClick={() => setSelectedTag(chip)}
+                    className={`feed__tag-chip${selectedTag === chip ? " feed__tag-chip--active" : ""}`}
+                  >
+                    {chip === "전체" ? "전체" : `#${chip}`}
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {/* [추가] 내 주변 탭 전용 소분류 정렬 필터 바 */}
+            {activeTab === 'local' && (
+              <div className="feed__sort-bar">
+                {[
+                  { id: 'distance', label: '거리순' },
+                  { id: 'latest', label: '최신순' },
+                  { id: 'popular', label: '인기순' }
+                ].map(sort => (
+                  <button
+                    key={sort.id}
+                    onClick={() => setLocalSortType(sort.id as any)}
+                    className={`feed__sort-btn${localSortType === sort.id ? " feed__sort-btn--active" : ""}`}
+                  >
+                    {sort.label}
+                    {localSortType === sort.id && (
+                      <div className="feed__sort-indicator" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
 
       <div className="feed__list">
+        {activeTab === 'tag' ? (
+          <div className="feed__tag-grid">
+            {isLoading ? (
+              <div className="loading-state">태그 피드를 불러오는 중...</div>
+            ) : filteredData.length > 0 ? (
+              filteredData.map(post => (
+                <div key={post.id} className="tag-grid-item" onClick={() => handlePostClick(post.id)}>
+                  <img src={post.image} alt="post" />
+                  <div className="item-overlay">
+                    <div className="stat">
+                      <Heart size={14} fill="white" color="white" />
+                      <span>{post.likes}</span>
+                    </div>
+                    {post.isVerified && (
+                      <div className="verify-icon">
+                        <CheckCircle2 size={12} color="white" strokeWidth={3} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state empty-state--grid">
+                <p>해당 태그의 사진이 아직 없습니다.</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* [추가] GPS 오류/방역 방어용 UI 카드 섹션 */}
+            {activeTab === 'local' && (gpsStatus !== 'success' || (gpsStatus === 'success' && filteredData.length === 0)) && (
+              <div className="feed__defense-card-wrapper">
+            <div className="feed__defense-card">
+              <div className="feed__defense-card-info">
+                <h3 className="feed__defense-card-title">
+                  {gpsStatus === 'loading' ? '위치를 확인하고 있어요' : 
+                   gpsStatus === 'denied' ? '위치 권한이 필요해요' :
+                   (gpsStatus === 'success' && filteredData.length === 0) ? '주변 200m에 글이 없어요' : '위치를 불러올 수 없어요'}
+                </h3>
+                <p className="feed__defense-card-desc">
+                  <span className="icon">📍</span>
+                  {gpsStatus === 'denied' ? '장소와 멀리 떨어져 있으면 인증 마크를 달 수 없어요.' : 
+                   (gpsStatus === 'success' && filteredData.length === 0) ? '반경을 조금 더 넓혀보거나 다른 곳으로 이동해 보세요.' : '정확한 정보를 위해 위치 서비스가 필요해요.'}
+                </p>
+              </div>
+              <button 
+                onClick={fetchUserLocation}
+                className="feed__defense-card-btn"
+              >
+                <RefreshCw size={20} color="#4E5968" className={gpsStatus === 'loading' ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="loading-state">방문록을 불러오는 중...</div>
         ) : filteredData.length > 0 ? (
@@ -286,7 +455,7 @@ export function Feed() {
                 <MapIcon size={14} color="#3182F6" />
                 <span>{post.location}</span>
                 {post.addressDetail && (
-                  <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '4px' }}>
+                  <span className="address-detail">
                     {formatAddressDetail(post.addressDetail)}
                   </span>
                 )}
@@ -332,7 +501,9 @@ export function Feed() {
             <p>첫 번째 방문록을 작성해보세요!</p>
           </div>
         )}
-      </div>
+      </>
+    )}
+  </div>
 
       {isAdShowing && (
         <div className="ad-overlay">

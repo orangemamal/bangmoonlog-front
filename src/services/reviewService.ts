@@ -46,14 +46,28 @@ export const toggleLike = async (reviewId: string, userId: string, authorId: str
       
       // 내 게시물이 아닌 경우에만 좋아요 알림 전송
       if (authorId && userId !== authorId && likerName) {
-        await addDoc(collection(db, "notifications"), {
-          toUserId: authorId,
-          type: "reaction",
-          content: `${likerName}님이 회원님의 방문록에 공감했습니다.`,
-          createdAt: serverTimestamp(),
-          isRead: false,
-          reviewId: reviewId
-        });
+        // 수신자의 알림 설정 확인
+        const userRef = doc(db, "users", authorId);
+        const userSnap = await getDoc(userRef);
+        
+        let canNotify = true;
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          if (userData.settings?.notifications?.reactions === false) {
+            canNotify = false;
+          }
+        }
+
+        if (canNotify) {
+          await addDoc(collection(db, "notifications"), {
+            toUserId: authorId,
+            type: "reaction",
+            content: `${likerName}님이 회원님의 방문록에 공감했습니다.`,
+            createdAt: serverTimestamp(),
+            isRead: false,
+            reviewId: reviewId
+          });
+        }
       }
     }
     
@@ -79,14 +93,28 @@ export const addComment = async (reviewId: string, userId: string, authorName: s
     
     // 댓글 작성 알림 (내 게시물이 아닐 때)
     if (reviewAuthorId && userId !== reviewAuthorId) {
-      await addDoc(collection(db, "notifications"), {
-        toUserId: reviewAuthorId,
-        type: "reaction",
-        content: `${authorName}님이 댓글을 남겼습니다: ${content}`,
-        createdAt: serverTimestamp(),
-        isRead: false,
-        reviewId: reviewId
-      });
+      // 수신자의 알림 설정 확인
+      const userRef = doc(db, "users", reviewAuthorId);
+      const userSnap = await getDoc(userRef);
+      
+      let canNotify = true;
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        if (userData.settings?.notifications?.reactions === false) {
+          canNotify = false;
+        }
+      }
+
+      if (canNotify) {
+        await addDoc(collection(db, "notifications"), {
+          toUserId: reviewAuthorId,
+          type: "reaction",
+          content: `${authorName}님이 댓글을 남겼습니다: ${content}`,
+          createdAt: serverTimestamp(),
+          isRead: false,
+          reviewId: reviewId
+        });
+      }
     }
     return true;
   } catch (error) {

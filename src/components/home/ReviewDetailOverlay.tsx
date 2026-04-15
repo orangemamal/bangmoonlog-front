@@ -38,13 +38,13 @@ export function ReviewDetailOverlay({ review, onClose }: ReviewDetailOverlayProp
         </div>
         <div className="info-section">
           <div className="profile-row">
-            <div className="avatar"></div>
+            {/* <div className="avatar"></div> */}
             <div className="meta">
               <div className="name">{review.author}</div>
               <div className="date">{review.date}</div>
             </div>
           </div>
-          
+
           <div className="location-info">
             <MapPin size={14} />
             <span>{review.location}</span>

@@ -61,6 +61,77 @@
     }
   }
 
+  // [추가] 태그 탭 전용 카테고리 칩 바
+  &__tag-scroll-bar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    overflow-x: auto;
+    white-space: nowrap;
+    background-color: $color-surface;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  &__tag-chip {
+    padding: 8px 16px;
+    border-radius: 100px;
+    font-size: 14px;
+    font-weight: 500;
+    background-color: #F2F4F6;
+    color: #4E5968;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s;
+
+    &--active {
+      font-weight: 700;
+      background-color: #3182F6;
+      color: #FFFFFF;
+    }
+  }
+
+  // [추가] 내 주변 탭 전용 소분류 정렬 필터 바
+  &__sort-bar {
+    display: flex;
+    gap: 12px;
+    padding: 12px 20px 4px;
+    border-bottom: 1px solid #F2F4F6;
+    background-color: $color-surface;
+  }
+
+  &__sort-btn {
+    font-size: 13px;
+    font-weight: 500;
+    color: #8B95A1;
+    border: none;
+    background: none;
+    padding: 4px 0;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+
+    &--active {
+      font-weight: 700;
+      color: #191F28;
+    }
+  }
+
+  &__sort-indicator {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #191F28;
+    border-radius: 2px;
+  }
+
   // 피드 리스트
   &__list {
     flex: 1;
@@ -69,6 +140,67 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  // [추가] GPS 오류/방역 방어용 UI 카드 섹션
+  &__defense-card-wrapper {
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+
+  &__defense-card {
+    background-color: #FFFFFF;
+    border-radius: 20px;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #F2F4F6;
+  }
+
+  &__defense-card-info {
+    flex: 1;
+  }
+
+  &__defense-card-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #191F28;
+    margin-bottom: 4px;
+  }
+
+  &__defense-card-desc {
+    font-size: 13px;
+    color: #4E5968;
+    line-height: 1.5;
+    margin: 0;
+
+    .icon {
+      margin-right: 4px;
+    }
+  }
+
+  &__defense-card-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: #F2F4F6;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-left: 12px;
+    transition: background-color 0.2s;
+
+    &:active {
+      background-color: #E5E8EB;
+    }
+
+    .animate-spin {
+      animation: spin 1s linear infinite;
+    }
   }
 
   // 카드 공통
@@ -141,6 +273,13 @@
       text-overflow: ellipsis; // 말줄임표 표시
       flex: 1; // 가용 공간 차지
       min-width: 0; // flex 아이템의 최소 너비 해제 (생략 작동을 위해 필수)
+    }
+
+    .address-detail {
+      color: #3182F6;
+      font-weight: 600;
+      margin-left: 4px;
+      flex: 0 0 auto; // 주소 상세는 말줄임 방지 위해 flex 조절
     }
   }
 
@@ -237,6 +376,79 @@
     color: $color-text-disabled;
     font-size: 15px;
     line-height: 1.6;
+
+    &--grid {
+      grid-column: span 2;
+
+      @media (min-width: 560px) {
+        grid-column: span 3;
+      }
+    }
+  }
+
+  // 태그 그리드 (인스타 스타일)
+  &__tag-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    padding: 4px;
+
+    @media (min-width: 560px) {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      padding: 6px;
+    }
+
+    .tag-grid-item {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 4px;
+      overflow: hidden;
+      background-color: #f2f4f6;
+      cursor: pointer;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s;
+      }
+
+      &:active img {
+        transform: scale(0.98);
+      }
+
+      .item-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 40%);
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding: 8px;
+        opacity: 0.9;
+
+        .stat {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          color: white;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .verify-icon {
+          background-color: #3182f6;
+          border-radius: 50%;
+          width: 18px;
+          height: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+      }
+    }
   }
 }
 

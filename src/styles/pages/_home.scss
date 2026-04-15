@@ -26,7 +26,7 @@
   padding: 4px 4px 4px 20px;
   display: flex;
   align-items: center;
-  z-index: 10;
+  z-index: 400;
   transition: box-shadow 0.3s;
   border: 1px solid $color-text-caption;
 
@@ -114,6 +114,148 @@
     caret-color: transparent;
   }
 }
+
+// ── 검색바 컨테이너 및 히스토리 모달 (토스 스타일) ────────────────
+.home-search-bar-container {
+  position: absolute;
+  top: 20px;
+  width: calc(100% - 48px);
+  max-width: 448px;
+  z-index: 400; // 지도의 다른 요소들보다 위
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-search-bar {
+  position: relative; // container 내부에서 상대 위치로 변경
+  top: 0;
+  width: 100%;
+  background-color: #fff;
+  border-radius: 24px; // 조금 더 각진 토스 스타일로 9999px에서 수정
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 4px 4px 4px 20px;
+  display: flex;
+  align-items: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #E5E8EB;
+
+  &.focused {
+    border-color: #3182F6;
+    box-shadow: 0 12px 32px rgba(49, 130, 246, 0.15);
+    background-color: #fff;
+  }
+
+  .home-search-icon {
+    width: 32px;
+    height: 44px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-right: 4px;
+  }
+}
+
+.home-search-history-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: transparent;
+  z-index: 2100;
+}
+
+.home-search-history {
+  background-color: #fff;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  padding: 20px;
+  z-index: 2201;
+  border: 1px solid #F2F4F6;
+  overflow: hidden;
+
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #6B7684;
+      margin: 0;
+    }
+
+    button {
+      background: none;
+      border: none;
+      font-size: 13px;
+      color: #B0B8C1;
+      cursor: pointer;
+
+      &:hover {
+        color: #8B95A1;
+      }
+    }
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+
+    &:active {
+      opacity: 0.6;
+    }
+
+    .history-item-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+
+      span {
+        font-size: 16px;
+        color: #333D4B;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 300px;
+      }
+    }
+
+    .history-delete {
+      padding: 8px;
+      background: none;
+      border: none;
+      color: #D1D6DB;
+      font-size: 14px;
+      cursor: pointer;
+
+      &:hover {
+        color: #B0B8C1;
+      }
+    }
+  }
+
+  .history-empty {
+    padding: 32px 0;
+    text-align: center;
+    font-size: 14px;
+    color: #B0B8C1;
+  }
+}
+
 
 // ── 주소검색 독립 오버레이 (BottomSheet 대신 직접 fixed) ──────
 // motion transform 스택 컨텍스트 없이 iframe이 온전히 동작
@@ -269,7 +411,7 @@
   .count {
     color: #FFFFFF;
     font-size: 14px;
-    font-weight: 800;
+    font-weight: 600; // 수정 X
     line-height: 1;
     letter-spacing: -0.2px;
   }
@@ -1178,7 +1320,7 @@
     gap: 8px;
     overflow-x: auto;
     pointer-events: auto;
-    padding: 4px 0;
+    padding: 4px 8px;
 
     // 가로 스크롤바 숨기기
     -ms-overflow-style: none;

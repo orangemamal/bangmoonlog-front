@@ -13,7 +13,7 @@
   background-color: $color-surface;
 
   &__header {
-    padding: 24px $padding-h 16px;
+    padding: 16px $padding-h;
     background-color: $color-surface;
     border-bottom: 1px solid $color-border-light;
     display: flex;
@@ -24,7 +24,6 @@
       font-size: 20px;
       font-weight: 700;
       color: #333d4b;
-      margin-bottom: 16px;
     }
   }
 
@@ -59,18 +58,24 @@
     position: relative;
     background-color: $color-surface;
 
-    &::after { // TDS 특유의 얇은 구분선
+    &::after {
+      // TDS 특유의 얇은 구분선
       content: '';
       position: absolute;
       bottom: 0;
       left: $padding-h;
       right: $padding-h;
       height: 1px;
-      background-color: $color-border-light;
+      background-color: $color-border;
     }
 
-    &:last-child::after { display: none; }
-    &:active { background-color: #F9FAFB; }
+    &:last-child::after {
+      display: none;
+    }
+
+    &:active {
+      background-color: #F9FAFB;
+    }
 
     &--unread {
       background-color: #F2F4F6; // 요청하신 연한 블루 배경
@@ -102,6 +107,7 @@
     word-break: keep-all;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
@@ -114,13 +120,14 @@
 
   &__dot {
     position: absolute;
-    top: 24px;
-    right: $padding-h;
-    width: 6px;
-    height: 6px;
+    top: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
     background-color: $color-primary;
     border-radius: 50%;
-    box-shadow: 0 0 0 2px #fff;
+    border: 2px solid $color-surface; // 아이콘 박스 배경과 일치시켜 구분감 부여
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
   &__empty {
@@ -164,6 +171,8 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 }

@@ -6,7 +6,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { db } from "../services/firebase";
-import { collection, query, where, onSnapshot, doc, deleteDoc, getDoc } from "firebase/firestore";
+import {
+  collection, query, where, onSnapshot, doc, deleteDoc, getDoc, setDoc
+} from "firebase/firestore";
 import { getUserTitle } from "../utils/titleSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -15,16 +17,24 @@ import { ANNOUNCEMENTS, Announcement } from "../constants/announcements";
 import { MY_PAGE_MENU } from "../constants/myPage";
 import { formatAddressDetail } from "../utils/addressUtils";
 import { ReviewDetail } from "../components/ReviewDetail";
+import { ProfileAvatarUpload } from "../components/mypage/ProfileAvatarUpload";
+import logoSvg from "../assets/images/bangmoonlog_logo.svg";
+
+/** Set true when Firebase Storage is ready — shows profile photo + upload UI. */
+const ENABLE_PROFILE_PHOTO_UPLOAD = false;
 
 export function MyPage() {
-  const { isLoggedIn, login, logout, user } = useAuth();
+  const { isLoggedIn, login, logout, user, updateProfile } = useAuth();
   const [stats, setStats] = useState({ likes: 0, reviews: 0 });
   const [showTitleInfo, setShowTitleInfo] = useState(false);
   const [isBookmarkModalOpen, setBookmarkModalOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<any[]>([]);
-  const [bookmarkNotifEnabled, setBookmarkNotifEnabled] = useState(() => {
-    return localStorage.getItem('bookmark_notif') !== 'false';
+  const [notiSettings, setNotiSettings] = useState({
+    bookmarks: true,
+    reactions: true,
+    notices: true
   });
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [myReviews, setMyReviews] = useState<any[]>([]);
@@ -61,8 +71,8 @@ export function MyPage() {
         const d = await getDoc(doc(db, "reviews", id));
         if (d.exists()) {
           const data = d.data();
-          details.push({ 
-            id: d.id, 
+          details.push({
+            id: d.id,
             ...data,
             date: data.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(data.createdAt.toDate()) : "2026.04.10"
           });
@@ -106,10 +116,56 @@ export function MyPage() {
       setBookmarks(bList);
     });
 
+    // 사용자 알림 설정 로드
+    const loadUserSettings = async () => {
+      const userRef = doc(db, "users", user.id);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        if (data.settings?.notifications) {
+          setNotiSettings(data.settings.notifications);
+        }
+      } else {
+        // 기본값으로 문서 생성
+        await setDoc(userRef, {
+          id: user.id,
+          name: user.name,
+          settings: {
+            notifications: {
+              bookmarks: true,
+              reactions: true,
+              notices: true
+            }
+          }
+        }, { merge: true });
+      }
+    };
+
+    loadUserSettings();
+
     if (activeModal === "recent") loadRecentDetails();
 
     return () => { unsubStats(); unsubBookmarks(); };
   }, [user?.id, activeModal, loadRecentDetails]);
+
+  // 알림 설정 변경 핸들러
+  const handleToggleNotif = async (key: keyof typeof notiSettings) => {
+    if (!user?.id) return;
+
+    const newSettings = { ...notiSettings, [key]: !notiSettings[key] };
+    setNotiSettings(newSettings);
+
+    try {
+      const userRef = doc(db, "users", user.id);
+      await setDoc(userRef, {
+        settings: {
+          notifications: newSettings
+        }
+      }, { merge: true });
+    } catch (e) {
+      console.error("Failed to update notification settings:", e);
+    }
+  };
 
   // 공유하기 기능
   const handleShare = () => {
@@ -134,11 +190,11 @@ export function MyPage() {
           <h2>리얼한 거주 후기,<br />지금 바로 확인해보세요!</h2>
           <p>로그인하고 전국 방방곡곡의 솔직 담백한<br />방문록을 구경해보세요.</p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '16px', width: '100%', maxWidth: '300px' }}>
-            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0 }} onClick={() => login({ id: 'test_a', name: '이민수' })}>이민수</button>
-            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0, backgroundColor: '#FFF0F0', color: '#F04452' }} onClick={() => login({ id: 'test_b', name: '김지영' })}>김지영</button>
-            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0, backgroundColor: '#E7F9F1', color: '#00A968' }} onClick={() => login({ id: 'test_c', name: '박태환' })}>박태환</button>
-            <button className="mypage__login-btn" style={{ fontSize: '14px', height: '48px', margin: 0, backgroundColor: '#F2F4F6', color: '#4E5968' }} onClick={() => login({ id: 'test_d', name: '최소연' })}>최소연</button>
+          <div className="mypage__login-prompt-grid">
+            <button className="mypage__login-btn" onClick={() => login({ id: 'test_a', name: '이민수' })}>이민수</button>
+            <button className="mypage__login-btn" style={{ backgroundColor: '#FFF0F0', color: '#F04452' }} onClick={() => login({ id: 'test_b', name: '김지영' })}>김지영</button>
+            <button className="mypage__login-btn" style={{ backgroundColor: '#E7F9F1', color: '#00A968' }} onClick={() => login({ id: 'test_c', name: '박태환' })}>박태환</button>
+            <button className="mypage__login-btn" style={{ backgroundColor: '#F2F4F6', color: '#4E5968' }} onClick={() => login({ id: 'test_d', name: '최소연' })}>최소연</button>
           </div>
         </div>
       </div>
@@ -152,20 +208,28 @@ export function MyPage() {
       <div className="mypage__profile">
         <div className="mypage__profile-row">
           <div className="mypage__profile-info">
-            <div className="mypage__avatar">{user?.name?.slice(0, 1)}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {ENABLE_PROFILE_PHOTO_UPLOAD && user?.id ? (
+              <ProfileAvatarUpload
+                userId={user.id}
+                userName={user.name}
+                photoURL={user.photoURL}
+                updateProfile={updateProfile}
+              />
+            ) : null}
+            <div className="mypage__profile-details">
               {authorTitle && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ fontSize: '12px', background: '#E8F3FF', padding: '2px 8px', borderRadius: '100px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 'bold', color: '#1B64DA' }}>
-                    {authorTitle.icon} {authorTitle.title}
+                <div className="mypage__title-row">
+                  <span className="mypage__author-title">
+                    <span className="icon">{authorTitle.icon}</span>
+                    <span className="text">{authorTitle.title}</span>
                   </span>
-                  <button onClick={() => setShowTitleInfo(true)} style={{ background: 'none', border: 'none', padding: 0, display: 'flex', opacity: 0.5, cursor: 'pointer' }}>
+                  <button onClick={() => setShowTitleInfo(true)} className="mypage__title-help">
                     <HelpCircle size={14} color="#1B64DA" />
                   </button>
                 </div>
               )}
-              <h1 className="mypage__name" style={{ margin: 0 }}>{user?.name} 님</h1>
-              <p className="mypage__email" style={{ marginTop: '2px' }}>{user?.id}@toss.im</p>
+              <h1 className="mypage__name">{user?.name} 님</h1>
+              <p className="mypage__email">{user?.id}@toss.im</p>
             </div>
           </div>
           <button className="mypage__logout-btn" onClick={logout}>로그아웃</button>
@@ -180,9 +244,9 @@ export function MyPage() {
             </div>
           </div>
           <div className="mypage__stat-card">
-            <div className="mypage__stat-icon" style={{ backgroundColor: "#FFF0F0" }}><Heart size={20} style={{ fill: "#F04452", color: "#F04452" }} /></div>
+            <div className="mypage__stat-icon mypage__stat-icon-heart"><Heart size={20} color="#F04452" fill="#F04452" /></div>
             <div>
-              <p className="mypage__stat-label">공감받은 횟수</p>
+              <p className="mypage__stat-label">받은 공감</p>
               <p className="mypage__stat-value">{stats.likes}개</p>
             </div>
           </div>
@@ -190,32 +254,20 @@ export function MyPage() {
       </div>
 
       <div className="mypage__menu-section">
-        {["활동", "정보", "설정", "지원"].map((cat) => (
+        {["활동", "정보", "설정", "지원"].map((cat, catIdx, catArr) => (
           <div key={cat}>
             <h3 className="mypage__menu-heading">{cat === "활동" ? "나의 활동" : cat === "정보" ? "앱 설정 및 정보" : cat === "설정" ? "서비스 설정" : "고객 지원"}</h3>
             {MY_PAGE_MENU.filter(m => m.category === cat).map(item => {
               const IconComp = (Icons as any)[item.icon] || HelpCircle;
 
-              if (item.label === "찜한 방문록 알림 설정") {
-                return (
-                  <div className="mypage__menu-item" key={item.label}>
-                    <div className="mypage__menu-item-left">
-                      <IconComp size={20} color="#333D4B" />
-                      <span className="mypage__menu-item-label">{item.label}</span>
-                    </div>
-                    <ToggleButton 
-                      initialValue={bookmarkNotifEnabled} 
-                      onChange={(isOn) => {
-                        setBookmarkNotifEnabled(isOn);
-                        localStorage.setItem('bookmark_notif', isOn ? 'true' : 'false');
-                        alert(isOn ? "찜한 건물의 새로운 방문록 알림을 받습니다 🔔" : "찜한 건물의 새로운 방문록 알림을 해제했습니다 🔕");
-                      }} 
-                    />
-                  </div>
-                );
-              }
-
-              return (
+              const menuItem = item.label === "알림 설정" ? (
+                <MenuItem
+                  key={item.label}
+                  icon={<IconComp size={20} color="#333D4B" />}
+                  title={item.label}
+                  onClick={() => setIsNotifModalOpen(true)}
+                />
+              ) : (
                 <MenuItem
                   key={item.label}
                   icon={<IconComp size={20} color="#333D4B" />}
@@ -246,8 +298,15 @@ export function MyPage() {
                   isSpecial={item.label === "제휴 문의"}
                 />
               );
+
+              return (
+                <div key={item.label}>
+                  {item.label === "제휴 문의" && <div className="mypage__spacer" />}
+                  {menuItem}
+                </div>
+              );
             })}
-            <div className="mypage__spacer" />
+            {catIdx < catArr.length - 1 && <div className="mypage__spacer" />}
           </div>
         ))}
       </div>
@@ -258,11 +317,11 @@ export function MyPage() {
           <motion.div
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            style={{ position: 'fixed', inset: 0, backgroundColor: 'white', zIndex: 2500, overflowY: 'auto' }}
+            className="mypage__full-modal"
           >
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #F2F4F6', display: 'flex', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 10 }}>
-              <button onClick={() => setActiveModal(null)} style={{ border: 'none', background: 'none', marginRight: '16px', display: 'flex' }}><ArrowLeft size={24} color="#333D4B" /></button>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>
+            <div className="mypage__modal-header">
+              <button onClick={() => setActiveModal(null)} className="back-btn"><ArrowLeft size={24} color="#333D4B" /></button>
+              <h2>
                 {activeModal === "reviews" ? "내가 쓴 방문록" :
                   activeModal === "recent" ? "최근 본 방문록" :
                     activeModal === "announcements" ? "공지사항" :
@@ -271,22 +330,22 @@ export function MyPage() {
               </h2>
             </div>
 
-            <div style={{ padding: '20px' }}>
+            <div className="mypage__modal-content">
               {activeModal === "announcements" && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {ANNOUNCEMENTS.sort((a, b) => (b.isFixed ? 1 : 0) - (a.isFixed ? 1 : 0)).map(ann => (
                     <div
                       key={ann.id}
                       onClick={() => setSelectedAnnouncement(ann)}
-                      style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#F9FAFB', cursor: 'pointer' }}
+                      className="mypage__announcement-item"
                     >
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: ann.category === "점검" ? "#F04452" : "#3182F6" }}>[{ann.category}]</span>
-                        {ann.isFixed && <span style={{ fontSize: '12px', fontWeight: 700, color: '#3182F6' }}>📌 중요</span>}
-                        {(new Date().getTime() - new Date(ann.createdAt).getTime() < 86400000) && <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#F04452' }} />}
+                      <div className="mypage__announcement-item-meta">
+                        <span className={`mypage__announcement-item-category ${ann.category === "점검" ? "maintenance" : "notice"}`}>[{ann.category}]</span>
+                        {ann.isFixed && <span className="mypage__announcement-item-fixed">📌 중요</span>}
+                        {(new Date().getTime() - new Date(ann.createdAt).getTime() < 86400000) && <div className="mypage__announcement-item-new" />}
                       </div>
-                      <div style={{ fontSize: '15px', fontWeight: 600, color: '#333D4B' }}>{ann.title}</div>
-                      <div style={{ fontSize: '12px', color: '#8B95A1', marginTop: '4px' }}>{ann.createdAt.slice(0, 10).replace(/-/g, '.')}</div>
+                      <div className="mypage__announcement-item-title">{ann.title}</div>
+                      <div className="mypage__announcement-item-date">{ann.createdAt.slice(0, 10).replace(/-/g, '.')}</div>
                     </div>
                   ))}
                 </div>
@@ -294,15 +353,21 @@ export function MyPage() {
               {activeModal === "partnership" && (
                 <div className="mypage__partnership">
                   <div className="mypage__partnership-slogan">
-                    세입자의 알권리를 위해 함께 뜁니다.
+                    더 나은 주거 경험을 만드는<br /><strong>가장 확실한 데이터 파트너</strong>
                   </div>
 
                   {/* 카드 UI */}
                   <div className="mypage__partnership-card">
-                    <div className="card-logo">방문Log <span>Business</span></div>
+                    <div className="card-logo">
+                      <div className="logo-wrapper">
+                        <img src={logoSvg} alt="" className="logo-icon" />
+                        <span className="logo-text">방문Log</span>
+                      </div>
+                      <span className="badge">Business</span>
+                    </div>
                     <div className="card-philosophy">
-                      "우리는 투명한 부동산 시장을 위해<br />
-                      실제 거주 데이터를 연결합니다."
+                      "검증된 실거주 데이터로<br />
+                      부동산 시장의 새로운 신뢰를 구축합니다."
                     </div>
                   </div>
 
@@ -311,22 +376,22 @@ export function MyPage() {
                     <div className="value-item">
                       <div className="value-icon">🎯</div>
                       <div className="value-text">
-                        <strong>정확한 타겟팅</strong>
-                        예비 세입자 접점 확보
+                        <strong>압도적인 타겟 도달</strong>
+                        이사 및 계약을 준비하는 유저 밀착 타겟팅
                       </div>
                     </div>
                     <div className="value-item">
-                      <div className="value-icon">📢</div>
+                      <div className="value-icon">✅</div>
                       <div className="value-text">
-                        <strong>데이터 신뢰도</strong>
-                        인증된 사용자의 진짜 보이스
+                        <strong>검증된 리얼 보이스</strong>
+                        100% 방문 인증 기반의 고품질 실거주 데이터
                       </div>
                     </div>
                     <div className="value-item">
-                      <div className="value-icon">🤝</div>
+                      <div className="value-icon">🚀</div>
                       <div className="value-text">
-                        <strong>브랜드 가치</strong>
-                        세입자 권리 증진 기여
+                        <strong>동반 성장 파트너십</strong>
+                        브랜드 이미지 제고와 사회적 가치 창출
                       </div>
                     </div>
                   </div>
@@ -340,7 +405,7 @@ export function MyPage() {
                       setActiveModal("inquiry");
                     }}
                   >
-                    방문Log 팀에게 메일 쓰기
+                    비즈니스 제휴 문의하기
                   </button>
                 </div>
               )}
@@ -358,8 +423,8 @@ export function MyPage() {
                   </div>
 
                   <div className="mypage__inquiry-field">
-                    <label className="mypage__inquiry-label">문의 유형</label>
-                    <div style={{ position: 'relative' }}>
+                   <label className="mypage__inquiry-label">문의 유형</label>
+                    <div className="mypage__inquiry-input-wrap">
                       <select
                         className="mypage__inquiry-input mypage__inquiry-select"
                         value={inquiryType}
@@ -372,13 +437,13 @@ export function MyPage() {
                         <option value="불건전 게시물">불건전 게시물 신고</option>
                         <option value="기타">기타 문의</option>
                       </select>
-                      <Icons.ChevronDown size={20} color="#8B95A1" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                      <Icons.ChevronDown size={20} color="#8B95A1" className="mypage__inquiry-select-icon" />
                     </div>
                   </div>
 
                   <div className="mypage__inquiry-field">
                     <label className="mypage__inquiry-label">문의 내용</label>
-                    <div style={{ position: 'relative' }}>
+                    <div className="mypage__inquiry-input-wrap">
                       <textarea
                         className="mypage__inquiry-textarea"
                         placeholder="내용을 입력하세요."
@@ -518,12 +583,16 @@ export function MyPage() {
       {/* 상세 공지 모달 */}
       <AnimatePresence>
         {selectedAnnouncement && (
-          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} style={{ position: 'fixed', inset: 0, backgroundColor: 'white', zIndex: 3000, padding: '24px', overflowY: 'auto' }}>
+          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="mypage__full-modal" style={{ padding: '24px' }}>
             <button onClick={() => setSelectedAnnouncement(null)} style={{ border: 'none', background: 'none', marginBottom: '24px' }}><ArrowLeft size={24} color="#333D4B" /></button>
             <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>{selectedAnnouncement.title}</h1>
             <p style={{ color: '#8B95A1', marginBottom: '24px' }}>{selectedAnnouncement.createdAt.slice(0, 10).replace(/-/g, '.')}</p>
-            <div style={{ lineHeight: 1.8, fontSize: '16px', color: '#4E5968' }}>
-              <ReactMarkdown>{selectedAnnouncement.content}</ReactMarkdown>
+            <div className="mypage__announcement-detail-content">
+              <ReactMarkdown>
+                {selectedAnnouncement.content
+                  .replace(/\\n/g, '\n')
+                  .replace(/<br\s*\/?>/gi, '\n')}
+              </ReactMarkdown>
             </div>
           </motion.div>
         )}
@@ -541,7 +610,6 @@ export function MyPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowTitleInfo(false)}
-              style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, WebkitBackdropFilter: 'blur(4px)', backdropFilter: 'blur(4px)' }}
             />
             <motion.div
               className="mypage__title-modal"
@@ -549,44 +617,32 @@ export function MyPage() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              style={{
-                position: 'fixed', bottom: 0, left: 0, right: 0,
-                backgroundColor: 'white', borderTopLeftRadius: '24px', borderTopRightRadius: '24px',
-                padding: '32px 24px 48px', zIndex: 1001, maxHeight: '80vh', overflowY: 'auto'
-              }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#333D4B', margin: 0 }}>칭호 시스템 안내</h2>
-                <button
-                  onClick={() => setShowTitleInfo(false)}
-                  style={{ background: '#F2F4F6', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                >
+              <div className="mypage__title-modal-header">
+                <h2>칭호 시스템 안내</h2>
+                <button onClick={() => setShowTitleInfo(false)} className="mypage__title-modal-close">
                   <X size={20} color="#4E5968" />
                 </button>
               </div>
 
-              <div style={{ backgroundColor: '#F9FAFB', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
-                <p style={{ fontSize: '15px', color: '#4E5968', margin: 0, lineHeight: 1.6 }}>
+              <div className="mypage__title-modal-desc-box">
+                <p>
                   방문Log를 작성할수록 더 높은 등급의 칭호를 획득할 수 있습니다. <br />
                   꾸준한 활동으로 <strong>방문록의 신</strong>에 도전해보세요!
                 </p>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="mypage__title-step-list">
                 {titleSteps.map((step) => (
                   <div
                     key={step.title}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '16px', borderRadius: '16px', border: '1px solid #F2F4F6',
-                      backgroundColor: stats.reviews >= step.count ? '#E8F3FF' : 'white'
-                    }}
+                    className={`mypage__title-step-item ${stats.reviews >= step.count ? 'active' : ''}`}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '24px' }}>{step.icon}</span>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#333D4B' }}>{step.title}</span>
-                        <span style={{ fontSize: '13px', color: '#6B7684' }}>누적 방문록 {step.count}회 이상</span>
+                    <div className="mypage__title-step-item-left">
+                      <span className="mypage__title-step-item-icon">{step.icon}</span>
+                      <div className="mypage__title-step-item-info">
+                        <span className="mypage__title-step-item-name">{step.title}</span>
+                        <span className="mypage__title-step-item-requirement">누적 방문록 {step.count}회 이상</span>
                       </div>
                     </div>
                     {stats.reviews >= step.count && (
@@ -615,26 +671,21 @@ export function MyPage() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300, mass: 0.8 }}
-            style={{
-              position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-              backgroundColor: '#F9FAFB', zIndex: 2000, overflowY: 'auto'
-            }}
+            className="mypage__full-modal"
+            style={{ backgroundColor: '#F9FAFB' }}
           >
-            <div style={{ padding: '20px 24px', backgroundColor: 'white', borderBottom: '1px solid #F2F4F6', display: 'flex', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
-              <button
-                onClick={() => setBookmarkModalOpen(false)}
-                style={{ border: 'none', background: 'none', marginRight: '16px', padding: '4px', display: 'flex' }}
-              >
+            <div className="mypage__bookmark-header">
+              <button onClick={() => setBookmarkModalOpen(false)} className="back-btn">
                 <ArrowLeft size={24} color="#333D4B" />
               </button>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#333D4B', margin: 0 }}>찜한 리스트</h2>
+              <h2>찜한 리스트</h2>
             </div>
 
             <div style={{ padding: '16px' }}>
               {bookmarks.length === 0 ? (
-                <div style={{ padding: '100px 0', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ fontSize: '40px' }}>📍</div>
-                  <p style={{ fontSize: '15px', color: '#8B95A1', lineHeight: 1.6 }}>찜한 건물이 아직 없어요.<br />지도를 탐색하며 마음에 드는 곳을 찜해보세요!</p>
+                <div className="mypage__bookmark-empty">
+                  <div className="icon">📍</div>
+                  <p>찜한 건물이 아직 없어요.<br />지도를 탐색하며 마음에 드는 곳을 찜해보세요!</p>
                 </div>
               ) : (
                 bookmarks.map(bm => (
@@ -644,22 +695,17 @@ export function MyPage() {
                       setBookmarkModalOpen(false);
                       navigate(`/?lat=${bm.lat}&lng=${bm.lng}&zoom=19&address=${encodeURIComponent(bm.address)}`);
                     }}
-                    style={{
-                      backgroundColor: 'white', borderRadius: '20px', padding: '20px',
-                      marginBottom: '12px', display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'center', boxShadow: '0 2px 12px rgba(0,0,0,0.04)', cursor: 'pointer',
-                      gap: '12px' // 아이콘-텍스트-삭제버튼 사이의 최소 간격 확보
-                    }}
+                    className="mypage__bookmark-item"
                   >
-                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flex: 1, minWidth: 0 }}>
-                      <div style={{ width: '48px', height: '48px', borderRadius: '14px', backgroundColor: '#E8F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div className="mypage__bookmark-item-left">
+                      <div className="mypage__bookmark-item-icon">
                         <MapPin size={24} color="#3182F6" />
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '16px', fontWeight: 600, color: '#333D4B', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div className="mypage__bookmark-item-info">
+                        <div className="mypage__bookmark-item-name">
                           {bm.address.split(' ').slice(-2).join(' ')}
                         </div>
-                        <div style={{ fontSize: '13px', color: '#8B95A1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bm.address}</div>
+                        <div className="mypage__bookmark-item-address">{bm.address}</div>
                       </div>
                     </div>
                     <button
@@ -667,7 +713,7 @@ export function MyPage() {
                         e.stopPropagation();
                         setBookmarkDeleteTarget({ id: bm.id, address: bm.address });
                       }}
-                      style={{ border: 'none', background: 'none', color: '#B0B8C1', padding: '8px', flexShrink: 0 }}
+                      className="mypage__bookmark-item-delete"
                     >
                       <Trash2 size={20} />
                     </button>
@@ -785,6 +831,83 @@ export function MyPage() {
         )}
       </AnimatePresence>
 
+      {/* 알림 상세 설정 모달 (TDS 바텀 시트) */}
+      <AnimatePresence>
+        {isNotifModalOpen && (
+          <>
+            <motion.div
+              className="modal-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsNotifModalOpen(false)}
+            />
+            <motion.div
+              className="mypage__notif-modal"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            >
+              <div className="mypage__notif-modal-header">
+                <h2>알림 설정</h2>
+                <button
+                  onClick={() => setIsNotifModalOpen(false)}
+                  className="mypage__title-modal-close"
+                >
+                  <X size={20} color="#4E5968" />
+                </button>
+              </div>
+
+              <div className="mypage__notif-item-list">
+                {/* 1. 찜한 매물 알림 */}
+                <div className="mypage__notif-item">
+                  <div className="mypage__notif-item-info">
+                    <span className="mypage__notif-item-title">찜한 매물 새 방문록</span>
+                    <span className="mypage__notif-item-desc">관심 있거나 살고 싶은 건물의 소식을 알려줘요</span>
+                  </div>
+                  <ToggleButton
+                    initialValue={notiSettings.bookmarks}
+                    onChange={() => handleToggleNotif('bookmarks')}
+                  />
+                </div>
+
+                {/* 2. 소셜 알림 */}
+                <div className="mypage__notif-item">
+                  <div className="mypage__notif-item-info">
+                    <span className="mypage__notif-item-title">좋아요 및 댓글</span>
+                    <span className="mypage__notif-item-desc">내 방문록에 대한 다른 사람들의 반응을 알려줘요</span>
+                  </div>
+                  <ToggleButton
+                    initialValue={notiSettings.reactions}
+                    onChange={() => handleToggleNotif('reactions')}
+                  />
+                </div>
+
+                {/* 3. 서비스 공지 */}
+                <div className="mypage__notif-item">
+                  <div className="mypage__notif-item-info">
+                    <span className="mypage__notif-item-title">서비스 공지 및 혜택</span>
+                    <span className="mypage__notif-item-desc">중요한 서비스 공지와 혜택 정보를 놓치지 않게 알려줘요</span>
+                  </div>
+                  <ToggleButton
+                    initialValue={notiSettings.notices}
+                    onChange={() => handleToggleNotif('notices')}
+                  />
+                </div>
+              </div>
+
+              <div className="mypage__notif-footer">
+                <p>
+                  * 알림은 서비스 내부 알림 탭에서 확인하실 수 있습니다.<br />
+                  * 야간 시간대(오후 9시 ~ 오전 8시)에는 마케팅 관련 알림이 제한될 수 있습니다.
+                </p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
@@ -794,38 +917,25 @@ function MenuItem({ icon, title, onClick, badge, isSpecial }: { icon: React.Reac
     <button
       className={`mypage__menu-item ${isSpecial ? 'mypage__menu-item--special' : ''}`}
       onClick={onClick}
-      style={isSpecial ? {
-        background: 'linear-gradient(135deg, #E8F3FF 0%, #F0F7FF 100%)',
-        border: '1px solid #D0E5FF',
-        marginTop: '8px',
-        padding: '24px 20px'
-      } : {}}
     >
       <div className="mypage__menu-item-left">
         {icon}
-        <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-          <span className="mypage__menu-item-label" style={isSpecial ? { fontWeight: 700, color: '#1B64DA' } : {}}>{title}</span>
-          {isSpecial && <span style={{ fontSize: '12px', color: '#4E5968', marginTop: '2px' }}>방문Log와 함께 세입자의 세상을 바꿀 파트너를 찾습니다 🤝</span>}
+        <div className="mypage__menu-item-info">
+          <span className="mypage__menu-item-label">{title}</span>
+          {isSpecial && <span className="mypage__menu-item-sublabel">방문Log와 함께 세입자의 세상을 바꿀 파트너를 찾습니다 🤝</span>}
         </div>
         {badge !== undefined && (
-          <span style={{
-            marginLeft: '8px', padding: '2px 8px', backgroundColor: '#3182F6',
-            color: 'white', borderRadius: '100px', fontSize: '11px', fontWeight: 700
-          }}>
+          <span className="mypage__menu-item-badge">
             {badge}
           </span>
         )}
       </div>
-      <ChevronRight size={20} className="mypage__menu-item-chevron" style={isSpecial ? { color: '#1B64DA' } : {}} />
+      <ChevronRight size={20} className="mypage__menu-item-chevron" />
     </button>
   );
 }
 
-const ArrowLeft = ({ size, color }: { size?: number, color?: string }) => (
-  <svg width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M19 12H5M12 19l-7-7 7-7" />
-  </svg>
-);
+
 
 function ToggleButton({ initialValue, onChange }: { initialValue: boolean, onChange?: (isOn: boolean) => void }) {
   const [isOn, setIsOn] = useState(initialValue);
@@ -837,22 +947,11 @@ function ToggleButton({ initialValue, onChange }: { initialValue: boolean, onCha
         if (onChange) onChange(newState);
       }}
       className={`toggle-btn ${isOn ? 'on' : 'off'}`}
-      style={{
-        width: '40px', height: '22px', borderRadius: '11px',
-        backgroundColor: isOn ? '#3182F6' : '#E5E8EB',
-        position: 'relative', border: 'none', cursor: 'pointer',
-        transition: 'background-color 0.2s',
-        flexShrink: 0
-      }}
     >
       <motion.div
-        animate={{ x: isOn ? 20 : 2 }}
+        className="toggle-btn__thumb"
+        animate={{ x: isOn ? 19 : 3 }}
         initial={false}
-        style={{
-          width: '18px', height: '18px', borderRadius: '50%',
-          backgroundColor: 'white', position: 'absolute', top: '2px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
-        }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
       />
     </button>

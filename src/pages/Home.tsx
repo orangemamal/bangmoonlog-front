@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, User, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db } from '../services/firebase';
@@ -8,17 +8,19 @@ import {
   getDocs,
   addDoc,
   query,
-  doc,
-  getDoc,
   updateDoc,
-  deleteDoc,
+  setDoc,
+  writeBatch,
   Timestamp,
   onSnapshot,
   where,
   DocumentData,
   QuerySnapshot,
-  QueryDocumentSnapshot
+  QueryDocumentSnapshot,
+  doc,
+  getDoc
 } from "firebase/firestore";
+import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { checkEligibleForNewTitle } from "../utils/titleSystem";
 import { useAuth } from "../hooks/useAuth";
@@ -27,7 +29,8 @@ import { useAccessControl } from "../hooks/useAccessControl";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { deleteReview } from "../services/reviewService";
 import { WelcomeModal } from "../components/home/WelcomeModal";
-import { normalizeAddressDetail, formatAddressDetail } from "../utils/addressUtils";
+import { normalizeAddressDetail, formatAddressDetail, normalizeBaseAddress } from "../utils/addressUtils";
+import { calculateDistance } from "../utils/geoUtils";
 
 interface Review {
   id: string;
@@ -48,28 +51,11 @@ interface Review {
   isVerified?: boolean;
   distance?: number;
   experienceType?: string;
+  address?: string;
 }
 
 
-// [유틸리티] 두 좌표 사이의 거리 계산 (Haversine 공식, m 단위)
-const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-  const R = 6371000; // 지구 반지름 (m)
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c);
-};
-
-// [유틸리티] 주소 정규화 (중복 방지용 키 생성)
-const normalizeAddress = (addr: string) => {
-  if (!addr) return "";
-  // 1. 공백 제거 및 소문자화 (네이버 주소는 보통 대항문자이므로 큰 의미는 없지만 기본 처리)
-  // 2. 괄호 안의 상세 주소(예: (서린동)) 제거 - 주소지 단일화를 위함
-  return addr.replace(/\(.*\)/g, "").replace(/\s+/g, " ").trim();
-};
+// 주소 정규화 유틸리티는 ../utils/addressUtils의 normalizeBaseAddress를 사용합니다.
 
 // [유틸리티] 거주용 건물 여부 판단 (비거주 시설 필터링)
 const checkIsResidential = (addr: string) => {
@@ -156,8 +142,16 @@ export function Home() {
   const infoWindowInstance = useRef<any>(null);
   const allLocationsRef = useRef<any[]>([]);
   const unsubscribeReadListRef = useRef<(() => void) | null>(null);
+  const isInitialNavRef = useRef(false);
   const clusterRef = useRef<any>(null);
   const allMarkersRef = useRef<any[]>([]);
+
+  // 검색 기록 상태
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    const saved = localStorage.getItem('recent_searches_log');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // [환영 모달] 첫 방문 시 노출 여부 체크
   useEffect(() => {
@@ -199,12 +193,162 @@ export function Home() {
         } catch (e) { }
 
         // Remove param so it doesn't loop
-        searchParams.delete("edit");
-        setSearchParams(searchParams, { replace: true });
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("edit");
+        setSearchParams(nextParams, { replace: true });
       };
       loadToEdit();
     }
   }, [searchParams, setSearchParams]);
+
+  // [추가] 찜 목록/지도 이동 파라미터 감지 및 자동 포커싱 구현
+  useEffect(() => {
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+    const rawAddr = searchParams.get("address");
+    const addr = rawAddr ? normalizeBaseAddress(rawAddr) : null;
+
+    if (lat && lng && addr && mapInstance.current && infoWindowInstance.current) {
+      const targetPos = new window.naver.maps.LatLng(Number(lat), Number(lng));
+
+      // 즉시 이동 및 줌 설정
+      mapInstance.current.setZoom(19);
+      mapInstance.current.setCenter(targetPos);
+
+      const triggerFocus = async () => {
+        // [1] 데이터 로드 (찜 상태 및 거주용 여부)
+        let isBookmarked = false;
+        if (isLoggedIn && user) {
+          const bookmarkId = `bookmark_${user.id}_${addr.replace(/\s+/g, '_')}`;
+          const bRef = doc(db, "bookmarks", bookmarkId);
+          const bSnap = await getDoc(bRef);
+          isBookmarked = bSnap.exists();
+        }
+
+        const isRes = checkIsResidential(addr);
+
+        // [2] 본인 작성 여부 체크
+        let hasWritten = false;
+        if (isLoggedIn && user?.id) {
+          const q = query(collection(db, "reviews"), where("authorId", "==", user.id), where("address", "==", addr));
+          const snap = await getDocs(q);
+          hasWritten = !snap.empty;
+        }
+
+        const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
+        const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
+
+        // [3] 인포윈도우 템플릿 적용 및 오픈
+        infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+        infoWindowInstance.current.setContent(`
+          <div class="iw-container marker">
+            <div class="iw-card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                ${isRes ? `
+                <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${addr}', ${lat}, ${lng})">
+                  <svg width="24" height="24" viewBox="0 0 24 24" 
+                    fill="${isBookmarked ? '#FFD43B' : 'none'}" 
+                    stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </button>` : ''}
+              </div>
+              <div class="iw-address"><span>📍</span><span>${addr}</span></div>
+              <div class="iw-button-group">
+                <button class="iw-button iw-button--read" onclick="window.__openReadList('${addr}')">방문록 보기</button>
+                ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${addr}', ${lat}, ${lng})">${buttonText}</button>` : ''}
+              </div>
+              <div class="iw-arrow"></div>
+            </div>
+          </div>
+        `);
+        infoWindowInstance.current.open(mapInstance.current, targetPos);
+
+        // [4] 파라미터 정리 (반복 실행 방지)
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("lat");
+        nextParams.delete("lng");
+        nextParams.delete("address");
+        nextParams.delete("zoom");
+        setSearchParams(nextParams, { replace: true });
+      };
+
+      triggerFocus();
+    }
+  }, [searchParams, mapInstance.current, infoWindowInstance.current, isLoggedIn, user, setSearchParams]);
+
+  // [추가] 기존 중복 찜 데이터 클린업 로직 (1회성)
+  // [개선] 찜 데이터 전면 마이그레이션 및 클린업 (1회성/지속성 통합)
+  useEffect(() => {
+    const migrateAndCleanupBookmarks = async () => {
+      if (!isLoggedIn || !user?.id) return;
+
+      try {
+        const q = query(collection(db, "bookmarks"), where("userId", "==", user.id));
+        const snap = await getDocs(q);
+
+        // 정규화된 주소를 키로 하여 데이터 그룹화
+        const addressMap = new Map<string, { data: any, ids: string[] }>();
+
+        snap.forEach(d => {
+          const rawData = d.data();
+          const stdAddr = normalizeBaseAddress(rawData.address);
+
+          if (!addressMap.has(stdAddr)) {
+            addressMap.set(stdAddr, { data: rawData, ids: [] });
+          }
+          addressMap.get(stdAddr)?.ids.push(d.id);
+        });
+
+        const batch = writeBatch(db);
+        let hasChanges = false;
+
+        for (const [stdAddr, info] of addressMap.entries()) {
+          // 신규 표준 ID 규격 생성
+          const correctId = `bookmark_${user.id}_${stdAddr.replace(/\s+/g, '_')}`;
+
+          // 1. 마이그레이션 필요 여부 체크: 
+          //    - ID가 규격에 맞지 않거나
+          //    - 주소 필드가 표준화되지 않았거나
+          //    - 중복된 문서가 있는 경우
+          const needsMigration = !info.ids.includes(correctId) ||
+            info.data.address !== stdAddr ||
+            info.ids.length > 1;
+
+          if (needsMigration) {
+            hasChanges = true;
+
+            // 새 규격으로 데이터 복사/생성
+            const newRef = doc(db, "bookmarks", correctId);
+            batch.set(newRef, {
+              ...info.data,
+              address: stdAddr, // 필드값 표준화
+              updatedAt: Timestamp.now()
+            });
+
+            // 기존 모든 구형/중복 ID 문서 삭제 (새 ID가 포함되어 있더라도 위에서 set 해줬으므로 안전하게 삭제 로직 구성)
+            info.ids.forEach(oldId => {
+              if (oldId !== correctId) {
+                batch.delete(doc(db, "bookmarks", oldId));
+              }
+            });
+          }
+        }
+
+        if (hasChanges) {
+          await batch.commit();
+          console.log("🧹 [Migration] 찜 데이터 주소 규격을 통합하고 문서 ID를 재배치했습니다.");
+          refreshMarkers(); // UI 리프레시 유도
+        }
+      } catch (e) {
+        console.error("Migration error:", e);
+      }
+    };
+
+    migrateAndCleanupBookmarks();
+  }, [isLoggedIn, user?.id]);
 
   // [핸들러] 리뷰 상세 보기 관련 핸들러 안정화 (무한 루프 해결)
   const handleCloseDetail = useCallback(() => setSelectedReview(null), []);
@@ -227,7 +371,7 @@ export function Home() {
 
       const groups: { [key: string]: any[] } = {};
       allReviews.forEach(r => {
-        const key = normalizeAddress(r.address || r.location);
+        const key = normalizeBaseAddress(r.address || r.location);
         if (!groups[key]) groups[key] = [];
         groups[key].push(r);
       });
@@ -293,24 +437,26 @@ export function Home() {
           // 줌 레벨 19 이상일 때만 모달 노출 로직 실행
           mapInstance.current.panTo(latLng, { duration: 300, easing: "linear" });
 
-          // [개선] 찜하기 상태 확인 로직 추가
+          // [개선] 찜하기 상태 확인 로직 (조회 성능 및 정확도 향상: ID로 직접 조회)
           const checkBookmark = async () => {
             let isBookmarked = false;
             if (isLoggedIn && user) {
-              const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", loc.address));
-              const bsnap = await getDocs(bq);
-              isBookmarked = !bsnap.empty;
+              const stdAddr = normalizeBaseAddress(loc.address);
+              const bookmarkId = `bookmark_${user.id}_${stdAddr.replace(/\s+/g, '_')}`;
+              const bRef = doc(db, "bookmarks", bookmarkId);
+              const bSnap = await getDoc(bRef);
+              isBookmarked = bSnap.exists();
             }
 
             const isRes = checkIsResidential(loc.address);
-            
+
             // [추가] 중복 작성 체크 후 말풍선 오픈
             const openInfoWindow = async () => {
               let hasWritten = false;
               if (isLoggedIn && user?.id) {
                 const q = query(
-                  collection(db, "reviews"), 
-                  where("authorId", "==", user.id), 
+                  collection(db, "reviews"),
+                  where("authorId", "==", user.id),
                   where("address", "==", loc.address)
                 );
                 const snap = await getDocs(q);
@@ -516,7 +662,29 @@ export function Home() {
     icon: "🥳",
   });
 
-  const neighborhoodTags = ["#채광맛집", "#방음주의", "#수압짱", "#집주인천사", "#편의점가깝", "#언덕주의"];
+  // [개선] 현재 검색된 주소지(혹은 선택된 장소)의 방문록 태그들 중 빈도가 높은 상위 5개를 동적으로 추출
+  const dynamicNeighborhoodTags = useMemo(() => {
+    if (!selectedAddress || reviews.length === 0) return [];
+
+    const tagCount: { [key: string]: number } = {};
+    const normalizedTarget = normalizeBaseAddress(selectedAddress);
+
+    reviews.forEach(r => {
+      const docAddr = normalizeBaseAddress(r.location || r.address || "");
+      if (docAddr === normalizedTarget && r.tags) {
+        r.tags.forEach((t: string) => {
+          tagCount[t] = (tagCount[t] || 0) + 1;
+        });
+      }
+    });
+
+    // 많이 쓰인 순서대로 정렬하여 상위 6개 반환
+    return Object.entries(tagCount)
+      .sort((a, b) => b[1] - a[1])
+      .map(entry => entry[0])
+      .slice(0, 6);
+  }, [reviews, selectedAddress]);
+
   const tags = [
     // ✨ 숨은 매력 장점 (발견하면 좋은 안심 태그)
     "#채광맛집", "#방음잘됨", "#수압짱", "#수납넉넉", "#벌레청정구역",
@@ -546,7 +714,7 @@ export function Home() {
       // [개선] 특정 주소 필드 일치 쿼리 대신, 전체 리스트를 실시간으로 가져와서 주소 정규화 기준으로 필터링합니다.
       // 이는 마커 숫자와 리스트 숫자의 일관성을 100% 보장하며 주소 오타나 필드명 차이(address vs location)로 인한 누락을 방지합니다.
       const q = query(collection(db, "reviews"));
-      const normalizedTarget = normalizeAddress(address);
+      const normalizedTarget = normalizeBaseAddress(address);
 
       unsubscribeReadListRef.current = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
         const list: Review[] = [];
@@ -554,7 +722,7 @@ export function Home() {
 
         snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
           const data = doc.data();
-          const docAddr = normalizeAddress(data.address || data.location || "");
+          const docAddr = normalizeBaseAddress(data.address || data.location || "");
 
           if (docAddr === normalizedTarget) {
             list.push({
@@ -611,23 +779,35 @@ export function Home() {
     };
 
     window.__toggleBookmark = async (address: string, lat: number, lng: number) => {
-      if (!isLoggedIn) {
+      if (!isLoggedIn || !user?.id) {
         showConfirm("로그인 필요", () => login(), "찜하기 기능은 로그인 후 이용 가능합니다.", "🔒");
         return;
       }
 
       try {
-        const q = query(collection(db, "bookmarks"), where("userId", "==", user?.id), where("address", "==", address));
-        const snap = await getDocs(q);
-        const isDelete = !snap.empty;
+        const normalizedAddr = normalizeBaseAddress(address);
+        // 고유 ID 생성 (중복 방지 핵심)
+        const bookmarkId = `bookmark_${user.id}_${normalizedAddr.replace(/\s+/g, '_')}`;
+        const bRef = doc(db, "bookmarks", bookmarkId);
+        const bSnap = await getDoc(bRef);
+
+        const isDelete = bSnap.exists();
 
         if (isDelete) {
-          await deleteDoc(doc(db, "bookmarks", snap.docs[0].id));
+          // [중급 클린업] 혹시 만에 하나 다른 ID로 중복된 게 있다면 같이 삭제
+          const q = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", normalizedAddr));
+          const snap = await getDocs(q);
+          const batch = writeBatch(db);
+          snap.forEach((d: QueryDocumentSnapshot<DocumentData>) => batch.delete(d.ref));
+          await batch.commit();
+
           showAlert("찜 해제", "관심 건물에서 삭제되었습니다.", "💔");
         } else {
-          await addDoc(collection(db, "bookmarks"), {
-            userId: user?.id,
-            address, lat, lng,
+          await setDoc(bRef, {
+            userId: user.id,
+            address: normalizedAddr, // [핵심 수정] 무조건 표준화된 주소로 저장
+            lat,
+            lng,
             createdAt: Timestamp.now()
           });
           showAlert("찜 완료!", "이 건물의 새로운 방문록 알림을 보내드릴게요. 🔔", "🏠");
@@ -662,6 +842,12 @@ export function Home() {
     const initializeMap = () => {
       if (!window.naver?.maps || !mapElement.current || mapInstance.current) return;
 
+      // [핵심 로직] 지도 생성 시점에 내비게이션 여부를 즉시 기록 (Ref 활용)
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("lat") || urlParams.get("lng") || urlParams.get("address")) {
+        isInitialNavRef.current = true;
+      }
+
       // 초기 서울 중심 위치 - 시청/광장 (가장 표준적인 선택)
       const initialCenter = new window.naver.maps.LatLng(37.5665, 126.9780);
 
@@ -681,8 +867,11 @@ export function Home() {
           const userLng = pos.coords.longitude;
           const userPos = new window.naver.maps.LatLng(userLat, userLng);
 
-          mapInstance.current.setCenter(userPos);
-          mapInstance.current.setZoom(14);
+          // [버그 수정 완료] URL 파라미터 삭제 후에도 Ref를 통해 내비게이션 중이었음을 인지
+          if (!isInitialNavRef.current) {
+            mapInstance.current.setCenter(userPos);
+            mapInstance.current.setZoom(14);
+          }
 
           const myMarker = new window.naver.maps.Marker({
             position: userPos,
@@ -756,21 +945,23 @@ export function Home() {
           const v2Addr = res.v2?.address;
           if (v2Addr) rawAddress = v2Addr.roadAddress || v2Addr.jibunAddress || rawAddress;
 
-          const address = normalizeAddress(rawAddress);
+          const address = normalizeBaseAddress(rawAddress);
           const isKorea = address !== "주소를 찾을 수 없는 지역입니다.";
           const isResidential = checkIsResidential(address);
 
           // [개선] 이미 해당 주소에 마커가 있는지 체크
-          const existingLoc = allLocationsRef.current.find(loc => normalizeAddress(loc.address) === address);
+          const existingLoc = allLocationsRef.current.find(loc => normalizeBaseAddress(loc.address) === address);
 
           if (existingLoc) {
-            // 이미 등록된 장소라면 -> 마커 클릭과 동일한 인포윈도우 노출 (찜하기 버튼 포함)
+            // [개선] 찜하기 상태 확인 로직 (ID 직접 조회)
             const checkBookmark = async () => {
               let isBookmarked = false;
               if (isLoggedIn && user) {
-                const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", address));
-                const bsnap = await getDocs(bq);
-                isBookmarked = !bsnap.empty;
+                const stdAddr = normalizeBaseAddress(address);
+                const bookmarkId = `bookmark_${user.id}_${stdAddr.replace(/\s+/g, '_')}`;
+                const bRef = doc(db, "bookmarks", bookmarkId);
+                const bSnap = await getDoc(bRef);
+                isBookmarked = bSnap.exists();
               }
 
               const liveRating = existingLoc.rating || 0;
@@ -832,9 +1023,11 @@ export function Home() {
             const checkBookmarkNone = async () => {
               let isBookmarked = false;
               if (isLoggedIn && user) {
-                const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", address));
-                const bsnap = await getDocs(bq);
-                isBookmarked = !bsnap.empty;
+                const stdAddr = normalizeBaseAddress(address);
+                const bookmarkId = `bookmark_${user.id}_${stdAddr.replace(/\s+/g, '_')}`;
+                const bRef = doc(db, "bookmarks", bookmarkId);
+                const bSnap = await getDoc(bRef);
+                isBookmarked = bSnap.exists();
               }
 
               infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
@@ -888,7 +1081,7 @@ export function Home() {
       };
       document.head.appendChild(s);
     } else { initializeMap(); }
-  }, [editingReviewId, refreshMarkers, verifyLocation]);
+  }, [editingReviewId, refreshMarkers, verifyLocation, isLoggedIn, user, showAlert, showConfirm, login]);
 
   const handleTagToggle = (tag: string) => {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -936,7 +1129,7 @@ export function Home() {
         const qDuplicate = query(
           collection(db, "reviews"),
           where("authorId", "==", user.id),
-          where("address", "==", selectedAddress),
+          where("address", "==", normalizeBaseAddress(selectedAddress)),
           where("addressDetail", "==", normalizedDetail)
         );
         const snapDuplicate = await getDocs(qDuplicate);
@@ -955,7 +1148,7 @@ export function Home() {
 
       // 1. 리뷰 데이터 가공
       const reviewData: any = {
-        address: selectedAddress,
+        address: normalizeBaseAddress(selectedAddress),
         addressDetail: normalizeAddressDetail(addressDetail),
         content: comment,
         ratings,
@@ -1023,19 +1216,35 @@ export function Home() {
         // [추가] 찜한 사용자들에게 알림 발송
         const bq = query(collection(db, "bookmarks"), where("address", "==", selectedAddress));
         const bsnap = await getDocs(bq);
-        bsnap.forEach(async (bdoc) => {
+
+        const notifyPromises = bsnap.docs.map(async (bdoc: QueryDocumentSnapshot<DocumentData>) => {
           const bm = bdoc.data();
-          if (bm.userId !== user?.id) { // 본인 제외
+          // 수신자의 알림 설정 확인
+          const userRef = doc(db, "users", bm.userId);
+          const userSnap = await getDoc(userRef);
+
+          let canNotify = true;
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            if (userData.settings?.notifications?.bookmarks === false) {
+              canNotify = false;
+            }
+          }
+
+          if (canNotify) {
+            const displayAddress = selectedAddress.split(' ').slice(-2).join(' ');
             await addDoc(collection(db, "notifications"), {
               toUserId: bm.userId,
               type: "local",
-              content: `찜한 건물 '${selectedAddress.split(' ').slice(-1)}'에 새로운 방문록이 올라왔어요!`,
+              content: `찜한 건물 '${displayAddress}'에 새로운 방문록이 올라왔어요!`,
               reviewId: docRef.id,
               createdAt: Timestamp.now(),
               isRead: false
             });
           }
         });
+
+        await Promise.all(notifyPromises);
       }
 
       setSheetOpen(false); setComment(""); setAddressDetail(""); setSelectedTags([]); setSelectedImages([]);
@@ -1053,10 +1262,95 @@ export function Home() {
 
   return (
     <div className="page-home">
-      <div className="home-search-bar">
-        {!searchQuery && <span className="home-search-icon"><Search size={24} color="#8B95A1" /></span>}
-        <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsAddressSelected(false); }} onKeyDown={e => e.key === "Enter" && setPostcodeOpen(true)} placeholder="어떤 집의 방문Log가 궁금하세요?" className="home-search-input" />
-        {searchQuery.length > 0 && <span className="home-search-submit"><button className="icon-search-btn" onClick={() => setPostcodeOpen(true)}><Search size={24} color="#3182F6" /></button></span>}
+      <div className="home-search-bar-container">
+        <div className={`home-search-bar ${isHistoryOpen ? 'focused' : ''}`}>
+          {!searchQuery && <span className="home-search-icon"><Search size={24} color="#8B95A1" /></span>}
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setIsAddressSelected(false); }}
+            onKeyDown={e => {
+              if (e.key === "Enter" && searchQuery.trim()) {
+                const term = searchQuery.trim();
+                setRecentSearches(prev => {
+                  const next = [term, ...prev.filter(t => t !== term)].slice(0, 10);
+                  localStorage.setItem('recent_searches_log', JSON.stringify(next));
+                  return next;
+                });
+                setPostcodeOpen(true);
+                setIsHistoryOpen(false);
+              }
+            }}
+            onFocus={() => setIsHistoryOpen(true)}
+            placeholder="어떤 집의 방문Log 궁금하세요?"
+            className="home-search-input"
+          />
+          {searchQuery.length > 0 && (
+            <span className="home-search-submit">
+              <button className="icon-search-btn" onClick={() => {
+                setPostcodeOpen(true);
+                setIsHistoryOpen(false);
+              }}>
+                <Search size={24} color="#3182F6" />
+              </button>
+            </span>
+          )}
+        </div>
+
+        {/* 최근 검색어 모달 */}
+        <AnimatePresence>
+          {isHistoryOpen && (
+            <>
+              <motion.div
+                className="home-search-history-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsHistoryOpen(false)}
+              />
+              <motion.div
+                className="home-search-history"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <div className="history-header">
+                  <h3>최근 검색어</h3>
+                  <button onClick={() => { setRecentSearches([]); localStorage.setItem('recent_searches_log', '[]'); }}>전체 삭제</button>
+                </div>
+                <div className="history-list" style={{ maxHeight: '380px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {recentSearches.length > 0 ? (
+                    recentSearches.map((term, idx) => (
+                      <div key={`${term}-${idx}`} className="history-item" onClick={() => {
+                        setSearchQuery(term);
+                        setRecentSearches(prev => {
+                          const next = [term, ...prev.filter(t => t !== term)].slice(0, 10);
+                          localStorage.setItem('recent_searches_log', JSON.stringify(next));
+                          return next;
+                        });
+                        setPostcodeOpen(true);
+                        setIsHistoryOpen(false);
+                      }}>
+                        <div className="history-item-left">
+                          <MapPin size={16} color="#B0B8C1" />
+                          <span>{term}</span>
+                        </div>
+                        <button className="history-delete" onClick={(e) => {
+                          e.stopPropagation();
+                          const next = recentSearches.filter((_, i) => i !== idx);
+                          setRecentSearches(next);
+                          localStorage.setItem('recent_searches_log', JSON.stringify(next));
+                        }}>✕</button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="history-empty">최근 검색어가 없습니다.</div>
+                  )}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
 
       <div ref={mapElement} className="home-map-container" />
@@ -1084,10 +1378,10 @@ export function Home() {
         </svg>
       </button>
 
-      {isAddressSelected && (
+      {isAddressSelected && dynamicNeighborhoodTags.length > 0 && (
         <div className="neighborhood-tag-wrapper">
           <div className="tag-scroll-container">
-            {neighborhoodTags.map(tag => (
+            {dynamicNeighborhoodTags.map(tag => (
               <button key={tag} onClick={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)} className={`tds-chip ${activeTagFilter === tag ? "active" : ""}`}>{tag}</button>
             ))}
           </div>
@@ -1101,47 +1395,78 @@ export function Home() {
             <div className="postcode-header"><h2>주소 검색</h2><button onClick={() => setPostcodeOpen(false)} className="postcode-close">✕</button></div>
             <DaumPostcodeEmbed onComplete={(data: any) => {
               const full = data.address;
-              setSearchQuery(full); setIsAddressSelected(true); setPostcodeOpen(false);
+              setSearchQuery(full);
+              setIsAddressSelected(true);
+              setPostcodeOpen(false);
+              setIsHistoryOpen(false);
+
+              // [추가] 최근 검색어 저장 로직
+              setRecentSearches(prev => {
+                const next = [full, ...prev.filter(t => t !== full)].slice(0, 10);
+                localStorage.setItem('recent_searches_log', JSON.stringify(next));
+                return next;
+              });
               window.naver.maps.Service.geocode({ query: full }, async (s: any, r: any) => {
                 if (s === window.naver.maps.Service.Status.OK && r.v2.addresses.length > 0) {
                   const p = new window.naver.maps.LatLng(r.v2.addresses[0].y, r.v2.addresses[0].x);
                   mapInstance.current.setZoom(19); mapInstance.current.panTo(p);
-                  
+
                   // [추가] 검색 결과에서도 중복 체크 수행
                   let hasWritten = false;
+                  if (isLoggedIn && user?.id) {
+                    const qCheck = query(
+                      collection(db, "reviews"),
+                      where("authorId", "==", user.id),
+                      where("address", "==", full),
+                      where("addressDetail", "==", normalizeAddressDetail(addressDetail))
+                    );
+                    const snapCheck = await getDocs(qCheck);
+                    hasWritten = !snapCheck.empty;
+                  }
+
+                  // 검색 결과에서도 찜 상태 확인
+                  const checkBookmarkSearch = async () => {
+                    let isBookmarked = false;
                     if (isLoggedIn && user?.id) {
-                      const qCheck = query(
-                        collection(db, "reviews"),
-                        where("authorId", "==", user.id),
-                        where("address", "==", full),
-                        where("addressDetail", "==", normalizeAddressDetail(addressDetail))
-                      );
-                      const snapCheck = await getDocs(qCheck);
-                      hasWritten = !snapCheck.empty;
+                      const bq = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", full));
+                      const bsnap = await getDocs(bq);
+                      isBookmarked = !bsnap.empty;
                     }
 
-                  // 칭호 기반 랭킹/카운트 로직 등 기존 데이터 기반 정보 Window 처리 루틴이 필요할 수 있으나,
-                  // 여기서는 단순 검색 결과이므로 중복 체크만 반영하여 오픈
-                  const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
-                  const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
-                  const isRes = checkIsResidential(full);
+                    const isRes = checkIsResidential(full);
+                    const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
+                    const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
 
-                  infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-                  infoWindowInstance.current.setContent(`
-                    <div class="iw-container marker">
-                      <div class="iw-card">
-                        <div class="iw-title">이 공간의 방문록</div>
-                        <div class="iw-address"><span>📍</span><span>${full}</span></div>
-                        <div class="iw-button-group">
-                          <button class="iw-button iw-button--read" onclick="window.__openReadList('${full}')">방문록 보기</button>
-                          ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${full}', ${r.v2.addresses[0].y}, ${r.v2.addresses[0].x})">${buttonText}</button>` : ''}
+                    infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+                    infoWindowInstance.current.setContent(`
+                      <div class="iw-container marker">
+                        <div class="iw-card">
+                          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                            ${isRes ? `
+                            <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${full}', ${p.lat()}, ${p.lng()})">
+                              <svg width="24" height="24" viewBox="0 0 24 24" 
+                                fill="${isBookmarked ? '#FFD43B' : 'none'}" 
+                                stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                              </svg>
+                            </button>` : ''}
+                          </div>
+                          <div class="iw-address"><span>📍</span><span>${full}</span></div>
+                          <div class="iw-button-group">
+                            <button class="iw-button iw-button--read" onclick="window.__openReadList('${full}')">방문록 보기</button>
+                            ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${full}', ${p.lat()}, ${p.lng()})">${buttonText}</button>` : ''}
+                          </div>
+                          <div class="iw-arrow"></div>
                         </div>
-                        <div class="iw-arrow"></div>
                       </div>
-                    </div>
-                  `);
+                    `);
 
-                  infoWindowInstance.current.open(mapInstance.current, p);
+                    infoWindowInstance.current.open(mapInstance.current, p);
+                  };
+
+                  checkBookmarkSearch();
                 }
               });
             }} autoClose={false} defaultQuery={searchQuery} className="postcode-embed" />
@@ -1149,9 +1474,9 @@ export function Home() {
         </div>
       )}
 
-      <BottomSheet 
-        isOpen={isSheetOpen} 
-        onClose={() => { setSheetOpen(false); setEditingReviewId(null); setComment(""); setSelectedTags([]); setSelectedImages([]); setIsVerified(false); setVerificationDistance(null); }} 
+      <BottomSheet
+        isOpen={isSheetOpen}
+        onClose={() => { setSheetOpen(false); setEditingReviewId(null); setComment(""); setSelectedTags([]); setSelectedImages([]); setIsVerified(false); setVerificationDistance(null); }}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {editingReviewId ? <Pencil size={20} color="#3182F6" /> : <Star size={20} color="#F5A623" fill="#F5A623" />}
@@ -1235,12 +1560,12 @@ export function Home() {
               <MapPin size={16} color="#3182F6" />
               <span>상세주소 (선택)</span>
             </div>
-            <input 
-              type="text" 
-              className="comment-textarea" 
-              style={{ 
-                height: '52px', 
-                padding: '0 16px', 
+            <input
+              type="text"
+              className="comment-textarea"
+              style={{
+                height: '52px',
+                padding: '0 16px',
                 fontSize: '15.5px',
                 borderRadius: '14px',
                 backgroundColor: '#F2F4F6',
@@ -1248,9 +1573,9 @@ export function Home() {
                 width: '100%',
                 outline: 'none'
               }}
-              placeholder="예: 101동 201호, 2층 왼쪽, 반지하 등" 
-              value={addressDetail} 
-              onChange={e => setAddressDetail(e.target.value)} 
+              placeholder="예: 101동 201호, 2층 왼쪽, 반지하 등"
+              value={addressDetail}
+              onChange={e => setAddressDetail(e.target.value)}
             />
             <p style={{ fontSize: '11px', color: '#8B95A1', marginTop: '6px', marginLeft: '4px' }}>
               * 단독/다가구는 층수나 위치를 적어주시면 더 도움이 돼요.

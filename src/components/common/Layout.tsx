@@ -21,8 +21,12 @@ export function Layout() {
       where("isRead", "==", false)
     );
     
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setHasUnread(!snap.empty);
+    const unsubscribe = onSnapshot(q, (snap: any) => {
+      const unreadCount = snap.size;
+      setHasUnread(unreadCount > 0);
+      console.log(`[Notification Badge] Unread count updated: ${unreadCount}`);
+    }, (error: any) => {
+      console.error("[Notification Badge] onSnapshot error:", error);
     });
 
     return () => unsubscribe();

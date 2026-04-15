@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Heart, MapPin, Award } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { db } from "../services/firebase";
-import { collection, query, where, orderBy, onSnapshot, doc, writeBatch } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, writeBatch, DocumentData, QuerySnapshot } from "firebase/firestore";
 
 type NotifType = "reaction" | "local" | "system";
 
@@ -35,9 +35,9 @@ export function Notifications() {
       where("toUserId", "==", user.id)
     );
 
-    const unsubscribe = onSnapshot(q, (snap) => {
+    const unsubscribe = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
       const list: Notification[] = [];
-      snap.forEach(docSnap => {
+      snap.forEach((docSnap) => {
         const data = docSnap.data();
         list.push({ id: docSnap.id, ...data } as Notification);
       });
@@ -50,7 +50,7 @@ export function Notifications() {
 
       setNotifs(list);
       setIsLoading(false);
-    }, (error) => {
+    }, (error: Error) => {
       console.error("Notifications snapshot error:", error);
       setIsLoading(false);
     });
@@ -115,16 +115,17 @@ export function Notifications() {
                 backgroundColor: 
                   noti.type === "reaction" ? "#FEEBED" : 
                   noti.type === "local" ? "#E8F3FF" : 
-                  "#E7F9F1" 
+                  "#E7F9F1",
+                position: 'relative'
               }}
             >
               <NotifIcon type={noti.type} />
+              {!noti.isRead && <span className="notifications__dot" />}
             </div>
 
             <div className="notifications__content">
               <p className="notifications__text">{noti.content}</p>
               <span className="notifications__time">{formatTime(noti.createdAt)}</span>
-              {!noti.isRead && <span className="notifications__dot" />}
             </div>
           </div>
         ))}
