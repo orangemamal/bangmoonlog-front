@@ -67,13 +67,18 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
   useEffect(() => {
     if (!reviewId) return;
 
-    // 1. 조회수 증가 - 할당량 초과 방지를 위해 일시 비활성화
-    /*
-    if (hasIncremented.current !== reviewId) {
-      incrementViews(reviewId);
-      hasIncremented.current = reviewId;
+    // 1. 조회수 증가 - 1시간 쿨타임 적용 (데이터 낭비 및 할당량 초과 방지)
+    const VIEW_COOLDOWN = 60 * 60 * 1000; // 1시간
+    const lastViewed = localStorage.getItem(`viewed_${reviewId}`);
+    const now = Date.now();
+
+    if (!lastViewed || (now - parseInt(lastViewed) > VIEW_COOLDOWN)) {
+      incrementViews(reviewId).catch(err => {
+        // 할당량 초과 시 에러 무시 (사용자 경험 방해 금지)
+        console.warn("View increment skipped due to quota or network:", err);
+      });
+      localStorage.setItem(`viewed_${reviewId}`, now.toString());
     }
-    */
 
     // 2. 리뷰 실시간 감시
     const unsubscribeReview = onSnapshot(doc(db, "reviews", reviewId), (docSnap: any) => {

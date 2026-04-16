@@ -131,8 +131,9 @@
   position: relative; // container 내부에서 상대 위치로 변경
   top: 0;
   width: 100%;
+  height: 52px;
   background-color: #fff;
-  border-radius: 24px; // 조금 더 각진 토스 스타일로 9999px에서 수정
+  border-radius: 9999px; // 조금 더 각진 토스 스타일로 9999px에서 수정
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   padding: 4px 4px 4px 20px;
   display: flex;
@@ -217,7 +218,7 @@
 
     &:hover {
       background-color: #F9FAFB;
-      
+
       .history-delete {
         color: #8B95A1;
       }
@@ -368,8 +369,8 @@
   position: fixed;
   bottom: calc(72px + 32px); // 하단 네비게이션(72px) + 여백
   right: 16px;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: white;
   border: none;
@@ -2289,5 +2290,380 @@
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+// ── 내 위치 찾기 로딩 오버레이 ──────────────
+.home-locating-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+
+  .locating-content {
+    background: #fff;
+    padding: 30px 40px;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+
+    p {
+      color: #333D4B;
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+  }
+
+  .locating-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #F2F4F6;
+    border-top: 4px solid #3182F6;
+    border-radius: 50%;
+    animation: locating-spin 1s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+  }
+}
+
+@keyframes locating-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+// ── 내 위치 마커 생동감 애니메이션 ──────────────
+.user-location-marker {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-location-dot {
+  width: 14px;
+  height: 14px;
+  background: #FB8890; // 소프트 코랄로 변경하여 따뜻하고 세련된 느낌 부여
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(251, 136, 144, 0.4);
+  z-index: 2;
+}
+
+.user-location-pulse {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: rgba(251, 136, 144, 0.4); // 펄스 색상도 소프트 코랄로 통일
+  border-radius: 50%;
+  z-index: 1;
+  animation: user-location-pulse-anim 1.2s ease-out infinite;
+}
+
+@keyframes user-location-pulse-anim {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+
+  70% {
+    transform: scale(4);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+// ── 초기 위치 권한 유도 모달 ──────────────
+.home-location-intro-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+
+  .location-intro-sheet {
+    background: #fff;
+    width: 100%;
+    max-width: 500px;
+    padding: 40px 24px;
+    border-radius: 24px 24px 0 0;
+    text-align: center;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2);
+
+    .location-intro-icon {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      color: #191F28;
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+
+    p {
+      color: #4E5968;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .location-intro-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
+      button {
+        padding: 18px;
+        border-radius: 16px;
+        font-size: 16px;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+
+        &.intro-btn-allow {
+          background: #3182F6;
+          color: #fff;
+
+          &:active {
+            background: #1B64DA;
+            transform: scale(0.98);
+          }
+        }
+
+        &.intro-btn-skip {
+          background: #F2F4F6;
+          color: #4E5968;
+
+          &:active {
+            background: #E5E8EB;
+            transform: scale(0.98);
+          }
+        }
+      }
+    }
+  }
+}
+
+// ── 검색바 삭제 버튼 및 컨트롤러 ──────────────
+.home-search-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-right: 4px;
+}
+
+.home-search-clear-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+
+  &:active {
+    background-color: #F2F4F6;
+  }
+}
+
+// ── 방문록 리스트 Empty State (프리미엄 디자인) ──────────────
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  background: #fff;
+
+  .empty-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.08));
+    animation: floating 3s ease-in-out infinite;
+  }
+
+  .empty-text {
+    font-size: 19px;
+    font-weight: 800;
+    color: #191F28;
+    margin-bottom: 8px;
+  }
+
+  .empty-subtext {
+    font-size: 15px;
+    color: #6B7684;
+    line-height: 1.6;
+    margin-bottom: 32px;
+  }
+
+  .empty-btn {
+    background: #3182F6;
+    color: #fff;
+    border: none;
+    padding: 14px 28px;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(49, 130, 246, 0.2);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:active {
+      transform: scale(0.96);
+      background: #1B64DA;
+    }
+  }
+}
+
+@keyframes floating {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+// ── 검색바 기능 버튼 그룹 (X & 검색) ──────────────
+.home-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 4px;
+
+  .icon-clear-btn {
+    background: #B1B8C1;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    overflow: hidden; // [중요] 큰 아이콘의 외부 여백을 잘라냄
+    transition: all 0.15s;
+
+    &:active {
+      transform: scale(0.88);
+      background: #8B95A1;
+    }
+  }
+
+  .icon-search-btn {
+    background: none;
+    border: none;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+
+    &:active {
+      transform: scale(0.9);
+    }
+  }
+}
+
+// ── 고품질 Empty View (방문록 없음) ──────────────
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+  text-align: center;
+  background: #fff;
+  border-radius: 24px;
+  margin: 20px;
+
+  .empty-state-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.1));
+    animation: bounce 2s ease-in-out infinite;
+  }
+
+  h3 {
+    font-size: 20px;
+    font-weight: 800;
+    color: #191F28;
+    margin-bottom: 12px;
+  }
+
+  p {
+    font-size: 15px;
+    color: #8B95A1;
+    line-height: 1.6;
+    margin-bottom: 32px;
+    word-break: keep-all;
+  }
+
+  .empty-state-cta {
+    background: #3182F6;
+    color: #fff;
+    border: none;
+    padding: 16px 28px;
+    border-radius: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 8px 20px rgba(49, 130, 246, 0.25);
+
+    &:active {
+      transform: scale(0.96);
+      background: #1B64DA;
+    }
+  }
+}
+
+@keyframes bounce {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
   }
 }

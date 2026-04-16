@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag } from "lucide-react";
+import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db } from '../services/firebase';
@@ -147,6 +147,7 @@ export function Home() {
   const allMarkersRef = useRef<any[]>([]);
 
   // 검색 기록 상태
+  const [isLocating, setIsLocating] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     const saved = localStorage.getItem('recent_searches_log');
     return saved ? JSON.parse(saved) : [];
@@ -862,6 +863,8 @@ export function Home() {
 
       // 2. 사용자의 GPS 위치로 설정 + 파란색 점 마크 추가
       if (navigator.geolocation) {
+        // [강화] 초기 진입 시에도 로딩 오버레이를 켜서 모바일 지연 시간 동안 인터랙션 차단
+        setIsLocating(true);
         navigator.geolocation.getCurrentPosition((pos) => {
           const userLat = pos.coords.latitude;
           const userLng = pos.coords.longitude;
@@ -877,8 +880,13 @@ export function Home() {
             position: userPos,
             map: mapInstance.current,
             icon: {
-              content: `<div style="width:16px;height:16px;background:#3182F6;border-radius:50%;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-              anchor: new window.naver.maps.Point(8, 8), // [참고] 16px이므로 8,8이 정중앙입니다.
+              content: `
+                <div class="user-location-marker">
+                  <div class="user-location-pulse"></div>
+                  <div class="user-location-dot"></div>
+                </div>
+              `,
+              anchor: new window.naver.maps.Point(12, 12),
             }
           });
 
@@ -892,10 +900,13 @@ export function Home() {
               mapInstance.current.morph(userPos, 19, { duration: 300, easing: "linear" });
             }
           });
+
+          setIsLocating(false); // 초기 로딩 해제
           console.log("📍 [내 위치 초기화 완료]:", userLat, userLng);
         }, (err) => {
           console.warn("GPS 허용 불가, 기본 좌표를 유지합니다.", err);
-        }, { enableHighAccuracy: true });
+          setIsLocating(false); // 에러 시에도 반드시 로딩 해제
+        }, { enableHighAccuracy: true, timeout: 10000 });
       }
 
       window.naver.maps.Event.addListener(mapInstance.current, "zoom_changed", () => {
@@ -1245,7 +1256,7 @@ export function Home() {
       refreshMarkers();
     } catch (e: any) {
       console.error("Submit Error:", e);
-      
+
       // [핵심] 할당량 초과 시에도 로컬에 저장하고 창을 닫음 (사용자 경험 우선)
       if (e.code === 'resource-exhausted' || e.message?.includes('quota')) {
         const pendingReviews = JSON.parse(localStorage.getItem('pending_reviews') || '[]');
@@ -1254,7 +1265,7 @@ export function Home() {
 
         setSheetOpen(false); // 창 닫기
         setComment(""); setSelectedImages([]); setSelectedTags([]);
-        
+
         showAlert("등록 요청 완료", "현재 서버 접속자가 많아 동기화가 지연되고 있습니다. 곧 반영될 예정입니다! ✨", "🚀");
         return;
       }
@@ -1269,7 +1280,7 @@ export function Home() {
   return (
     <div className="page-home">
       <div className="home-search-bar-container">
-        <div className={`home-search-bar ${isHistoryOpen ? 'focused' : ''}`}>
+        <div className={`home-search-bar ${isHistoryOpen ? 'focused' : ''}`} style={{ position: 'relative', zIndex: isHistoryOpen ? 2202 : 400 }}>
           {!searchQuery && <span className="home-search-icon"><Search size={24} color="#8B95A1" /></span>}
           <input
             type="text"
@@ -1292,14 +1303,37 @@ export function Home() {
             className="home-search-input"
           />
           {searchQuery.length > 0 && (
-            <span className="home-search-submit">
-              <button className="icon-search-btn" onClick={() => {
-                setPostcodeOpen(true);
-                setIsHistoryOpen(false);
-              }}>
-                <Search size={24} color="#3182F6" />
+            <div className="home-search-actions" style={{ display: "flex", alignItems: "center", gap: "8px", paddingRight: "4px" }}>
+              <button
+                className="icon-clear-btn"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSearchQuery("");
+                  setIsAddressSelected(false);
+                }}
+              >
+                {/* 순수 SVG로 그 정해진 원 안을 최대한 꽉 채우는 큼직한 X 구현 */}
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 2L10 10M10 2L2 10" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
-            </span>
+              <span className="home-search-submit">
+                <button className="icon-search-btn" onClick={() => {
+                  if (searchQuery.trim()) {
+                    setPostcodeOpen(true);
+                    setIsHistoryOpen(false);
+                  }
+                }}>
+                  <Search size={22} color="#3182F6" strokeWidth={2.5} />
+                </button>
+              </span>
+            </div>
           )}
         </div>
 
@@ -1366,21 +1400,27 @@ export function Home() {
         className="home-location-btn"
         onClick={() => {
           if (!navigator.geolocation || !mapInstance.current) return;
+
+          setIsLocating(true);
           navigator.geolocation.getCurrentPosition(
             (pos) => {
               const userPos = new window.naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
               mapInstance.current.morph(userPos, 17, { duration: 400, easing: 'linear' });
+              setIsLocating(false);
             },
-            (err) => console.warn('GPS 오류:', err),
-            { enableHighAccuracy: true }
+            (err) => {
+              console.warn('GPS 오류:', err);
+              setIsLocating(false);
+              if (err.code === 1) alert("위치 권한이 거부되었습니다. 설정에서 권한을 허용해주세요!");
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
           );
         }}
         title="내 위치로 이동"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-          <circle cx="12" cy="12" r="8" strokeDasharray="2 2" strokeOpacity="0.4" />
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3182F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 3v5M12 16v5M3 12h5M16 12h5" />
         </svg>
       </button>
 
@@ -1398,6 +1438,23 @@ export function Home() {
         <div className="postcode-overlay">
           <div className="postcode-backdrop" onClick={() => setPostcodeOpen(false)} />
           <div className="postcode-sheet">
+
+            {/* 내 위치 찾기 로딩 오버레이 */}
+            <AnimatePresence>
+              {isLocating && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="home-locating-overlay"
+                >
+                  <div className="locating-content">
+                    <div className="locating-spinner" />
+                    <p>내 주변의 방문Log를 찾는 중...</p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div className="postcode-header"><h2>주소 검색</h2><button onClick={() => setPostcodeOpen(false)} className="postcode-close">✕</button></div>
             <DaumPostcodeEmbed onComplete={(data: any) => {
               const full = data.address;
@@ -1440,6 +1497,12 @@ export function Home() {
                     }
 
                     const isRes = checkIsResidential(full);
+
+                    // [핵심 추가] 해당 주소지에 실제 리뷰가 존재하는지 카운트 체크
+                    const qReviews = query(collection(db, "reviews"), where("address", "==", full));
+                    const snapReviews = await getDocs(qReviews);
+                    const reviewCount = snapReviews.size;
+
                     const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
                     const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
 
@@ -1460,9 +1523,20 @@ export function Home() {
                             </button>` : ''}
                           </div>
                           <div class="iw-address"><span>📍</span><span>${full}</span></div>
+                          
+                          ${reviewCount > 0 ? `
+                            <div class="iw-stats" style="margin-bottom:12px; padding:8px; background:#F9FAFB; border-radius:8px; font-size:12px; display:flex; gap:12px; justify-content:center;">
+                              <div style="color:#4E5968;">등록된 방문록 <strong style="color:#3182F6;">${reviewCount}건</strong></div>
+                            </div>
+                          ` : `
+                            <div style="text-align:center; padding:12px; background:#F2F4F6; border-radius:12px; margin-bottom:16px; font-size:13px; color:#8B95A1;">
+                              아직 작성된 방문록이 없어요. 👟
+                            </div>
+                          `}
+
                           <div class="iw-button-group">
-                            <button class="iw-button iw-button--read" onclick="window.__openReadList('${full}')">방문록 보기</button>
-                            ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${full}', ${p.lat()}, ${p.lng()})">${buttonText}</button>` : ''}
+                            ${reviewCount > 0 ? `<button class="iw-button iw-button--read" onclick="window.__openReadList('${full}')">방문록 보기</button>` : ''}
+                            ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} style="${reviewCount === 0 ? 'width:100%;' : ''}" onclick="window.__openWriteSheet('${full}', ${p.lat()}, ${p.lng()})">${buttonText}</button>` : ''}
                           </div>
                           <div class="iw-arrow"></div>
                         </div>
@@ -1745,7 +1819,23 @@ export function Home() {
                   </div>
                 ))
             ) : (
-              <div className="empty-state">아직 작성된 방문록이 없습니다.</div>
+              <div className="empty-state">
+                <div className="empty-state-icon">👟</div>
+                <h3>아직 작성된 방문록이 없어요</h3>
+                <p>이 공간의 첫 번째 발도장을 남기고<br />다른 사람들에게 소중한 정보를 공유해보세요.</p>
+                <button
+                  className="empty-state-cta"
+                  onClick={() => {
+                    setReadListOpen(false);
+                    if (selectedAddress) {
+                      const pos = mapInstance.current.getCenter();
+                      window.__openWriteSheet(selectedAddress, pos.lat(), pos.lng());
+                    }
+                  }}
+                >
+                  첫 방문록 작성하기
+                </button>
+              </div>
             )}
           </div>
         </div>
