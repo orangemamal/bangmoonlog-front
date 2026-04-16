@@ -147,6 +147,48 @@
   .detail-info-section {
     padding: 24px;
 
+    .status-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+
+      // 두 배지의 디자인 사이즈를 통일 (방문자 인증 배지 기준)
+      .experience-badge, .badge-verified {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px; // 사이즈 통일
+        border-radius: 99px;
+        font-size: 11px;
+        font-weight: 700;
+        height: 24px; // 높이 고정으로 이질감 완벽 제거
+        box-sizing: border-box;
+      }
+
+      .experience-badge {
+        background: #F2F8FF;
+        color: #3182F6;
+        border: 1px solid rgba(49, 130, 246, 0.1);
+
+        &.resident {
+          background: #FFF0F0;
+          color: #E84040;
+          border-color: rgba(232, 64, 64, 0.1);
+        }
+        &.visit {
+          background: #E8F3FF;
+          color: #3182F6;
+          border-color: rgba(49, 130, 246, 0.1);
+        }
+      }
+
+      .badge-verified {
+        background: #3182F6; // 좀 더 강조된 블루
+        color: #FFFFFF;
+      }
+    }
+
     .profile-row {
       display: flex;
       align-items: center;
@@ -180,26 +222,39 @@
       }
 
       .meta {
-        .name-row {
+        display: flex;
+        flex-direction: column;
+        gap: 2px; // 이름과 날짜 사이 간격을 좁게 하여 덩어리감 형성
+
+        .author-info-block {
           display: flex;
           align-items: center;
           gap: 6px;
-          margin-bottom: 2px;
 
-          .name { font-size: 16px; font-weight: 700; color: $color-text-main; }
-          .badge-verified {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            background: #E8F3FF;
-            color: #3182F6;
-            padding: 2px 8px;
-            border-radius: 99px;
+          .name {
+            font-size: 16px;
+            font-weight: 700;
+            color: $color-text-main;
+            letter-spacing: -0.3px;
+          }
+
+          .author-title-badge {
             font-size: 11px;
             font-weight: 700;
+            color: #4E5968;
+            background-color: #F8F9FA;
+            padding: 2px 8px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
           }
         }
-        .date { font-size: 12px; color: $color-text-disabled; }
+
+        .date {
+          font-size: 12px;
+          color: #ADB5BD;
+        }
       }
     }
 

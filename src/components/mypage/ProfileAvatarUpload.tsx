@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import * as Icons from "lucide-react";
 import { Camera } from "lucide-react";
 import { db } from "../../services/firebase";
-import { doc, setDoc } from "firebase/firestore";
 
 /** 
  * 이미지 압축 및 Base64 인코딩 함수 (Home.tsx와 동일 로직)
@@ -83,11 +82,8 @@ export function ProfileAvatarUpload({ userId, userName, photoURL, updateProfile 
             // 1. 이미지 압축 및 Base64 변환 (Storage를 거치지 않음)
             const base64Image = await compressAndEncodeProfileImage(file);
             
-            // 2. Firestore의 users 문서에 직접 업데이트
-            await setDoc(doc(db, "users", userId), { photoURL: base64Image }, { merge: true });
-            
-            // 3. 상태 업데이트
-            updateProfile({ photoURL: base64Image });
+            // 2. 상태 업데이트 및 Firestore 동기화 (useAuth의 updateProfile이 처리)
+            await updateProfile({ photoURL: base64Image });
             setAvatarImg(base64Image);
           } catch (err) {
             console.error("Profile image upload failed:", err);

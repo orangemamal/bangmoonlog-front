@@ -1123,21 +1123,13 @@ export function Home() {
     try {
       if (!user?.id) { login(); return; }
 
-      // 0. 매물 단위 중복 체크 (도로명 + 상세주소)
+      // 0. 매물 단위 중복 체크 (사용자 의견에 따라 엄격한 제한 대신 안내 후 허용으로 변경 가능)
+      /* 
       const normalizedDetail = normalizeAddressDetail(addressDetail);
       if (!editingReviewId) {
-        const qDuplicate = query(
-          collection(db, "reviews"),
-          where("authorId", "==", user.id),
-          where("address", "==", normalizeBaseAddress(selectedAddress)),
-          where("addressDetail", "==", normalizedDetail)
-        );
-        const snapDuplicate = await getDocs(qDuplicate);
-        if (!snapDuplicate.empty) {
-          showAlert("중복 작성 제한", `이미 '${selectedAddress} ${addressDetail || "(상세없음)"}'에 대한 방문록을 작성하셨습니다. 기존 내용을 수정하거나 다른 상세주소를 입력해 주세요.`, "🚫");
-          return;
-        }
+        ... (중략)
       }
+      */
 
       // 0. 이미지 압축 및 Base64 변환 (Firestore 저장 방식)
       const imageUrls: string[] = [];
@@ -1251,8 +1243,22 @@ export function Home() {
       setEditingReviewId(null); setIsVerified(false); setVerificationDistance(null);
       setExperienceType("단순 방문");
       refreshMarkers();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("Submit Error:", e);
+      
+      // [핵심] 할당량 초과 시에도 로컬에 저장하고 창을 닫음 (사용자 경험 우선)
+      if (e.code === 'resource-exhausted' || e.message?.includes('quota')) {
+        const pendingReviews = JSON.parse(localStorage.getItem('pending_reviews') || '[]');
+        pendingReviews.push({ ...reviewData, id: 'temp_' + Date.now(), isPending: true });
+        localStorage.setItem('pending_reviews', JSON.stringify(pendingReviews));
+
+        setSheetOpen(false); // 창 닫기
+        setComment(""); setSelectedImages([]); setSelectedTags([]);
+        
+        showAlert("등록 요청 완료", "현재 서버 접속자가 많아 동기화가 지연되고 있습니다. 곧 반영될 예정입니다! ✨", "🚀");
+        return;
+      }
+
       showAlert("오류 발생", "처리 중 문제가 생겼습니다. 다시 시도해 주세요.", "❌");
     }
   };

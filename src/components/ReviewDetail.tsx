@@ -62,11 +62,18 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showMenuPopup, setShowMenuPopup] = useState(false);
 
+  const hasIncremented = useRef<string | null>(null);
+
   useEffect(() => {
     if (!reviewId) return;
 
-    // 1. 조회수 증가
-    incrementViews(reviewId);
+    // 1. 조회수 증가 - 할당량 초과 방지를 위해 일시 비활성화
+    /*
+    if (hasIncremented.current !== reviewId) {
+      incrementViews(reviewId);
+      hasIncremented.current = reviewId;
+    }
+    */
 
     // 2. 리뷰 실시간 감시
     const unsubscribeReview = onSnapshot(doc(db, "reviews", reviewId), (docSnap: any) => {
@@ -109,7 +116,7 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
       unsubscribeComments();
       unsubscribeLike();
     };
-  }, [reviewId, user, onClose]);
+  }, [reviewId, !!user, onClose]);
 
   useEffect(() => {
     if (review?.authorId) {
@@ -173,29 +180,36 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
       return;
     }
     if (review) {
-      // 1. 낙관적 업데이트 (Optimistic UI Update) - 즉각적인 붉은색 토글 적용
+      // 1. 낙관적 업데이트 - 상태를 즉시 변경 (단, 서버 데이터가 오면 덮어씌워짐)
       const previousIsLiked = isLiked;
       const previousLikes = review.likes || 0;
-
+      
       setIsLiked(!previousIsLiked);
-      setReview({
-        ...review,
+      setReview(prev => ({
+        ...prev,
         likes: previousIsLiked ? Math.max(0, previousLikes - 1) : previousLikes + 1
-      });
+      }));
 
-      // 2. 실제 DB 업데이트 (작성자 이름과 리뷰 작성자 ID 추가 전달)
-      const success = await toggleLike(
-        reviewId,
-        user.id,
-        review.authorId || "",
-        user.name || "익명 사용자"
-      );
-
-      // 3. 실패 시 롤백 (원래 상태로 복구)
-      if (!success) {
+      // 2. 실제 DB 업데이트
+      try {
+        await toggleLike(
+          reviewId,
+          user.id,
+          review.authorId || "",
+          user.name || "익명 사용자"
+        );
+      } catch (err: any) {
+        // 실패 시 원래상태로 복구
         setIsLiked(previousIsLiked);
-        setReview({ ...review, likes: previousLikes });
-        alert("공감하기 처리 중 오류가 발생했습니다.");
+        setReview(prev => ({ ...prev, likes: previousLikes }));
+        
+        // Quota 에러인지 판별하여 친절한 메시지 제공
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('exhausted')) {
+          alert('서버 일일 사용량(무료 할당량)이 초과되어 기능이 일시 제한됩니다. 내일 다시 시도해주세요! 😭');
+        } else {
+          alert(`공감하기 실패: ${err.message || '알 수 없는 오류'}`);
+        }
+        console.error("Like toggle error:", err);
       }
     }
   }, [user, isLoggedIn, review, reviewId, isLiked, onLoginRequired]);
@@ -296,6 +310,28 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
         </div>
 
         <div className="detail-info-section">
+          {/* Row 1: Visit Purpose & Verification (Full Width Top) */}
+          <div className="status-badge-row">
+            {(() => {
+              const displayType = review.experienceType || "단순 방문";
+              return (
+                <div className={`experience-badge ${displayType === '거주 경험' ? 'resident' : displayType === '매물 투어' ? 'visit' : ''}`}>
+                  <span className="icon">
+                    {displayType === '거주 경험' ? <HomeIcon size={12} /> : displayType === '매물 투어' ? <Search size={12} /> : <MapPin size={12} />}
+                  </span>
+                  <span>{displayType}</span>
+                </div>
+              );
+            })()}
+            {review.isVerified && (
+              <div className="badge-verified">
+                <CheckCircle2 size={12} />
+                <span>방문자 인증</span>
+              </div>
+            )}
+          </div>
+
+          {/* Row 2: Profile Image & User Info */}
           <div className="profile-row">
             <div className="avatar">
               {authorPhotoURL ? (
@@ -305,29 +341,12 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
               )}
             </div>
             <div className="meta">
-              <div className="name-row">
+              <div className="author-info-block">
                 <span className="name">{review.author}</span>
-                {(() => {
-                  const displayType = review.experienceType || "단순 방문";
-                  return (
-                    <div className={`experience-badge ${displayType === '거주 경험' ? 'resident' : displayType === '매물 투어' ? 'visit' : ''}`}>
-                      <span className="icon">
-                        {displayType === '거주 경험' ? <HomeIcon size={12} /> : displayType === '매물 투어' ? <Search size={12} /> : <MapPin size={12} />}
-                      </span>
-                      <span>{displayType}</span>
-                    </div>
-                  );
-                })()}
                 {authorTitle && (
-                  <span style={{ fontSize: '12px', background: '#F2F4F6', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  <span className="author-title-badge">
                     {authorTitle.icon} {authorTitle.title}
                   </span>
-                )}
-                {review.isVerified && (
-                  <div className="badge-verified">
-                    <CheckCircle2 size={12} />
-                    <span>방문 인증 완료</span>
-                  </div>
                 )}
               </div>
               <div className="date">{review.date}</div>

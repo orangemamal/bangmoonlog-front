@@ -35,46 +35,58 @@ export const toggleLike = async (reviewId: string, userId: string, authorId: str
     const likeRef = doc(db, "reviews", reviewId, "likes", userId);
     
     const likeDoc = await getDoc(likeRef);
-    const isLiked = likeDoc.exists();
+    let wasLiked = false;
 
-    if (isLiked) {
-      await deleteDoc(likeRef);
-      await updateDoc(reviewRef, { likes: increment(-1) });
-    } else {
-      await setDoc(likeRef, { createdAt: serverTimestamp() });
-      await updateDoc(reviewRef, { likes: increment(1) });
+    await runTransaction(db, async (transaction) => {
+      const reviewDoc = await transaction.get(reviewRef);
+      if (!reviewDoc.exists()) {
+        throw new Error("리뷰가 존재하지 않습니다.");
+      }
+
+      const likeDoc = await transaction.get(likeRef);
+      wasLiked = likeDoc.exists();
+      let currentLikes = reviewDoc.data().likes || 0;
+
+      if (wasLiked) {
+        transaction.delete(likeRef);
+        // 음수가 되지 않도록 방어 로직 추가
+        transaction.update(reviewRef, { likes: Math.max(0, currentLikes - 1) });
+      } else {
+        transaction.set(likeRef, { createdAt: serverTimestamp() });
+        transaction.update(reviewRef, { likes: currentLikes + 1 });
+      }
+    });
       
-      // 내 게시물이 아닌 경우에만 좋아요 알림 전송
-      if (authorId && userId !== authorId && likerName) {
-        // 수신자의 알림 설정 확인
-        const userRef = doc(db, "users", authorId);
-        const userSnap = await getDoc(userRef);
-        
-        let canNotify = true;
-        if (userSnap.exists()) {
-          const userData = userSnap.data();
-          if (userData.settings?.notifications?.reactions === false) {
-            canNotify = false;
-          }
+    // DB 업데이트가 성공적으로 완료된 후 알림 전송 (트랜잭션 외부)
+    if (!wasLiked && authorId && userId !== authorId && likerName) {
+      // 수신자의 알림 설정 확인
+      const userRef = doc(db, "users", authorId);
+      const userSnap = await getDoc(userRef);
+      
+      let canNotify = true;
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        if (userData.settings?.notifications?.reactions === false) {
+          canNotify = false;
         }
+      }
 
-        if (canNotify) {
-          await addDoc(collection(db, "notifications"), {
-            toUserId: authorId,
-            type: "reaction",
-            content: `${likerName}님이 회원님의 방문록에 공감했습니다.`,
-            createdAt: serverTimestamp(),
-            isRead: false,
-            reviewId: reviewId
-          });
-        }
+      if (canNotify) {
+        await addDoc(collection(db, "notifications"), {
+          toUserId: authorId,
+          type: "reaction",
+          content: `${likerName}님이 회원님의 방문록에 공감했습니다.`,
+          createdAt: serverTimestamp(),
+          isRead: false,
+          reviewId: reviewId
+        });
       }
     }
     
     return true;
-  } catch (error) {
-    console.error("Like toggle error:", error);
-    return false;
+  } catch (error: any) {
+    console.error("Like toggle transaction error:", error);
+    throw error; // 에러를 감추지 않고 던져서 UI가 정확한 원인을 알게 합니다.
   }
 };
 

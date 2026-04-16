@@ -22,7 +22,7 @@ export const ANNOUNCEMENTS: Announcement[] = [
 
 많은 응원 부탁드립니다!`,
     createdAt: "2024-04-10T10:00:00Z",
-    isFixed: true
+    isFixed: false
   },
   {
     id: "2",

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { auth, db } from '../services/firebase';
 import { signInAnonymously, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 /** Storage 업로드 등은 Firebase Auth 세션이 있어야 Storage 규칙을 통과합니다(mock 로그인과 별도). */
 export async function ensureFirebaseAuthForStorage() {
@@ -27,12 +27,13 @@ export function useAuth() {
       setTimeout(async () => {
         const baseUser = customUser || { id: 'user_' + Math.random().toString(36).substr(2, 9), name: 'jm_tester' };
 
-        // Firestore에서 저장된 photoURL 불러오기
+        // Firestore에서 저장된 유저 데이터 불러오기
         try {
           const userSnap = await getDoc(doc(db, 'users', baseUser.id));
           if (userSnap.exists()) {
             const data = userSnap.data();
             if (data.photoURL) baseUser.photoURL = data.photoURL;
+            if (data.name) baseUser.name = data.name;
           }
         } catch (e) {
           console.warn('Failed to load user profile from Firestore:', e);
@@ -72,11 +73,18 @@ export function useAuth() {
     }
   }, []);
 
-  const updateProfile = useCallback((partial: Partial<User>) => {
+  const updateProfile = useCallback(async (partial: Partial<User>) => {
     setUser(prev => {
       if (!prev) return prev;
       const updated = { ...prev, ...partial };
       localStorage.setItem('mock_user', JSON.stringify(updated));
+
+      // Firestore 동기화
+      if (updated.id) {
+        setDoc(doc(db, "users", updated.id), partial, { merge: true })
+          .catch(err => console.error("Failed to sync profile to Firestore:", err));
+      }
+
       return updated;
     });
   }, []);

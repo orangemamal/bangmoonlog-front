@@ -48,7 +48,9 @@ export function MyPage() {
   // 1:1 문의 폼 상태
   const [inquiryEmail, setInquiryEmail] = useState("");
   const [inquiryType, setInquiryType] = useState("");
-  const [inquiryContent, setInquiryContent] = useState("");
+  // 사용자 이름 수정 상태
+  const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
+  const [newName, setNewName] = useState("");
 
   const titleSteps = [
     { count: 0, title: "새내기", icon: "🌱" },
@@ -228,7 +230,18 @@ export function MyPage() {
                   </button>
                 </div>
               )}
-              <h1 className="mypage__name">{user?.name} 님</h1>
+              <div className="mypage__name-wrapper">
+                <h1 className="mypage__name">{user?.name} 님</h1>
+                <button
+                  className="mypage__edit-name-btn"
+                  onClick={() => {
+                    setNewName(user?.name || "");
+                    setIsEditNameModalOpen(true);
+                  }}
+                >
+                  <Pencil size={16} color="#8B95A1" />
+                </button>
+              </div>
               <p className="mypage__email">{user?.id}@toss.im</p>
             </div>
           </div>
@@ -333,7 +346,11 @@ export function MyPage() {
             <div className="mypage__modal-content">
               {activeModal === "announcements" && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {ANNOUNCEMENTS.sort((a, b) => (b.isFixed ? 1 : 0) - (a.isFixed ? 1 : 0)).map(ann => (
+                  {[...ANNOUNCEMENTS].sort((a, b) => {
+                    if (a.isFixed && !b.isFixed) return -1;
+                    if (!a.isFixed && b.isFixed) return 1;
+                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                  }).map(ann => (
                     <div
                       key={ann.id}
                       onClick={() => setSelectedAnnouncement(ann)}
@@ -423,7 +440,7 @@ export function MyPage() {
                   </div>
 
                   <div className="mypage__inquiry-field">
-                   <label className="mypage__inquiry-label">문의 유형</label>
+                    <label className="mypage__inquiry-label">문의 유형</label>
                     <div className="mypage__inquiry-input-wrap">
                       <select
                         className="mypage__inquiry-input mypage__inquiry-select"
@@ -721,6 +738,69 @@ export function MyPage() {
                 ))
               )}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 이름 수정 모달 */}
+      <AnimatePresence>
+        {isEditNameModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsEditNameModalOpen(false)}
+            className="mypage__confirm-overlay"
+          >
+            <motion.div
+              className="mypage__confirm-modal"
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ padding: '32px 24px' }}
+            >
+              <h3 className="mypage__confirm-title" style={{ marginBottom: '8px' }}>사용자 이름 수정</h3>
+              <p className="mypage__confirm-desc" style={{ marginBottom: '24px' }}>새로운 이름을 입력해주세요.</p>
+
+              <input
+                type="text"
+                className="mypage__inquiry-input"
+                style={{ marginBottom: '24px', textAlign: 'center', fontSize: '18px', fontWeight: 600 }}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="이름 입력"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newName.trim() && newName !== user?.name) {
+                    updateProfile({ name: newName.trim() });
+                    setIsEditNameModalOpen(false);
+                  }
+                }}
+              />
+
+              <div className="mypage__confirm-actions">
+                <button
+                  className="mypage__confirm-cancel"
+                  onClick={() => setIsEditNameModalOpen(false)}
+                >
+                  취소
+                </button>
+                <button
+                  className="mypage__confirm-ok"
+                  disabled={!newName.trim() || newName === user?.name}
+                  onClick={async () => {
+                    if (newName.trim()) {
+                      await updateProfile({ name: newName.trim() });
+                      setIsEditNameModalOpen(false);
+                    }
+                  }}
+                >
+                  저장
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -209,12 +209,22 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
+    padding: 10px 12px;
+    margin: 0 -12px; // 부모 패딩 상쇄하여 호버 시 꽉 차게
     cursor: pointer;
     transition: background-color 0.2s;
+    border-radius: 12px;
+
+    &:hover {
+      background-color: #F9FAFB;
+      
+      .history-delete {
+        color: #8B95A1;
+      }
+    }
 
     &:active {
-      opacity: 0.6;
+      background-color: #F2F4F6;
     }
 
     .history-item-left {
@@ -222,6 +232,7 @@
       align-items: center;
       gap: 12px;
       flex: 1;
+      min-width: 0; // flex 아이템 내 ellipsis 작동을 위한 필수 속성
 
       span {
         font-size: 16px;
@@ -230,20 +241,27 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 300px;
+        flex: 1;
+        min-width: 0;
       }
     }
 
     .history-delete {
       padding: 8px;
+      margin-left: 8px;
       background: none;
       border: none;
-      color: #D1D6DB;
-      font-size: 14px;
+      color: #E5E8EB;
+      font-size: 16px;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0; // 버튼 크기 유지
 
       &:hover {
-        color: #B0B8C1;
+        color: #F04452 !important;
       }
     }
   }
@@ -734,10 +752,25 @@
   }
 }
 
+.photo-section {
+  display: flex;
+  flex-wrap: nowrap; // 줄바꿈 금지
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  overflow-x: auto; // 가로 스크롤 허용
+  padding-bottom: 4px; // 스크롤 시 하단 그림자 잘림 방지
+  -webkit-overflow-scrolling: touch; // iOS 부드러운 스크롤
+
+  &::-webkit-scrollbar {
+    display: none; // 스크롤바 숨김
+  }
+}
+
 .photo-button {
-  flex-shrink: 0;
-  width: calc((100% - 24px) / 3); // 3개씩 노출되도록 반응형 설정
-  aspect-ratio: 1 / 1;
+  flex-shrink: 0; // 스크롤 내에서 크기 고정
+  width: 88px; // 고정 크기로 변경
+  height: 88px;
   border-radius: 12px;
   border: 1.5px dashed $color-border;
   display: flex;
@@ -760,19 +793,11 @@
   }
 }
 
-.photo-section {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-start;
-  width: 100%;
-}
-
 .preview-item {
   position: relative;
-  width: calc((100% - 24px) / 3);
-  aspect-ratio: 1 / 1;
-  flex-shrink: 0;
+  width: 88px; // 고정 크기로 변경
+  height: 88px;
+  flex-shrink: 0; // 스크롤 내에서 크기 고정
 
   img {
     width: 100%;

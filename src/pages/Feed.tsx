@@ -9,7 +9,11 @@ import {
   CheckCircle2,
   Home as HomeIcon,
   Search,
-  Map as MapIcon
+  Map as MapIcon,
+  X,
+  Layers,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -35,6 +39,7 @@ interface Post {
   addressDetail?: string;
   content: string;
   image: string;
+  images?: string[];
   likes: number;
   views: number;
   ratings?: { light: number; noise: number; water: number };
@@ -56,11 +61,86 @@ export function Feed() {
   const [isLoading, setIsLoading] = useState(true);
   const { canRead, incrementReadCount, watchAd, isAdShowing } = useAccessControl();
   const { login, user } = useAuth();
+
+  // [일시적] 잘못된 이미지(blob:) 데이터 자동 정리 로직
+  useEffect(() => {
+    const cleanup = async () => {
+      const isCleaned = localStorage.getItem('data_cleaned_blob_v4');
+      if (isCleaned) return;
+
+      try {
+        const querySnapshot = await getDocs(collection(db, "reviews"));
+        let count = 0;
+        for (const d of querySnapshot.docs) {
+          const data = d.data();
+          const images = data.images || [];
+          
+          // 더 강력한 체크: blob 주소거나, localhost 주소인 경우 (타 디바이스에서 보이지 않음)
+          const isBroken = images.some((url: string) => 
+            typeof url === 'string' && (url.startsWith("blob:") || url.includes("localhost:3000"))
+          );
+
+          if (isBroken) {
+            console.log(`🗑️ Cleaning up truly broken post: ${d.id}`);
+            await deleteDoc(doc(db, "reviews", d.id));
+            count++;
+          }
+        }
+        localStorage.setItem('data_cleaned_blob_v1', 'true');
+        console.log(`✅ Cleanup complete. ${count} posts removed.`);
+      } catch (e) {
+        console.error("Cleanup error:", e);
+      }
+    };
+    cleanup();
+  }, []);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // [추가] 태그 탭 관련 상태
   const [selectedTag, setSelectedTag] = useState<string>("전체");
+  const [tagSearchQuery, setTagSearchQuery] = useState("");
+  const [isSearchActive, setIsSearchActive] = useState(false);
   const CATEGORY_CHIPS = ["전체", "층간소음", "수압체크", "햇살맛집", "역세권", "관리비저렴", "치안좋음", "채광맛집", "외부소음", "외풍심함", "관리비폭탄", "뷰맛집"];
+  
+  // 실제 DB 내 데이터를 분석하여 작성 횟수 기준 상위 10개 태그 및 신입 태그 판독
+  const { trendingTags, newTags } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const tagLatestTime: Record<string, number> = {};
+    const threeHoursAgo = Date.now() - (3 * 60 * 60 * 1000); // 최근 3시간 내 기준
+
+    posts.forEach(p => {
+      p.tags?.forEach(t => {
+        const tag = t.startsWith("#") ? t : `#${t}`;
+        counts[tag] = (counts[tag] || 0) + 1;
+        
+        // 게시물 날짜(date)를 타임스탬프로 변환하여 태그별 최신 사용 시각 기록
+        const postTime = new Date(p.date).getTime();
+        if (!tagLatestTime[tag] || postTime > tagLatestTime[tag]) {
+          tagLatestTime[tag] = postTime;
+        }
+      });
+    });
+
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(e => e[0]);
+    const newlyEmerging = new Set(Object.keys(tagLatestTime).filter(tag => tagLatestTime[tag] > threeHoursAgo));
+
+    return { 
+      trendingTags: sorted.length > 0 ? sorted : ["#방문록", "#꿀팁", "#자취방구하기", "#직방", "#다방", "#부동산", "#이사준비", "#인테리어", "#집꾸미기", "#원룸"],
+      newTags: newlyEmerging 
+    };
+  }, [posts]);
+
+  // 실시간 랭킹 롤링 및 펼침 상태 관리
+  const [rollingIndex, setRollingIndex] = useState(0);
+  const [isRankingExpanded, setIsRankingExpanded] = useState(false);
+
+  useEffect(() => {
+    if (isRankingExpanded) return;
+    const interval = setInterval(() => {
+      setRollingIndex(prev => (prev + 1) % trendingTags.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [trendingTags.length, isRankingExpanded]);
 
   // [추가] GPS 위치 및 상태 관리
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
@@ -136,6 +216,7 @@ export function Feed() {
           addressDetail: data.addressDetail,
           content: data.content,
           image: data.images?.[0] || "",
+          images: data.images || [],
           likes: data.likes || 0,
           views: data.views || 0,
           ratings: data.ratings,
@@ -166,22 +247,27 @@ export function Feed() {
     if (activeTab === "hot") {
       return list.sort((a, b) => (b.likes * 1000 + b.views) - (a.likes * 1000 + a.views));
     } else if (activeTab === "tag") {
-      if (selectedTag === "전체") {
-        return list.filter(p => p.image); // 사진이 있는 것만 우선 노출
+      let filtered = list.filter(p => p.image);
+      
+      if (tagSearchQuery.trim()) {
+        filtered = filtered.filter(p => 
+          p.tags.some(t => t.toLowerCase().includes(tagSearchQuery.toLowerCase())) ||
+          p.location.toLowerCase().includes(tagSearchQuery.toLowerCase())
+        );
+      } else if (selectedTag !== "전체") {
+        filtered = filtered.filter(p => p.tags.some(t => t.includes(selectedTag)));
       }
-      return list.filter(p => p.tags.some(t => t.includes(selectedTag)) && p.image);
+      return filtered;
     } else {
-      // [개선] 내 주변 탭일 경우 200m 필터링 적용
       if (userLocation) {
         const nearbyList = list.filter(p => {
           if (p.lat && p.lng) {
             const dist = calculateDistance(userLocation.lat, userLocation.lng, p.lat, p.lng);
-            return dist <= 200; // 200m 이내
+            return dist <= 200;
           }
           return false;
         });
 
-        // 세부 정렬 적용
         if (localSortType === 'distance') {
           return nearbyList.sort((a, b) => {
             const distA = a.lat && a.lng ? calculateDistance(userLocation.lat, userLocation.lng, a.lat, a.lng) : 999999;
@@ -205,7 +291,7 @@ export function Feed() {
       }
       return list;
     }
-  }, [activeTab, posts, addressParam, userLocation, localSortType]);
+  }, [activeTab, posts, addressParam, userLocation, localSortType, tagSearchQuery, selectedTag]);
 
   const handlePostClick = async (postId: string) => {
     if (!canRead) {
@@ -306,22 +392,83 @@ export function Feed() {
               ))}
             </div>
 
-            {/* [추가] 태그 탭 전용 카테고리 칩 바 */}
             {activeTab === 'tag' && (
-              <div className="feed__tag-scroll-bar">
-                {CATEGORY_CHIPS.map(chip => (
-                  <button
-                    key={chip}
-                    onClick={() => setSelectedTag(chip)}
-                    className={`feed__tag-chip${selectedTag === chip ? " feed__tag-chip--active" : ""}`}
-                  >
-                    {chip === "전체" ? "전체" : `#${chip}`}
-                  </button>
-                ))}
+              <div className="feed__tag-header">
+                <div className="feed__tag-search-container">
+                  <div className={`feed__tag-search-bar ${isSearchActive ? 'active' : ''}`}>
+                    <Search size={18} color={isSearchActive ? "#3182F6" : "#8B95A1"} />
+                    <input 
+                      type="text" 
+                      placeholder="태그나 지역을 검색해보세요" 
+                      value={tagSearchQuery}
+                      onChange={(e) => setTagSearchQuery(e.target.value)}
+                      onFocus={() => setIsSearchActive(true)}
+                      onBlur={() => !tagSearchQuery && setIsSearchActive(false)}
+                    />
+                    {tagSearchQuery && (
+                      <button className="clear-btn" onClick={() => setTagSearchQuery("")}>
+                        <X size={16} color="#B0B8C1" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {!tagSearchQuery && (
+                  <div className={`feed__tag-ranking-container ${isRankingExpanded ? 'expanded' : ''}`}>
+                    <div className="feed__tag-ranking" onClick={() => setIsRankingExpanded(!isRankingExpanded)}>
+                      <span className="label">실시간 핫태그</span>
+                      {!isRankingExpanded ? (
+                        <div className="rolling-box">
+                          <ul 
+                            className="rolling-list" 
+                            style={{ 
+                              transform: `translateY(-${rollingIndex * 20}px)`,
+                              transition: 'transform 0.5s cubic-bezier(0, 0, 0.2, 1)'
+                            }}
+                          >
+                            {trendingTags.map((tag, idx) => (
+                              <li key={tag} className="rolling-item">
+                                <span className="num">{idx + 1}</span>
+                                <span className="tag-name">{tag}</span>
+                                {newTags.has(tag) ? <span className="badge new">NEW</span> : <span className="badge steady">-</span>}
+                              </li>
+                            ))}
+                          </ul>
+                          <ChevronDown size={14} color="#8B95A1" />
+                        </div>
+                      ) : (
+                        <button className="close-btn"><ChevronUp size={18} color="#191F28" /></button>
+                      )}
+                    </div>
+                    
+                    {isRankingExpanded && (
+                      <div className="ranking-list">
+                        <div className="ranking-date">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</div>
+                        <div className="divider"></div>
+                        <div className="list-items">
+                          {trendingTags.map((tag, idx) => (
+                            <div 
+                              key={tag} 
+                              className="rank-item"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTagSearchQuery(tag.replace('#', ''));
+                                setIsRankingExpanded(false);
+                              }}
+                            >
+                              <span className="rank-num">{idx + 1}</span>
+                              <span className="rank-name">{tag}</span>
+                              {newTags.has(tag) && <span className="list-badge">NEW</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             
-            {/* [추가] 내 주변 탭 전용 소분류 정렬 필터 바 */}
             {activeTab === 'local' && (
               <div className="feed__sort-bar">
                 {[
@@ -354,11 +501,34 @@ export function Feed() {
             ) : filteredData.length > 0 ? (
               filteredData.map(post => (
                 <div key={post.id} className="tag-grid-item" onClick={() => handlePostClick(post.id)}>
-                  <img src={post.image} alt="post" />
+                  <div className="image-container">
+                    <img src={post.image} alt="post" />
+                    {post.images && post.images.length > 1 && (
+                      <div className="image-count-badge">
+                        +{post.images.length - 1}
+                      </div>
+                    )}
+                  </div>
                   <div className="item-overlay">
-                    <div className="stat">
-                      <Heart size={14} fill="white" color="white" />
-                      <span>{post.likes}</span>
+                    <div className="info-box">
+                      <div className="location-text">
+                        <MapPin size={10} color="white" />
+                        <span>
+                          {(() => {
+                            const parts = post.location.split(' ');
+                            if (parts.length >= 3) {
+                              return `${parts[1]} ${parts[2]}`; // 예: "서울 광진구 자양번영로 6" -> "광진구 자양번영로"
+                            } else if (parts.length === 2) {
+                              return parts[1];
+                            }
+                            return post.location; // 예: "프리즈마111"
+                          })()}
+                        </span>
+                      </div>
+                      <div className="stat">
+                        <Heart size={12} fill="white" color="white" />
+                        <span>{post.likes}</span>
+                      </div>
                     </div>
                     {post.isVerified && (
                       <div className="verify-icon">
@@ -403,7 +573,10 @@ export function Feed() {
         )}
 
         {isLoading ? (
-          <div className="loading-state">방문록을 불러오는 중...</div>
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <p>방문록을 불러오는 중...</p>
+          </div>
         ) : filteredData.length > 0 ? (
           filteredData.map(post => (
             <div key={post.id} className="feed__card" onClick={() => handlePostClick(post.id)}>
@@ -465,7 +638,14 @@ export function Feed() {
                 <p className="feed__card-content">{post.content}</p>
                 <div className="feed__card-thumbnail">
                   {post.image ? (
-                    <img src={post.image} alt="thumb" />
+                    <>
+                      <img src={post.image} alt="thumb" />
+                      {post.images && post.images.length > 1 && (
+                        <div className="image-count-badge">
+                          +{post.images.length - 1}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="no-image-thumb">이미지 없음</div>
                   )}
@@ -508,8 +688,12 @@ export function Feed() {
       {isAdShowing && (
         <div className="ad-overlay">
           <div className="ad-content">
-            <div className="ad-timer">광고 시청 중... (2초)</div>
-            <div className="ad-placeholder">🏢 깨끗한 방 찾을 땐? 방문Log</div>
+            <div className="ad-icon">🏢</div>
+            <div className="ad-timer-container">
+              <div className="ad-progress-bar"></div>
+            </div>
+            <p className="ad-title">깨끗한 방 찾을 땐? 방문Log</p>
+            <p className="ad-desc">광고 시청 중... (2초)</p>
           </div>
         </div>
       )}
