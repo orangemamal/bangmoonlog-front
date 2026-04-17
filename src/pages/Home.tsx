@@ -161,6 +161,32 @@ export function Home() {
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef<number>(0);
 
+  // 전역 상태 및 UI 제어 상태 (useEffect 이전에 선언 필요)
+  const [showVerifiedOnly, setShowVerifiedOnly] = useState(false);
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [customTag, setCustomTag] = useState("");
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
+  const [verificationDistance, setVerificationDistance] = useState<number | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [experienceType, setExperienceType] = useState("단순 방문");
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    desc?: string;
+    icon: string;
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm?: () => void;
+    onCancel?: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    desc: "",
+    icon: "🥳",
+  });
+
   // [환영 모달] 첫 방문 시 노출 여부 체크
   useEffect(() => {
     const expiry = localStorage.getItem("welcome_modal_expiry");
@@ -655,18 +681,6 @@ export function Home() {
     handleDeleteReview(id);
   }, [handleDeleteReview]);
 
-  const [showVerifiedOnly, setShowVerifiedOnly] = useState(false);
-  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
-  const [customTag, setCustomTag] = useState("");
-  const [viewerImage, setViewerImage] = useState<string | null>(null);
-
-  const [isVerified, setIsVerified] = useState(false);
-  const [verificationDistance, setVerificationDistance] = useState<number | null>(null);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-
-  const [experienceType, setExperienceType] = useState("단순 방문");
-
   const verifyLocation = useCallback((targetLat?: number, targetLng?: number) => {
     if (!navigator.geolocation) return;
     setIsVerifying(true);
@@ -686,22 +700,6 @@ export function Home() {
       setIsVerifying(false);
     }, { enableHighAccuracy: true });
   }, [selectedCoord]);
-
-  const [modalConfig, setModalConfig] = useState<{
-    isOpen: boolean;
-    title: string;
-    desc?: string;
-    icon: string;
-    confirmText?: string;
-    cancelText?: string;
-    onConfirm?: () => void;
-    onCancel?: () => void;
-  }>({
-    isOpen: false,
-    title: "",
-    desc: "",
-    icon: "🥳",
-  });
 
   // [개선] 현재 검색된 주소지(혹은 선택된 장소)의 방문록 태그들 중 빈도가 높은 상위 5개를 동적으로 추출
   const dynamicNeighborhoodTags = useMemo(() => {
