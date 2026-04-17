@@ -31,6 +31,8 @@ import { deleteReview } from "../services/reviewService";
 import { WelcomeModal } from "../components/home/WelcomeModal";
 import { normalizeAddressDetail, formatAddressDetail, normalizeBaseAddress } from "../utils/addressUtils";
 import { calculateDistance } from "../utils/geoUtils";
+import { Toast } from "../components/common/Toast";
+import LogoImg from "../assets/images/favicon.svg";
 
 interface Review {
   id: string;
@@ -144,6 +146,8 @@ export function Home() {
   const unsubscribeReadListRef = useRef<(() => void) | null>(null);
   const isInitialNavRef = useRef(false);
   const clusterRef = useRef<any>(null);
+  const userMarkerRef = useRef<any>(null);
+  const watchIdRef = useRef<number | null>(null);
   const allMarkersRef = useRef<any[]>([]);
 
   // 검색 기록 상태
@@ -153,6 +157,9 @@ export function Home() {
     return saved ? JSON.parse(saved) : [];
   });
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  const [showExitToast, setShowExitToast] = useState(false);
+  const lastBackPressRef = useRef<number>(0);
 
   // [환영 모달] 첫 방문 시 노출 여부 체크
   useEffect(() => {
@@ -166,6 +173,39 @@ export function Home() {
       sessionStorage.setItem("welcome_modal_seen", "true");
     }
   }, []);
+
+  // [WebView/Mobile] 하드웨어 뒤로가기 버튼 핸들링
+  useEffect(() => {
+    // 앱 진입 시 가상의 히스토리를 하나 밀어넣어 뒤로가기 이벤트를 가로챌 준비를 합니다.
+    window.history.pushState({ isHome: true }, '', window.location.href);
+
+    const handlePopState = (e: PopStateEvent) => {
+      // 1. 열려있는 레이어(모달, 시트 등)가 있다면 뒤로가기 시 레이어를 먼저 닫습니다.
+      if (isPostcodeOpen) { setPostcodeOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
+      if (isSheetOpen) { setSheetOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
+      if (isReadListOpen) { setReadListOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
+      if (selectedReview) { setSelectedReview(null); window.history.pushState({ isHome: true }, '', window.location.href); return; }
+      if (viewerImage) { setViewerImage(null); window.history.pushState({ isHome: true }, '', window.location.href); return; }
+      if (isHistoryOpen) { setIsHistoryOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
+      if (modalConfig.isOpen) { setModalConfig(prev => ({ ...prev, isOpen: false })); window.history.pushState({ isHome: true }, '', window.location.href); return; }
+
+      // 2. 레이어가 없는 클린한 상태에서 뒤로가기 시 "한번 더 누르면 종료" 로직 실행
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        // 2초 내에 두 번 누름 -> 실제 종료 (이전 페이지 혹은 브라우저 종료)
+        window.history.go(-2); // 우리가 추가한 pushState와 원래 이동하려던 back을 합쳐서 -2
+      } else {
+        // 첫 번째 누름 -> 토스트 알림
+        lastBackPressRef.current = now;
+        setShowExitToast(true);
+        // 다시 가상 히스토리를 밀어넣어 다음 뒤로가기를 대기합니다.
+        window.history.pushState({ isHome: true }, '', window.location.href);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isPostcodeOpen, isSheetOpen, isReadListOpen, selectedReview, viewerImage, isHistoryOpen, modalConfig.isOpen]);
 
   // 수정 파라미터 감지 및 로드
   useEffect(() => {
@@ -861,57 +901,64 @@ export function Home() {
         tileTransition: false,
       });
 
-      // 2. 사용자의 GPS 위치로 설정 + 파란색 점 마크 추가
+      // 2. 사용자의 GPS 위치 실시간 추적 및 마커 표시
       if (navigator.geolocation) {
-        // [강화] 초기 진입 시에도 로딩 오버레이를 켜서 모바일 지연 시간 동안 인터랙션 차단
         setIsLocating(true);
-        navigator.geolocation.getCurrentPosition((pos) => {
-          const userLat = pos.coords.latitude;
-          const userLng = pos.coords.longitude;
+
+        // 기존 워치가 있다면 먼저 제거
+        if (watchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+        }
+
+        watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
+          const { latitude: userLat, longitude: userLng, accuracy } = pos.coords;
           const userPos = new window.naver.maps.LatLng(userLat, userLng);
 
-          // [버그 수정 완료] URL 파라미터 삭제 후에도 Ref를 통해 내비게이션 중이었음을 인지
-          if (!isInitialNavRef.current) {
+          // 초기 로딩 시 중심 이동 (한 번만)
+          if (!isInitialNavRef.current && !userMarkerRef.current) {
             mapInstance.current.setCenter(userPos);
-            mapInstance.current.setZoom(14);
+            mapInstance.current.setZoom(17); // 14 -> 17로 더 가깝게 초기화
           }
 
-          const myMarker = new window.naver.maps.Marker({
-            position: userPos,
-            map: mapInstance.current,
-            icon: {
-              content: `
-                <div class="user-location-marker">
-                  <div class="user-location-pulse"></div>
-                  <div class="user-location-dot"></div>
-                </div>
-              `,
-              anchor: new window.naver.maps.Point(12, 12),
-            }
-          });
+          if (userMarkerRef.current) {
+            userMarkerRef.current.setPosition(userPos);
+          } else {
+            userMarkerRef.current = new window.naver.maps.Marker({
+              position: userPos,
+              map: mapInstance.current,
+              icon: {
+                content: `
+                  <div class="user-location-marker">
+                    <div class="user-location-pulse"></div>
+                    <div class="user-location-dot"></div>
+                  </div>
+                `,
+                anchor: new window.naver.maps.Point(12, 12),
+              }
+            });
 
-          // [추가] 내 위치 마커 클릭 시 단계별 확대 기능
-          window.naver.maps.Event.addListener(myMarker, "click", () => {
-            const curZoom = mapInstance.current.getZoom();
+            window.naver.maps.Event.addListener(userMarkerRef.current, "click", () => {
+              const curZoom = mapInstance.current.getZoom();
+              const latestPos = userMarkerRef.current.getPosition();
+              if (curZoom < 17) {
+                mapInstance.current.morph(latestPos, 17, { duration: 300, easing: "linear" });
+              } else if (curZoom < 19) {
+                mapInstance.current.morph(latestPos, 19, { duration: 300, easing: "linear" });
+              }
+            });
+          }
 
-            if (curZoom < 17) {
-              mapInstance.current.morph(userPos, 17, { duration: 300, easing: "linear" });
-            } else if (curZoom < 19) {
-              mapInstance.current.morph(userPos, 19, { duration: 300, easing: "linear" });
-            }
-          });
-
-          setIsLocating(false); // 초기 로딩 해제
-          console.log("📍 [내 위치 초기화 완료]:", userLat, userLng);
+          setIsLocating(false);
+          console.log(`📍 [GPS 업데이트] 정확도: ${accuracy.toFixed(1)}m`, userLat, userLng);
         }, (err) => {
-          console.warn("GPS 허용 불가, 기본 좌표를 유지합니다.", err);
-          setIsLocating(false); // 에러 시에도 반드시 로딩 해제
-        }, { enableHighAccuracy: true, timeout: 10000 });
+          console.warn("GPS 허용 불가 또는 오류:", err);
+          setIsLocating(false);
+        }, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0 // 캐시된 위치 대신 항상 새로운 위치 요청
+        });
       }
-
-      window.naver.maps.Event.addListener(mapInstance.current, "zoom_changed", () => {
-        console.log("현재 네이버 지도 줌 레벨:", mapInstance.current.getZoom());
-      });
 
       infoWindowInstance.current = new window.naver.maps.InfoWindow({
         content: "",
@@ -1092,6 +1139,12 @@ export function Home() {
       };
       document.head.appendChild(s);
     } else { initializeMap(); }
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
   }, [editingReviewId, refreshMarkers, verifyLocation, isLoggedIn, user, showAlert, showConfirm, login]);
 
   const handleTagToggle = (tag: string) => {
@@ -1402,10 +1455,20 @@ export function Home() {
           if (!navigator.geolocation || !mapInstance.current) return;
 
           setIsLocating(true);
+
+          // 이미 마커가 있다면 즉시 이동 후 새로고침
+          if (userMarkerRef.current) {
+            mapInstance.current.morph(userMarkerRef.current.getPosition(), 17, { duration: 400, easing: 'linear' });
+          }
+
           navigator.geolocation.getCurrentPosition(
             (pos) => {
               const userPos = new window.naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
               mapInstance.current.morph(userPos, 17, { duration: 400, easing: 'linear' });
+
+              if (userMarkerRef.current) {
+                userMarkerRef.current.setPosition(userPos);
+              }
               setIsLocating(false);
             },
             (err) => {
@@ -1413,7 +1476,7 @@ export function Home() {
               setIsLocating(false);
               if (err.code === 1) alert("위치 권한이 거부되었습니다. 설정에서 권한을 허용해주세요!");
             },
-            { enableHighAccuracy: true, timeout: 10000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         }}
         title="내 위치로 이동"
@@ -1926,6 +1989,12 @@ export function Home() {
         </div>
       )}
       {showWelcomeModal && <WelcomeModal onClose={() => setShowWelcomeModal(false)} />}
+      <Toast
+        message="버튼을 한 번 더 누르면 종료됩니다."
+        isVisible={showExitToast}
+        onClose={() => setShowExitToast(false)}
+        icon={LogoImg}
+      />
     </div>
   );
 }
