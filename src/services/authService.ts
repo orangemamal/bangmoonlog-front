@@ -111,8 +111,15 @@ export const handleNaverCallback = async (accessToken: string) => {
       photoURL: naverUserInfo.picture || ""
     });
 
-    // Firestore 저장
-    await saveUserToFirestore(result.user);
+    // Firestore 저장 (네이버에서 가져온 이메일을 명시적으로 포함)
+    const userRef = doc(db, "users", result.user.uid);
+    await setDoc(userRef, {
+      email: naverUserInfo.email || "",
+      displayName: naverUserInfo.name || "네이버 사용자",
+      photoURL: naverUserInfo.picture || "",
+      lastLogin: serverTimestamp(),
+      // 이메일 정보가 인증 객체에 없을 수도 있으므로 Firestore에 확실히 심음
+    }, { merge: true });
 
     return result.user;
   } catch (error) {
