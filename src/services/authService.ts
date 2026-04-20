@@ -65,8 +65,31 @@ export const signInWithKakao = async () => {
   
   try {
     const result = await signInWithPopup(auth, provider);
-    await saveUserToFirestore(result.user);
-    return result.user;
+    const user = result.user;
+
+    // [개선] 카카오 OIDC 응답에서 프로필 정보 추출 및 업데이트
+    const profile = (result as any)._tokenResponse;
+    const name = profile?.displayName || profile?.fullName || profile?.nickname || user.displayName;
+    const photo = profile?.photoUrl || user.photoURL;
+    const email = profile?.email || user.email;
+
+    if (name || photo) {
+      await updateProfile(user, {
+        displayName: name || "방문객",
+        photoURL: photo || ""
+      });
+    }
+
+    // Firestore 저장 (이메일 명시적 포함)
+    const userRef = doc(db, "users", user.uid);
+    await setDoc(userRef, {
+      email: email || "",
+      displayName: name || "방문객",
+      photoURL: photo || "",
+      lastLogin: serverTimestamp()
+    }, { merge: true });
+
+    return user;
   } catch (error) {
     handleAuthError(error, "카카오");
   }
