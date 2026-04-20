@@ -21,7 +21,7 @@ import {
   getDoc
 } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { checkEligibleForNewTitle } from "../utils/titleSystem";
 import { useAuth } from "../hooks/useAuth";
 import { handleNaverCallback } from "../services/authService";
@@ -120,6 +120,7 @@ const compressAndEncodeImage = (file: File): Promise<string> => {
 export function Home() {
   console.log("🏠 [Home] Component Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { isLoggedIn, user, login } = useAuth();
   const { hasWatchedAd, watchAd, isAdShowing } = useAccessControl();
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -1241,7 +1242,15 @@ export function Home() {
 
         const docRef = await addDoc(collection(db, "reviews"), reviewData);
 
-        // 칭호 체크 로직
+        // [추가] 방문록 작성자에게 1년 전체 보기 권한 부여 로직
+        if (user?.id) {
+          const expiryDate = new Date();
+          expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+          await updateDoc(doc(db, "users", user.id), {
+            canViewAllUntil: Timestamp.fromDate(expiryDate)
+          });
+          console.log("🔓 [Auth] 사용자가 방문록을 작성하여 1년 전체 보기 권한이 부여되었습니다.");
+        }
         if (user?.id) {
           const q = query(collection(db, "reviews"), where("authorId", "==", user.id));
           const snap = await getDocs(q);
@@ -1795,15 +1804,30 @@ export function Home() {
               reviews
                 .filter(r => !showVerifiedOnly || r.isVerified)
                 .map((review, index) => (
-                  <div key={review.id} className={`review-card ${index > 0 && !hasWatchedAd ? 'blurred' : ''} ${review.isVerified ? 'verified' : ''}`} onClick={async () => {
-                    if (index > 0 && !hasWatchedAd) {
+                  <div key={review.id} className={`review-card ${index > 0 && !user?.canViewAll ? 'blurred' : ''} ${review.isVerified ? 'verified' : ''}`} onClick={async () => {
+                    if (index > 0 && !user?.canViewAll) {
+                      if (!isLoggedIn) {
+                        showConfirm(
+                          "앗! 로그인이 필요해요 🏠",
+                          () => navigate('/mypage'),
+                          "로그인하시면 내 동네의 생생한 방문록을 모두 확인할 수 있습니다.",
+                          "🔒",
+                          () => {}
+                        );
+                        return;
+                      }
+
                       showConfirm(
-                        "광고 시청 후 전체 보기",
-                        async () => {
-                          await watchAd();
+                        "방문록 작성하고 전체보기 ✨",
+                        () => {
+                          setReadListOpen(false);
+                          if (selectedAddress) {
+                            const pos = mapInstance.current.getCenter();
+                            window.__openWriteSheet(selectedAddress, pos.lat(), pos.lng());
+                          }
                         },
-                        "광고를 시청하고 모든 방문록을 확인하시겠습니까?",
-                        "📺"
+                        "회원님의 소중한 후기 하나가 다른 분들에게 큰 도움이 돼요! 딱 하나만 작성해 보실래요?",
+                        "✍️"
                       );
                       return;
                     }

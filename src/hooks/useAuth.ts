@@ -10,6 +10,8 @@ interface User {
   email?: string | null;
   photoURL?: string;
   isAnonymous?: boolean;
+  canViewAll?: boolean;
+  canViewAllUntil?: any;
 }
 
 export function useAuth() {
@@ -22,6 +24,8 @@ export function useAuth() {
         let name = firebaseUser.displayName || "방문객";
         let photoURL = firebaseUser.photoURL || undefined;
         let email = firebaseUser.email || null;
+        let canViewAll = false;
+        let canViewAllUntil = null;
 
         try {
           const userSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -30,6 +34,15 @@ export function useAuth() {
              if (data.displayName) name = data.displayName;
              if (data.photoURL) photoURL = data.photoURL;
              if (data.email) email = data.email;
+             
+             // 권한 체크: canViewAllUntil 필드가 현재 시간보다 미래인지 확인
+             if (data.canViewAllUntil) {
+               const expiry = data.canViewAllUntil.toDate();
+               if (expiry > new Date()) {
+                 canViewAll = true;
+                 canViewAllUntil = data.canViewAllUntil;
+               }
+             }
           }
         } catch (e) {
           console.warn("Failed to fetch user profile", e);
@@ -41,7 +54,9 @@ export function useAuth() {
           displayName: name,
           email,
           photoURL,
-          isAnonymous: firebaseUser.isAnonymous
+          isAnonymous: firebaseUser.isAnonymous,
+          canViewAll,
+          canViewAllUntil
         });
       } else {
         setUser(null);
