@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Heart, MapPin, Award } from "lucide-react";
+import { Heart, MapPin, Award, LogIn } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { db } from "../services/firebase";
 import { collection, query, where, onSnapshot, doc, writeBatch, DocumentData, QuerySnapshot } from "firebase/firestore";
@@ -23,12 +24,17 @@ function NotifIcon({ type }: { type: NotifType }) {
 }
 
 export function Notifications() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (authLoading) return;
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
 
     const q = query(
       collection(db, "notifications"), 
@@ -56,7 +62,7 @@ export function Notifications() {
     });
 
     return () => unsubscribe();
-  }, [user?.id]);
+  }, [user?.id, authLoading]);
 
   const markAsRead = async (id: string) => {
     try {
@@ -90,6 +96,81 @@ export function Notifications() {
     if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
     return new Intl.DateTimeFormat('ko-KR').format(date);
   };
+
+  // 1. 인증 확인 중일 때
+  if (authLoading) {
+    return (
+      <div className="notifications">
+        <div className="notifications__header"><h1>알림</h1></div>
+        <div className="notifications__list">
+          <div className="notifications__empty">
+            <div className="notifications__empty-spinner" />
+            <p>상태를 확인 중입니다...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. 로그인이 되어 있지 않을 때
+  if (!user) {
+    return (
+      <div className="notifications" style={{ background: '#F9FAFB' }}>
+        <div className="notifications__header"><h1>알림</h1></div>
+        <div className="notifications__list" style={{ height: 'calc(100vh - 120px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="notifications__empty" style={{ background: 'white', padding: '40px 30px', borderRadius: '32px', boxShadow: '0 8px 24px rgba(0,0,0,0.04)', width: '85%', maxWidth: '340px' }}>
+            <div 
+              className="notifications__empty-icon" 
+              style={{ 
+                background: '#E8F3FF', 
+                width: '80px',
+                height: '80px',
+                borderRadius: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 24px',
+                animation: 'bounce 2s infinite ease-in-out'
+              }}
+            >
+              <LogIn size={36} color="#3182F6" />
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: '700', color: '#191F28', marginBottom: '12px' }}>앗! 로그인이 필요해요 🐾</h3>
+            <p style={{ fontSize: '15px', color: '#4E5968', lineHeight: '1.5' }}>
+              로그인하시면 친구들의 공감 소식과<br />동네의 핫한 이야기를 알려드릴게요!
+            </p>
+            <button 
+              onClick={() => navigate('/mypage')}
+              style={{
+                marginTop: '32px',
+                width: '100%',
+                padding: '16px 0',
+                borderRadius: '20px',
+                border: 'none',
+                background: '#3182F6',
+                color: 'white',
+                fontSize: '16px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(49, 130, 246, 0.3)',
+                transition: 'transform 0.2s'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+            >
+              지금 바로 로그인하기
+            </button>
+          </div>
+        </div>
+        <style>{`
+          @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="notifications">

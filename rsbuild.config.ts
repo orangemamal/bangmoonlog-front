@@ -4,7 +4,13 @@ import { pluginSass } from '@rsbuild/plugin-sass';
 
 export default defineConfig({
   server: {
-    host: '0.0.0.0', // 공유기 내 모든 IP 접속을 허용합니다 (또는 '192.168.0.100' 직접 입력)
+    host: '0.0.0.0',
+    proxy: {
+      '/api': {
+        target: 'https://bangmoonlog.vercel.app',
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [pluginReact(), pluginSass()],
   html: {

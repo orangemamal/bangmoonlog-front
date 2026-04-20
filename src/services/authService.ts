@@ -3,19 +3,24 @@ import {
   GoogleAuthProvider, 
   OAuthProvider, 
   signInAnonymously,
-  signInWithCustomToken
+  signInWithCustomToken,
+  updateProfile
 } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 const saveUserToFirestore = async (user: any) => {
   try {
     const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+    const existingData = userSnap.exists() ? userSnap.data() : {};
+
     await setDoc(userRef, {
-      email: user.email || "",
-      displayName: user.displayName || "방문객",
-      photoURL: user.photoURL || "",
-      createdAt: serverTimestamp()
+      email: user.email || existingData.email || "",
+      displayName: user.displayName || existingData.displayName || "방문객",
+      photoURL: user.photoURL || existingData.photoURL || "",
+      lastLogin: serverTimestamp(),
+      createdAt: existingData.createdAt || serverTimestamp()
     }, { merge: true });
   } catch (e) {
     console.error("Firestore save error:", e);
@@ -32,7 +37,7 @@ const handleAuthError = (error: any, providerName: string) => {
  */
 const getProviderId = (type: 'kakao' | 'naver') => {
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (type === 'kakao') return isLocal ? 'oidc.kakao_local' : 'oidc.kakao';
+  if (type === 'kakao') return isLocal ? 'oidc.kakao_local' : 'oidc.log';
   if (type === 'naver') return isLocal ? 'oidc.naver_local' : 'oidc.naver';
   return '';
 };
@@ -84,9 +89,8 @@ export const signInWithNaver = async () => {
 
 export const handleNaverCallback = async (accessToken: string) => {
   try {
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    // 로컬 개발 환경에서는 RSBuild가 /api 라우팅을 Vercel처럼 지원하지 않으므로, 테스트 용이성을 위해 배포된 Vercel API를 우선 호출하도록 합니다.
-    const apiUrl = isLocal ? 'https://bangmoonlog.vercel.app/api/naverAuth' : '/api/naverAuth';
+    // Firebase Cloud Functions URL (서울 리전 사용 시)
+    const apiUrl = 'https://asia-northeast3-bangmoonlog-bdf9a.cloudfunctions.net/naverAuth';
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -98,9 +102,18 @@ export const handleNaverCallback = async (accessToken: string) => {
       throw new Error(`Naver Token Exchange Failed: ${response.status}`);
     }
 
-    const { firebaseToken } = await response.json();
+    const { firebaseToken, user: naverUserInfo } = await response.json();
     const result = await signInWithCustomToken(auth, firebaseToken);
+    
+    // Firebase 인증 프로필 실시간 업데이트 (커스텀 토큰은 초기 프로필이 비어있음)
+    await updateProfile(result.user, {
+      displayName: naverUserInfo.name || "네이버 사용자",
+      photoURL: naverUserInfo.picture || ""
+    });
+
+    // Firestore 저장
     await saveUserToFirestore(result.user);
+
     return result.user;
   } catch (error) {
     handleAuthError(error, "네이버(커스텀)");

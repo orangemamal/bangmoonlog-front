@@ -204,9 +204,7 @@ export function MyPage() {
     return (
       <div className="mypage mypage--guest">
         <div className="mypage__login-prompt">
-          <div className="mypage__login-prompt-icon">
-            <Award size={40} color="#3182F6" />
-          </div>
+          <img src={logoSvg} alt="방문Log 로고" className="mypage__login-logo" />
           <h2>리얼한 거주 후기,<br />지금 바로 확인해보세요!</h2>
 
           <div className="mypage__login-buttons">

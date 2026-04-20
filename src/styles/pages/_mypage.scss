@@ -13,6 +13,12 @@
   background-color: $color-bg;
   overflow-y: auto;
 
+  &__login-logo {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 24px;
+  }
+
   // 비로그인 상태
   &--guest {
     background-color: $color-surface;

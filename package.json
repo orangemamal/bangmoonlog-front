@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "rsbuild dev",
     "build": "rsbuild build --mode production",
+    "build:web": "npm run build",
     "preview": "rsbuild preview",
     "lint": "eslint .",
     "deploy": "ait deploy"
