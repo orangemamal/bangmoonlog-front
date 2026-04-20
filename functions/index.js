@@ -43,14 +43,30 @@ exports.naverAuth = onRequest(async (req, res) => {
         throw new Error("Could not parse Naver User Info");
       }
 
-      // 2. Firebase Custom Token 생성
+      // 2. Firebase 사용자 정보 동기화 (UserRecord 업데이트)
       const uid = `naver:${naverUser.id}`;
+      try {
+        await admin.auth().updateUser(uid, {
+          email: naverUser.email,
+          displayName: naverUser.name || naverUser.nickname,
+          photoURL: naverUser.profile_image,
+          emailVerified: true
+        });
+      } catch (error) {
+        if (error.code === 'auth/user-not-found') {
+          await admin.auth().createUser({
+            uid: uid,
+            email: naverUser.email,
+            displayName: naverUser.name || naverUser.nickname,
+            photoURL: naverUser.profile_image,
+            emailVerified: true
+          });
+        } else {
+          throw error;
+        }
+      }
       
-      const customToken = await admin.auth().createCustomToken(uid, {
-        email: naverUser.email,
-        name: naverUser.name || naverUser.nickname,
-        picture: naverUser.profile_image,
-      });
+      const customToken = await admin.auth().createCustomToken(uid);
 
       // 3. 토큰 반환
       return res.status(200).json({

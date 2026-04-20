@@ -59,8 +59,8 @@ export const signInWithKakao = async () => {
   // KOE205 에러 방지를 위해, 우선 에러가 났던 스코프들은 제외하고 openid만 시도합니다.
   // 카카오 콘솔에서 동의항목 설정이 완료되면 아래 주석을 해제하시면 됩니다.
   provider.addScope('openid');
-  // provider.addScope('profile');
-  // provider.addScope('email');
+  provider.addScope('profile');
+  provider.addScope('email');
   
   try {
     const result = await signInWithPopup(auth, provider);
