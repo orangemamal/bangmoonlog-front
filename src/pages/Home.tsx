@@ -991,6 +991,11 @@ export function Home() {
 
       refreshMarkers();
 
+      // [추가] 줌 레벨 최적화를 위한 실시간 로그 출력
+      window.naver.maps.Event.addListener(mapInstance.current, "zoom_changed", () => {
+        console.log("🔍 [Map Zoom] Current Zoom Level:", mapInstance.current.getZoom());
+      });
+
       window.naver.maps.Event.addListener(mapInstance.current, "click", (e: any) => {
         const curZoom = mapInstance.current.getZoom();
 
@@ -1826,37 +1831,63 @@ export function Home() {
               reviews
                 .filter(r => !showVerifiedOnly || r.isVerified)
                 .map((review, index) => (
-                  <div key={review.id} className={`review-card ${index > 0 && !user?.canViewAll ? 'blurred' : ''} ${review.isVerified ? 'verified' : ''}`} onClick={async () => {
-                    if (index > 0 && !user?.canViewAll) {
-                      if (!isLoggedIn) {
+                    <div key={review.id} className={`review-card ${index > 0 && !user?.canViewAll ? 'blurred' : ''} ${review.isVerified ? 'verified' : ''}`} onClick={async () => {
+                      if (index > 0 && !user?.canViewAll) {
+                        if (!isLoggedIn) {
+                          showConfirm(
+                            "앗! 로그인이 필요해요 🏠",
+                            () => navigate('/mypage'),
+                            "로그인 후 방문록을 단 하나만 작성해도 모든 방문록을 자유롭게 읽을 수 있어요! ✨",
+                            "🔒",
+                            () => {}
+                          );
+                          return;
+                        }
+
                         showConfirm(
-                          "앗! 로그인이 필요해요 🏠",
-                          () => navigate('/mypage'),
-                          "로그인 후 방문록을 단 하나만 작성해도 모든 방문록을 자유롭게 읽을 수 있어요! ✨",
-                          "🔒",
-                          () => {}
+                          "방문록 작성하고 전체보기 ✨",
+                          async () => {
+                            setReadListOpen(false);
+                            
+                            // [핵심 개선] 현재 GPS 기반 위치로 포커싱 및 작성 유도
+                            if (navigator.geolocation) {
+                              setIsLocating(true);
+                              navigator.geolocation.getCurrentPosition((pos) => {
+                                const userPos = new window.naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+                                mapInstance.current.morph(userPos, 19, { duration: 500, easing: "linear" });
+                                
+                                // 현재 위치 역지오코딩하여 인포윈도우 오픈
+                                window.naver.maps.Service.reverseGeocode({
+                                  coords: userPos,
+                                  orders: "roadaddr,addr"
+                                }, (status: any, res: any) => {
+                                  if (status === window.naver.maps.Service.Status.OK) {
+                                    const addr = res.v2.address.roadAddress || res.v2.address.jibunAddress;
+                                    const stdAddr = normalizeBaseAddress(addr);
+                                    
+                                    // 해당 좌표로 지도 중심 이동 후 정보창 수동 트리거
+                                    setTimeout(() => {
+                                      window.__openWriteSheet(stdAddr, pos.coords.latitude, pos.coords.longitude);
+                                    }, 600);
+                                  }
+                                });
+                                setIsLocating(false);
+                              }, (err) => {
+                                console.error("GPS Error:", err);
+                                setIsLocating(false);
+                                showAlert("위치 파악 실패", "현재 위치를 알 수 없어 가장 가까운 장소에서 직접 선택해 주세요.", "📍");
+                              });
+                            }
+                          },
+                          "정확한 정보를 위해 현재 계신 곳(또는 거주하셨던 곳)의 방문록을 하나만 작성해 주시겠어요? 작성 즉시 모든 방문록이 열립니다! 🏠",
+                          "📍"
                         );
                         return;
                       }
-
-                      showConfirm(
-                        "방문록 작성하고 전체보기 ✨",
-                        () => {
-                          setReadListOpen(false);
-                          if (selectedAddress) {
-                            const pos = mapInstance.current.getCenter();
-                            window.__openWriteSheet(selectedAddress, pos.lat(), pos.lng());
-                          }
-                        },
-                        "회원님의 소중한 후기 하나가 다른 분들에게 큰 도움이 돼요! 딱 하나만 작성해 보실래요? 🎤",
-                        "🥳"
-                      );
-                      return;
-                    }
-                    addRecentLog(review.id);
-                    setSelectedReview(review);
-                    setActiveMenuId(null);
-                  }}>
+                      addRecentLog(review.id);
+                      setSelectedReview(review);
+                      setActiveMenuId(null);
+                    }}>
                     <div className="card-top">
                       <div className="card-tags">
                         <div className={`experience-badge ${review.experienceType === '거주 경험' ? 'resident' : review.experienceType === '매물 투어' ? 'visit' : ''}`}>
