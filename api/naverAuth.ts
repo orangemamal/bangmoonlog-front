@@ -23,9 +23,9 @@ if (!admin.apps.length) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS configuration
+  // 1. CORS 설정을 최우선으로 배치하여 어떤 에러가 발생해도 응답이 차단되지 않게 합니다.
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*'); 
+  res.setHeader('Access-Control-Allow-Origin', '*'); // 로컬(localhost:3000) 접근을 위해 모든 오리진 허용
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
