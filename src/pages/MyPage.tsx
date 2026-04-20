@@ -225,7 +225,9 @@ export function MyPage() {
               <span>네이버 계정으로 로그인</span>
             </button>
           </div>
-          <p className="login-agreement">첫 로그인 시 <span>이용약관</span> 및 <span>개인정보처리방침</span> 동의로 간주됩니다.</p>
+          <p className="login-agreement">
+            첫 로그인 시 <span onClick={() => navigate('/terms')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>이용약관</span> 및 <span onClick={() => navigate('/privacy')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>개인정보처리방침</span> 동의로 간주됩니다.
+          </p>
         </div>
       </div>
     );
