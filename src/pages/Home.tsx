@@ -1833,11 +1833,13 @@ export function Home() {
                 .map((review, index) => (
                     <div key={review.id} className={`review-card ${index > 0 && !user?.canViewAll ? 'blurred' : ''} ${review.isVerified ? 'verified' : ''}`} onClick={async () => {
                       if (index > 0 && !user?.canViewAll) {
+                        const commonMsg = "모든 방문록을 보시려면 현재 거주 중인 집이나 전에 살던 집의 방문록을 남겨주세요. 모든 방문록이 즉시 열립니다! 🏠";
+                        
                         if (!isLoggedIn) {
                           showConfirm(
-                            "앗! 로그인이 필요해요 🏠",
+                            "방문록 작성하고 전체보기 ✨",
                             () => navigate('/mypage'),
-                            "로그인 후 방문록을 단 하나만 작성해도 모든 방문록을 자유롭게 읽을 수 있어요! ✨",
+                            commonMsg,
                             "🔒",
                             () => {}
                           );
@@ -1879,7 +1881,7 @@ export function Home() {
                               });
                             }
                           },
-                          "모든 방문록을 보시려면 현재 거주 중인 집이나 전에 살던 집의 방문록을 남겨주세요. 모든 방문록이 즉시 열립니다! 🏠",
+                          commonMsg,
                           "📍"
                         );
                         return;
