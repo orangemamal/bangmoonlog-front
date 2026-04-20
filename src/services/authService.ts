@@ -3,6 +3,7 @@ import {
   GoogleAuthProvider, 
   OAuthProvider, 
   signInAnonymously,
+  signInWithCustomToken
 } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
@@ -66,18 +67,43 @@ export const signInWithKakao = async () => {
 };
 
 export const signInWithNaver = async () => {
-  const providerId = getProviderId('naver');
-  const provider = new OAuthProvider(providerId);
-  provider.addScope('openid');
-  // provider.addScope('profile');
-  // provider.addScope('email');
+  // 프론트엔드 단독 파이어베이스 네이버 연동이 불가능하므로, 
+  // Custom Token 방식(Vercel API 통신)을 위해 네이버 로그인 페이지로 이동합니다.
+  const clientId = 'bHrWcLM6mH_duVHLXhzF';
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  // Vercel의 redirect 허용 목록에 localhost 주소나 배포 주소가 있어야 합니다.
+  const redirectUri = isLocal ? 'http://localhost:3000/mypage' : 'https://bangmoonlog.vercel.app/mypage';
   
+  const state = Math.random().toString(36).substring(7);
+  localStorage.setItem('naver_auth_state', state);
+  
+  const authUrl = `https://nid.naver.com/oauth2.0/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+  
+  window.location.href = authUrl;
+};
+
+export const handleNaverCallback = async (accessToken: string) => {
   try {
-    const result = await signInWithPopup(auth, provider);
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // 로컬 개발 환경에서는 RSBuild가 /api 라우팅을 Vercel처럼 지원하지 않으므로, 테스트 용이성을 위해 배포된 Vercel API를 우선 호출하도록 합니다.
+    const apiUrl = isLocal ? 'https://bangmoonlog.vercel.app/api/naverAuth' : '/api/naverAuth';
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Naver Token Exchange Failed: ${response.status}`);
+    }
+
+    const { firebaseToken } = await response.json();
+    const result = await signInWithCustomToken(auth, firebaseToken);
     await saveUserToFirestore(result.user);
     return result.user;
   } catch (error) {
-    handleAuthError(error, "네이버");
+    handleAuthError(error, "네이버(커스텀)");
   }
 };
 

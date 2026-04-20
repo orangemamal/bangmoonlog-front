@@ -9,7 +9,7 @@ import { db } from "../services/firebase";
 import {
   collection, query, where, onSnapshot, doc, deleteDoc, getDoc, setDoc
 } from "firebase/firestore";
-import { signInWithGoogle, signInWithKakao, signInWithNaver } from "../services/authService";
+import { signInWithGoogle, signInWithKakao, signInWithNaver, handleNaverCallback } from "../services/authService";
 import { getUserTitle } from "../utils/titleSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -95,6 +95,20 @@ export function MyPage() {
       setRecentLogs(details);
     }
   }, []);
+
+  // 네이버 로그인 해시 파싱 (implicit 흐름으로 커스텀 토큰 Vercel API 처리용)
+  useEffect(() => {
+    if (window.location.hash.includes('access_token=')) {
+      const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+      const token = hashParams.get('access_token');
+      if (token) {
+        handleNaverCallback(token).then((result) => {
+          if (result) navigate('/');
+        });
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if (!user?.id) return;
