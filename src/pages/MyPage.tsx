@@ -9,6 +9,7 @@ import { db } from "../services/firebase";
 import {
   collection, query, where, onSnapshot, doc, deleteDoc, getDoc, setDoc
 } from "firebase/firestore";
+import { signInWithGoogle, signInWithKakao, signInWithNaver } from "../services/authService";
 import { getUserTitle } from "../utils/titleSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -24,7 +25,7 @@ import logoSvg from "../assets/images/bangmoonlog_logo.svg";
 const ENABLE_PROFILE_PHOTO_UPLOAD = true;
 
 export function MyPage() {
-  const { isLoggedIn, login, logout, user, updateProfile } = useAuth();
+  const { isLoggedIn, logout, user, updateProfile, loading } = useAuth();
   const [stats, setStats] = useState({ likes: 0, reviews: 0 });
   const [showTitleInfo, setShowTitleInfo] = useState(false);
   const [isBookmarkModalOpen, setBookmarkModalOpen] = useState(false);
@@ -62,6 +63,17 @@ export function MyPage() {
   ];
 
   const navigate = useNavigate();
+
+  const handleLogin = useCallback(async (providerFn: () => Promise<any>) => {
+    try {
+      const result = await providerFn();
+      if (result) {
+        navigate("/"); // 로그인 성공 시 홈(지도)으로 리다이렉트
+      }
+    } catch (error) {
+      console.error("Login handle error", error);
+    }
+  }, [navigate]);
 
   // 최근 본 목록 상세 로드 함수를 외부로 추출
   const loadRecentDetails = useCallback(async () => {
@@ -182,6 +194,12 @@ export function MyPage() {
     alert("브라우저 메뉴의 '홈 화면에 추가'를 눌러 앱처럼 사용해보세요! ✨");
   };
 
+  if (loading) {
+    return <div className="mypage mypage--guest" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div className="initial-loader" style={{ width: '32px', height: '32px', border: '3px solid #E5E8EB', borderTopColor: '#3182F6', borderRadius: '50%', animation: 'init-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }} />
+    </div>;
+  }
+
   if (!isLoggedIn) {
     return (
       <div className="mypage mypage--guest">
@@ -190,14 +208,24 @@ export function MyPage() {
             <Award size={40} color="#3182F6" />
           </div>
           <h2>리얼한 거주 후기,<br />지금 바로 확인해보세요!</h2>
-          <p>로그인하고 전국 방방곡곡의 솔직 담백한<br />방문록을 구경해보세요.</p>
 
-          <div className="mypage__login-prompt-grid">
-            <button className="mypage__login-btn" onClick={() => login({ id: 'test_a', name: '이민수' })}>이민수</button>
-            <button className="mypage__login-btn" style={{ backgroundColor: '#FFF0F0', color: '#F04452' }} onClick={() => login({ id: 'test_b', name: '김지영' })}>김지영</button>
-            <button className="mypage__login-btn" style={{ backgroundColor: '#E7F9F1', color: '#00A968' }} onClick={() => login({ id: 'test_c', name: '박태환' })}>박태환</button>
-            <button className="mypage__login-btn" style={{ backgroundColor: '#F2F4F6', color: '#4E5968' }} onClick={() => login({ id: 'test_d', name: '최소연' })}>최소연</button>
+          <div className="mypage__login-buttons">
+            <button className="login-btn login-btn--google" onClick={() => handleLogin(signInWithGoogle)}>
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" />
+              <span>Google 계정으로 로그인</span>
+            </button>
+
+            <button className="login-btn login-btn--kakao" onClick={() => handleLogin(signInWithKakao)}>
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.558 1.712 4.8 4.346 6.09l-.437 2.45c-.035.196.082.38.267.38.083 0 .166-.03.23-.086l2.91-1.928c.636.084 1.296.128 1.984.128 4.97 0 9-3.186 9-7.115S16.97 3 12 3z" /></svg>
+              <span>카카오톡 계정으로 로그인</span>
+            </button>
+
+            <button className="login-btn login-btn--naver" onClick={() => handleLogin(signInWithNaver)}>
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.273 12.845L11.373 6.012H7.031V17.988H11.517V11.155L16.417 17.988H20.759V6.012H16.273V12.845Z" /></svg>
+              <span>네이버 계정으로 로그인</span>
+            </button>
           </div>
+          <p className="login-agreement">첫 로그인 시 <span>이용약관</span> 및 <span>개인정보처리방침</span> 동의로 간주됩니다.</p>
         </div>
       </div>
     );
@@ -209,43 +237,53 @@ export function MyPage() {
     <div className="mypage">
       <div className="mypage__profile">
         <div className="mypage__profile-row">
-          <div className="mypage__profile-info">
+          {/* 1구역: 프사 */}
+          <div className="mypage__avatar-zone">
             {ENABLE_PROFILE_PHOTO_UPLOAD && user?.id ? (
               <ProfileAvatarUpload
                 userId={user.id}
-                userName={user.name}
+                userName={user.displayName || user.name}
                 photoURL={user.photoURL}
                 updateProfile={updateProfile}
               />
-            ) : null}
-            <div className="mypage__profile-details">
+            ) : (
+              <div className="mypage__avatar">
+                {user?.displayName?.charAt(0) || '방'}
+              </div>
+            )}
+          </div>
+
+          {/* 2구역: 회원정보 */}
+          <div className="mypage__info-zone">
+            <div className="mypage__name-line">
               {authorTitle && (
-                <div className="mypage__title-row">
-                  <span className="mypage__author-title">
-                    <span className="icon">{authorTitle.icon}</span>
-                    <span className="text">{authorTitle.title}</span>
-                  </span>
-                  <button onClick={() => setShowTitleInfo(true)} className="mypage__title-help">
-                    <HelpCircle size={14} color="#1B64DA" />
-                  </button>
-                </div>
+                <span className="mypage__author-title">
+                  <span className="icon">{authorTitle.icon}</span>
+                  <span className="text">{authorTitle.title}</span>
+                </span>
               )}
-              <div className="mypage__name-wrapper">
-                <h1 className="mypage__name">{user?.name} 님</h1>
+              <div className="mypage__name-row">
+                <span className="mypage__name">{user?.displayName || user?.name || '방문인'} 님</span>
                 <button
                   className="mypage__edit-name-btn"
                   onClick={() => {
-                    setNewName(user?.name || "");
+                    setNewName(user?.displayName || user?.name || "");
                     setIsEditNameModalOpen(true);
                   }}
                 >
-                  <Pencil size={16} color="#8B95A1" />
+                  <Pencil size={14} color="#8B95A1" />
                 </button>
               </div>
-              <p className="mypage__email">{user?.id}@toss.im</p>
             </div>
+            <p className="mypage__email">{user?.email || (user?.isAnonymous ? '게스트 로그인 중' : '이메일 정보 없음')}</p>
           </div>
-          <button className="mypage__logout-btn" onClick={logout}>로그아웃</button>
+
+          {/* 3구역: 로그아웃 */}
+          <div className="mypage__logout-zone">
+            <button className="mypage__logout-btn" onClick={logout}>
+              로그아웃
+            </button>
+          </div>
         </div>
 
         <div className="mypage__stats">

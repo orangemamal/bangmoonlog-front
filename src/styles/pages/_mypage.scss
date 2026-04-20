@@ -16,6 +16,10 @@
   // 비로그인 상태
   &--guest {
     background-color: $color-surface;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   // 로그인 유도 화면
@@ -23,18 +27,16 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    height: 100%;
-    background-color: $color-surface;
-    padding: 0 $padding-h;
     text-align: center;
+    padding: 0 $padding-h;
+    width: 100%;
     box-sizing: border-box;
 
     &-icon {
       width: 80px;
       height: 80px;
       background-color: $color-bg;
-      border-radius: 50%;
+      border-radius: 24px;
       margin-bottom: 24px;
       display: flex;
       align-items: center;
@@ -42,37 +44,90 @@
     }
 
     h2 {
-      font-size: $font-size-title;
-      font-weight: $font-weight-title;
+      font-size: 24px;
+      font-weight: 700;
       color: $color-text-main;
-      margin: 0 0 8px;
+      margin-bottom: 12px;
       line-height: 1.4;
     }
 
     p {
-      font-size: $font-size-body;
+      font-size: 15px;
       color: $color-text-caption;
       margin-bottom: 32px;
-      line-height: 1.5;
+      line-height: 1.6;
       word-break: keep-all;
     }
   }
 
-  &__login-btn {
+  // 신규 로그인 버튼들 (디자인 최적화)
+  &__login-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     width: 100%;
-    background-color: $color-primary;
-    color: white;
-    border-radius: $radius-lg;
-    padding: 16px;
-    font-size: 16px;
-    font-weight: 700;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(49, 130, 246, 0.3);
-    transition: transform 0.1s;
-    font-family: $font-family;
+    max-width: 340px;
+    margin-top: 16px;
 
-    &:active { transform: scale(0.98); }
+    .login-btn {
+      width: 100%;
+      height: 54px;
+      border-radius: 27px; // Pill shape
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      &:hover {
+        opacity: 0.9;
+      }
+
+      img,
+      svg {
+        position: absolute;
+        left: 20px;
+        width: 22px;
+        height: 22px;
+      }
+
+      &--google {
+        background-color: #ffffff;
+        color: #3c4043;
+        border: 1px solid #e5e8eb;
+      }
+
+      &--kakao {
+        background-color: #FEE500;
+        color: #191919;
+      }
+
+      &--naver {
+        background-color: #03C75A;
+        color: #ffffff;
+      }
+    }
+  }
+
+  .login-agreement {
+    font-size: 12px;
+    color: #adb5bd;
+    margin-top: 32px;
+    line-height: 1.6;
+
+    span {
+      color: #3182f6;
+      text-decoration: underline;
+      cursor: pointer;
+    }
   }
 
   // 프로필 섹션
@@ -94,14 +149,27 @@
   }
 
   &__profile-row {
-    @include flex-between;
-    margin-bottom: 24px;
-  }
-
-  &__profile-info {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
+    margin-bottom: 24px;
+    width: 100%;
+  }
+
+  &__avatar-zone {
+    flex-shrink: 0;
+  }
+
+  &__info-zone {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__logout-zone {
+    flex-shrink: 0;
   }
 
   &__avatar-wrapper {
@@ -144,16 +212,16 @@
     pointer-events: none;
   }
 
-  &__name-wrapper {
+  &__name-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
   }
 
   &__name {
-    font-size: $font-size-title;
-    font-weight: $font-weight-title;
-    color: $color-text-main;
+    font-size: 19px;
+    font-weight: 700;
+    color: #333d4b;
   }
 
   &__edit-name-btn {
@@ -180,13 +248,33 @@
     font-size: 13px;
     color: $color-text-disabled;
     margin-top: 4px;
+    max-width: 180px; // 적절한 너비 제한
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__logout-btn {
+    font-size: 13px;
+    font-weight: 500;
+    color: #8b95a1;
+    background-color: #f2f4f6;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover {
+      background-color: #e5e8eb;
+    }
   }
 
   &__author-title {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 22px; // 소수점 발생 방지용 고정 높이
+    height: 22px;
     padding: 0 8px;
     background-color: #E8F3FF;
     border-radius: 11px;
@@ -196,13 +284,14 @@
     line-height: 1;
     gap: 4px;
     box-sizing: border-box;
+    margin-bottom: 4px;
 
     .icon {
       font-size: 12px;
       display: inline-flex;
       align-items: center;
       position: relative;
-      top: -1px; // 이모지가 텍스트보다 살짝 높게 뜨는 현상 보정
+      top: -1px;
     }
 
     .text {
@@ -222,7 +311,6 @@
     cursor: pointer;
   }
 
-  // 스탯
   &__stats {
     display: flex;
     gap: 12px;
@@ -254,7 +342,6 @@
     color: $color-text-main;
   }
 
-  // 메뉴
   &__menu-section {
     flex: 1;
     margin-top: 12px;
@@ -341,66 +428,12 @@
     }
   }
 
-  &__spacer { 
+  &__spacer {
     height: 1px;
     background-color: $color-border-light;
     margin: 8px 8px;
   }
 
-  // 로그인 유도 섹션
-  &--guest {
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: $color-surface;
-  }
-
-  &__login-prompt {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 24px;
-    width: 100%;
-
-    &-icon {
-      width: 80px;
-      height: 80px;
-      background-color: #f2f4f6;
-      border-radius: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 24px;
-    }
-
-    h2 {
-      font-size: 24px;
-      font-weight: 700;
-      color: #191f28;
-      line-height: 1.4;
-      margin-bottom: 12px;
-    }
-
-    p {
-      font-size: 15px;
-      color: #4e5968;
-      line-height: 1.6;
-      margin-bottom: 32px;
-    }
-
-    &-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 16px;
-      width: 100%;
-      max-width: 300px;
-    }
-  }
-
-  // 프로필 정보
   &__profile-details {
     display: flex;
     flex-direction: column;
@@ -426,7 +459,6 @@
     background-color: #fff0f0;
   }
 
-  // 모달/시트 공통
   &__full-modal {
     position: fixed;
     inset: 0;
@@ -463,7 +495,6 @@
     padding: 20px;
   }
 
-  // 리스트 아이템
   &__announcement-item {
     padding: 16px;
     border-radius: 16px;
@@ -482,9 +513,14 @@
     &-category {
       font-size: 12px;
       font-weight: 700;
-      
-      &.maintenance { color: #f04452; }
-      &.notice { color: #3182f6; }
+
+      &.maintenance {
+        color: #f04452;
+      }
+
+      &.notice {
+        color: #3182f6;
+      }
     }
 
     &-fixed {
@@ -513,7 +549,6 @@
     }
   }
 
-  // 제휴 문의
   &__partnership {
     &-slogan {
       font-size: 22px;
@@ -522,7 +557,7 @@
       color: #191f28;
       margin-bottom: 32px;
       text-align: center;
-      
+
       strong {
         color: #3182f6;
         font-weight: 700;
@@ -563,7 +598,7 @@
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        
+
         .logo-wrapper {
           display: flex;
           align-items: center;
@@ -574,7 +609,7 @@
             height: 32px;
             border-radius: 8px;
             object-fit: contain;
-            background-color: white; // SVG 배경이 투명하길 기대하며 화이트 배경 추가
+            background-color: white;
             padding: 4px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
           }
@@ -586,8 +621,8 @@
             letter-spacing: -0.5px;
           }
         }
-        
-        .badge { 
+
+        .badge {
           background: rgba(49, 130, 246, 0.15);
           color: #3182f6 !important;
           border: 1px solid rgba(49, 130, 246, 0.3);
@@ -630,8 +665,8 @@
           transform: scale(0.98);
         }
 
-        .value-icon { 
-          font-size: 24px; 
+        .value-icon {
+          font-size: 24px;
           width: 48px;
           height: 48px;
           background-color: white;
@@ -648,11 +683,11 @@
           font-size: 13px;
           color: #6b7684;
           line-height: 1.5;
-          
-          strong { 
-            color: #333d4b; 
+
+          strong {
+            color: #333d4b;
             font-size: 16px;
-            margin-bottom: 2px; 
+            margin-bottom: 2px;
             font-weight: 700;
           }
         }
@@ -682,7 +717,6 @@
     }
   }
 
-  // 문의하기
   &__inquiry {
     display: flex;
     flex-direction: column;
@@ -720,7 +754,9 @@
         background-color: white;
       }
 
-      &::placeholder { color: #adb5bd; }
+      &::placeholder {
+        color: #adb5bd;
+      }
     }
 
     &-select {
@@ -752,7 +788,10 @@
         border-color: #3182f6;
         background-color: white;
       }
-      &::placeholder { color: #adb5bd; }
+
+      &::placeholder {
+        color: #adb5bd;
+      }
     }
 
     &-counter {
@@ -786,667 +825,26 @@
     line-height: 1.8;
     font-size: 16px;
     color: #4e5968;
-    
-    p { margin-bottom: 12px; }
-    ul, ol { margin-bottom: 16px; padding-left: 20px; }
-    li { margin-bottom: 4px; }
+
+    p {
+      margin-bottom: 12px;
+    }
+
+    ul,
+    ol {
+      margin-bottom: 16px;
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
   }
 
-  // 칭호 모달
   &__title-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 24px;
-    
-    h2 { font-size: 22px; font-weight: bold; color: #333d4b; margin: 0; }
   }
-
-  &__title-modal-close {
-    background: #f2f4f6;
-    border: none;
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  &__title-modal-desc-box {
-    background-color: #f9fafb;
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 24px;
-    
-    p { font-size: 15px; color: #4e5968; margin: 0; line-height: 1.6; }
-  }
-
-  &__title-step-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  &__title-step-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px;
-    border-radius: 16px;
-    border: 1px solid #f2f4f6;
-    background-color: white;
-
-    &.active { background-color: #e8f3ff; }
-
-    &-left { display: flex; align-items: center; gap: 12px; }
-    &-icon { font-size: 24px; }
-    &-info { display: flex; flex-direction: column; }
-    &-name { font-size: 16px; font-weight: bold; color: #333d4b; }
-    &-requirement { font-size: 13px; color: #6b7684; }
-  }
-
-  &__notif-modal {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: white;
-    border-top-left-radius: 24px;
-    border-top-right-radius: 24px;
-    padding: 32px 24px 48px;
-    z-index: 3001;
-    max-height: 80vh;
-    overflow-y: auto;
-  }
-
-  &__notif-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    h2 { font-size: 20px; font-weight: bold; color: #191f28; margin: 0; }
-  }
-
-  &__notif-item-list {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-  }
-
-  &__notif-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    
-    &-info { display: flex; flex-direction: column; gap: 4px; }
-    &-title { font-size: 16px; font-weight: 600; color: #333d4b; }
-    &-desc { font-size: 13px; color: #8b95a1; }
-  }
-
-  &__notif-footer {
-    margin-top: 48px;
-    padding: 20px;
-    background-color: #f9fafb;
-    border-radius: 16px;
-    p { margin: 0; font-size: 13px; color: #6b7684; line-height: 1.6; }
-  }
-
-  // 찜한 리스트
-  &__bookmark-header {
-    padding: 20px 24px;
-    backgroundColor: white;
-    border-bottom: 1px solid #f2f4f6;
-    display: flex;
-    align-items: center;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    
-    .back-btn { border: none; background: none; margin-right: 16px; padding: 4px; display: flex; }
-    h2 { font-size: 18px; font-weight: 700; color: #333d4b; margin: 0; }
-  }
-
-  &__bookmark-empty {
-    padding: 100px 0;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    .icon { font-size: 40px; }
-    p { font-size: 15px; color: #8b95a1; line-height: 1.6; }
-  }
-
-  &__bookmark-item {
-    background-color: white;
-    border-radius: 20px;
-    padding: 20px;
-    margin-bottom: 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-    cursor: pointer;
-    gap: 12px;
-
-    &-left { display: flex; gap: 16px; align-items: center; flex: 1; min-width: 0; }
-    &-icon { width: 48px; height: 48px; border-radius: 14px; background-color: #e8f3ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    &-info { flex: 1; min-width: 0; }
-    &-name { font-size: 16px; font-weight: 600; color: #333d4b; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    &-address { font-size: 13px; color: #8b95a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    &-delete { border: none; background: none; color: #b0b8c1; padding: 8px; flex-shrink: 0; }
-  }
-
-  // 토글 버튼
-  .toggle-btn {
-    width: 40px;
-    height: 22px;
-    border-radius: 11px;
-    position: relative;
-    border: none;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    flex-shrink: 0;
-    padding: 0;
-
-    &.on {
-      background-color: #3182f6;
-    }
-
-    &.off {
-      background-color: #e5e8eb;
-    }
-
-    &__thumb {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background-color: white;
-      position: absolute;
-      top: 2px;
-      left: 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-    }
-  }
-
-  // 칭호 모달 스타일 (모바일 친화적 바텀 시트)
-  &__title-modal {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: white;
-    border-top-left-radius: 24px;
-    border-top-right-radius: 24px;
-    padding: 32px 24px 48px;
-    z-index: 3001;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.1);
-    
-    &::before {
-      content: '';
-      position: absolute;
-      top: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 40px;
-      height: 4px;
-      background-color: $color-border;
-      border-radius: 2px;
-    }
-  }
-
-  // 카드 리스트
-  &__card-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  &__card {
-    background-color: #F9FAFB;
-    border-radius: 20px;
-    padding: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    transition: background-color 0.1s;
-
-    &:active {
-      background-color: #F2F4F6;
-    }
-  }
-
-  &__card-left {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-  }
-
-  &__card-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    &.recent {
-      background-color: #E8F3FF;
-    }
-    
-    &.review {
-      background-color: #F0F7FF;
-    }
-  }
-
-  &__card-info {
-    display: flex;
-    flex-direction: column;
-    
-    .title {
-      font-weight: 600;
-      font-size: 16px;
-      color: #333D4B;
-      margin-bottom: 4px;
-    }
-
-    .date {
-      font-size: 13px;
-      color: #8B95A1;
-    }
-  }
-
-  &__card-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  &__card-more-btn {
-    background: none;
-    border: none;
-    padding: 8px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  &__card-menu {
-    position: absolute;
-    right: 0;
-    top: 36px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    padding: 4px;
-    min-width: 120px;
-
-    button {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 16px;
-      border: none;
-      background: transparent;
-      text-align: left;
-      cursor: pointer;
-      font-size: 14px;
-      color: #333D4B;
-
-      &.danger {
-        color: #E84040;
-      }
-
-      &:active {
-        background-color: #F2F4F6;
-        border-radius: 4px;
-      }
-    }
-  }
-
-  &__card-menu-divider {
-    height: 1px;
-    background-color: #F2F4F6;
-    margin: 0 4px;
-  }
-
-  // 삭제 확인 모달
-  &__confirm-overlay {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 4000;
-    backdrop-filter: blur(2px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
-
-  &__confirm-modal {
-    background: white;
-    border-radius: 24px;
-    padding: 32px 24px 24px;
-    z-index: 4001;
-    width: 100%;
-    max-width: 320px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-  }
-
-  &__confirm-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-  }
-
-  &__confirm-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: #191F28;
-    margin: 0 0 8px;
-  }
-
-  &__confirm-desc {
-    font-size: 14px;
-    color: #8B95A1;
-    margin: 0 0 28px;
-    line-height: 1.5;
-  }
-
-  &__confirm-actions {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-  }
-
-  &__confirm-cancel {
-    flex: 1;
-    padding: 14px;
-    border: none;
-    border-radius: 12px;
-    background-color: #F2F4F6;
-    color: #4E5968;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: $font-family;
-    transition: background-color 0.1s;
-
-    &:active { background-color: #E5E8EB; }
-  }
-
-  &__confirm-ok {
-    flex: 1;
-    padding: 14px;
-    border: none;
-    border-radius: 12px;
-    background-color: #3182F6;
-    color: white;
-    font-size: 15px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: $font-family;
-    transition: background-color 0.1s;
-
-    &:active { background-color: #1B64DA; }
-  }
-
-  // 1:1 문의 폼
-  &__inquiry {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-    padding: 8px 4px;
-    margin-bottom: 100px;
-  }
-
-  &__inquiry-field {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  &__inquiry-label {
-    font-size: 15px;
-    font-weight: 700;
-    color: #333D4B;
-  }
-
-  &__inquiry-input {
-    width: 100%;
-    border: none;
-    border-bottom: 1px solid #E5E8EB;
-    padding: 12px 0;
-    font-size: 16px;
-    font-family: $font-family;
-    outline: none;
-    background: transparent;
-    transition: border-color 0.2s;
-
-    &::placeholder {
-      color: #ADB5BD;
-    }
-
-    &:focus {
-      border-bottom: 2px solid $color-primary;
-    }
-  }
-
-  &__inquiry-select {
-    appearance: none;
-    cursor: pointer;
-    color: #333D4B;
-
-    &:invalid {
-      color: #ADB5BD;
-    }
-    
-    // 기본 선택 상태 텍스트 색상 대응
-    &[value=""] {
-      color: #ADB5BD;
-    }
-  }
-
-  &__inquiry-textarea {
-    width: 100%;
-    min-height: 280px;
-    background-color: #F2F4F8;
-    border: none;
-    border-radius: 16px;
-    padding: 24px;
-    font-size: 16px;
-    font-family: $font-family;
-    resize: none;
-    outline: none;
-    line-height: 1.6;
-
-    &::placeholder {
-      color: #ADB5BD;
-    }
-  }
-
-  &__inquiry-counter {
-    position: absolute;
-    bottom: 16px;
-    right: 16px;
-    font-size: 13px;
-    color: #8B95A1;
-  }
-
-  &__inquiry-submit {
-    width: 100%;
-    height: 56px;
-    background-color: #E8F3FF;
-    color: #3182F6;
-    border: none;
-    border-radius: 28px;
-    font-size: 17px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: $font-family;
-    margin-top: 16px;
-
-    &:not(:disabled):active {
-      transform: scale(0.98);
-      background-color: #D0E6FF;
-    }
-
-    &:disabled {
-      background-color: #F2F4F6;
-      color: #B0B8C1;
-      cursor: not-allowed;
-    }
-
-    // 이미지는 제출버튼이 active 상태가 아닐 때도 약간 연한 파란색이므로 맞춰줌
-    &:not(:disabled) {
-      background-color: #E8F3FF;
-      color: #3182F6;
-    }
-  }
-
-  // 제휴 문의 브릿지 페이지
-  &__partnership {
-    padding: 24px 4px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 40px;
-  }
-
-  &__partnership-slogan {
-    font-size: 18px;
-    font-weight: 700;
-    color: #333D4B;
-    line-height: 1.4;
-    word-break: keep-all;
-  }
-
-  &__partnership-card {
-    width: 100%;
-    aspect-ratio: 1.6 / 1;
-    background: linear-gradient(135deg, #191F28 0%, #333D4B 100%);
-    border-radius: 24px;
-    padding: 32px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: flex-start;
-    text-align: left;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-    position: relative;
-    overflow: hidden;
-
-    &::after {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
-    .card-logo {
-      font-size: 22px;
-      font-weight: 800;
-      color: white;
-      letter-spacing: -0.5px;
-      
-      span {
-        color: #3182F6;
-        font-weight: 600;
-        font-size: 16px;
-        margin-left: 4px;
-        vertical-align: middle;
-      }
-    }
-
-    .card-philosophy {
-      font-size: 15px;
-      line-height: 1.6;
-      color: rgba(255, 255, 255, 0.8);
-      font-weight: 500;
-    }
-  }
-
-  &__partnership-values {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 0 8px;
-
-    .value-item {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      text-align: left;
-    }
-
-    .value-icon {
-      width: 44px;
-      height: 44px;
-      background-color: #F9FAFB;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-    }
-
-    .value-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      font-size: 13px;
-      color: #6B7684;
-
-      strong {
-        font-size: 15px;
-        color: #333D4B;
-        font-weight: 700;
-      }
-    }
-  }
-
-  &__partnership-submit {
-    width: 100%;
-    height: 60px;
-    background-color: #3182F6;
-    color: white;
-    border: none;
-    border-radius: 16px;
-    font-size: 17px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: $font-family;
-    margin-top: 20px;
-    box-shadow: 0 8px 24px rgba(49, 130, 246, 0.3);
-
-    &.glow-btn {
-      position: relative;
-      animation: buttonGlow 2s infinite;
-    }
-  }
-}
-
-@keyframes buttonGlow {
-  0% { box-shadow: 0 8px 24px rgba(49, 130, 246, 0.3); }
-  50% { box-shadow: 0 8px 32px rgba(49, 130, 246, 0.6); }
-  100% { box-shadow: 0 8px 24px rgba(49, 130, 246, 0.3); }
 }

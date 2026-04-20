@@ -117,6 +117,7 @@ const compressAndEncodeImage = (file: File): Promise<string> => {
 };
 
 export function Home() {
+  console.log("🏠 [Home] Component Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
   const { isLoggedIn, user, login } = useAuth();
   const { hasWatchedAd, watchAd, isAdShowing } = useAccessControl();
@@ -186,6 +187,284 @@ export function Home() {
     desc: "",
     icon: "🥳",
   });
+
+  const handleCloseDetail = useCallback(() => setSelectedReview(null), []);
+
+  const calculateAverageRating = useCallback((reviewList: Review[]) => {
+    if (!reviewList || reviewList.length === 0) return "0.0";
+    const totalAvg = reviewList.reduce((acc, rev) => {
+      const revAvg = ((rev.ratings?.light || 0) + (rev.ratings?.noise || 0) + (rev.ratings?.water || 0)) / 3;
+      return acc + revAvg;
+    }, 0);
+    return (totalAvg / reviewList.length).toFixed(2);
+  }, []);
+
+  const refreshMarkers = useCallback(async () => {
+    if (!mapInstance.current) return;
+    try {
+      const snapshot = await getDocs(collection(db, "reviews"));
+      const allReviews: any[] = [];
+      snapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => allReviews.push({ id: d.id, ...d.data() }));
+
+      const groups: { [key: string]: any[] } = {};
+      allReviews.forEach(r => {
+        const key = normalizeBaseAddress(r.address || r.location);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
+      });
+
+      const data = Object.keys(groups).map(addr => {
+        const list = groups[addr];
+        const first = list[0];
+        return {
+          address: addr,
+          lat: first.lat,
+          lng: first.lng,
+          count: list.length,
+          avgRating: calculateAverageRating(list),
+        };
+      });
+
+      allMarkersRef.current.forEach(m => m.setMap(null));
+      allMarkersRef.current = [];
+      if (clusterRef.current) {
+        clusterRef.current.setMap(null);
+        clusterRef.current = null;
+      }
+
+      const markers = data.map(loc => {
+        const pos = new window.naver.maps.LatLng(loc.lat, loc.lng);
+        const m = new window.naver.maps.Marker({
+          position: pos,
+          map: mapInstance.current,
+          title: loc.address,
+          icon: {
+            content: `
+              <div class="marker-container">
+                <div class="marker-bubble">
+                  <span class="count">${loc.count}</span>
+                </div>
+              </div>
+            `,
+            anchor: new window.naver.maps.Point(21, 21),
+          }
+        });
+        (m as any).propertyCount = loc.count;
+        allMarkersRef.current.push(m);
+
+        window.naver.maps.Event.addListener(m, "click", () => {
+          const latLng = m.getPosition();
+          const curZoom = mapInstance.current.getZoom();
+          mapInstance.current.autoResize();
+
+          if (curZoom < 17) {
+            mapInstance.current.morph(latLng, 17, { duration: 300, easing: "linear" });
+            if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
+            return;
+          }
+
+          if (curZoom < 19) {
+            mapInstance.current.morph(latLng, 19, { duration: 300, easing: "linear" });
+            if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
+            return;
+          }
+
+          mapInstance.current.panTo(latLng, { duration: 300, easing: "linear" });
+
+          const checkBookmark = async () => {
+            let isBookmarked = false;
+            if (isLoggedIn && user) {
+              const stdAddr = normalizeBaseAddress(loc.address);
+              const bookmarkId = `bookmark_${user.id}_${stdAddr.replace(/\s+/g, '_')}`;
+              const bRef = doc(db, "bookmarks", bookmarkId);
+              const bSnap = await getDoc(bRef);
+              isBookmarked = bSnap.exists();
+            }
+
+            const isRes = checkIsResidential(loc.address);
+
+            const openInfoWindow = async () => {
+              let hasWritten = false;
+              if (isLoggedIn && user?.id) {
+                const q = query(
+                  collection(db, "reviews"),
+                  where("authorId", "==", user.id),
+                  where("address", "==", loc.address)
+                );
+                const snap = await getDocs(q);
+                hasWritten = !snap.empty;
+              }
+
+              const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
+              const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
+
+              infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+              infoWindowInstance.current.setContent(`
+                <div class="iw-container marker">
+                  <div class="iw-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                      <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
+                      ${isRes ? `
+                      <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${loc.address}', ${loc.lat}, ${loc.lng})">
+                        <svg width="24" height="24" viewBox="0 0 24 24" 
+                          fill="${isBookmarked ? '#FFD43B' : 'none'}" 
+                          stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                      </button>` : ''}
+                    </div>
+                    <div class="iw-address"><span>📍</span><span>${loc.address}</span></div>
+                    <div class="iw-stats">
+                      <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(loc.avgRating || 0).toFixed(2)}</span></div></div>
+                      <div class="iw-divider"></div>
+                      <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${loc.count}건</span></div></div>
+                    </div>
+                    <div class="iw-button-group">
+                      <button class="iw-button iw-button--read" onclick="window.__openReadList('${loc.address}')">방문록 보기</button>
+                      ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${loc.address}', ${loc.lat}, ${loc.lng})">${buttonText}</button>` : ''}
+                    </div>
+                    ${!isRes ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
+                         <span style="font-size:14px;">🏠</span>
+                         <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
+                       </div>` : ''}
+                    <div class="iw-arrow"></div>
+                  </div>
+                </div>
+              `);
+              infoWindowInstance.current.open(mapInstance.current, latLng);
+            };
+
+            openInfoWindow();
+          };
+          checkBookmark();
+        });
+        return m;
+      });
+
+      clusterRef.current = new window.MarkerClustering({
+        minClusterSize: 2,
+        maxZoom: 18,
+        map: mapInstance.current,
+        markers: markers,
+        disableClickZoom: false,
+        gridSize: 180,
+        icons: [
+          { content: '<div class="cluster cluster-s"><div></div></div>', size: new window.naver.maps.Size(52, 52), anchor: new window.naver.maps.Point(26, 26) },
+          { content: '<div class="cluster cluster-m"><div></div></div>', size: new window.naver.maps.Size(60, 60), anchor: new window.naver.maps.Point(30, 30) },
+          { content: '<div class="cluster cluster-l"><div></div></div>', size: new window.naver.maps.Size(72, 72), anchor: new window.naver.maps.Point(36, 36) },
+        ],
+        stylingFunction: (clusterMarker: any, count: number) => {
+          const el = clusterMarker.getElement();
+          const div = el.querySelector('div');
+          if (div) {
+            if (!clusterRef.current) {
+              div.innerText = count;
+              return;
+            }
+            const clusterObj = clusterRef.current._clusters.find((c: any) => c._clusterMarker === clusterMarker);
+            if (clusterObj) {
+              const members = clusterObj.getClusterMember();
+              const totalSum = members.reduce((acc: number, m: any) => acc + (m.propertyCount || 0), 0);
+              div.innerText = totalSum > 999 ? "999+" : totalSum;
+              el.classList.remove('cluster-s', 'cluster-m', 'cluster-l');
+              if (totalSum < 10) el.classList.add('cluster-s');
+              else if (totalSum < 100) el.classList.add('cluster-m');
+              else el.classList.add('cluster-l');
+            } else {
+              div.innerText = count;
+            }
+          }
+        }
+      });
+
+      setTimeout(() => {
+        if (clusterRef.current) clusterRef.current._redraw();
+      }, 100);
+
+    } catch (e) { console.error("Marker refresh error:", e); }
+  }, [calculateAverageRating, isLoggedIn, user]);
+
+  const showAlert = useCallback((title: string, desc?: string, icon: string = "✅", onConfirm?: () => void) => {
+    setModalConfig({ isOpen: true, title, desc, icon, onConfirm, confirmText: "확인" });
+  }, []);
+
+  const showConfirm = useCallback((title: string, onConfirm: () => void, desc?: string, icon: string = "❓", onCancel?: () => void) => {
+    setModalConfig({
+      isOpen: true,
+      title,
+      desc,
+      icon,
+      onConfirm,
+      onCancel,
+      confirmText: "확인",
+      cancelText: "취소"
+    });
+  }, []);
+
+  const handleEditReview = useCallback((review: any) => {
+    setEditingReviewId(review.id);
+    setSelectedAddress(review.location);
+    setAddressDetail(review.addressDetail || "");
+    setSelectedCoord({ lat: review.lat || 37.5, lng: review.lng || 127.0 });
+    setComment(review.content);
+    setSelectedTags(review.tags || []);
+    setExperienceType(review.experienceType || "단순 방문");
+    setReadListOpen(false);
+    setSelectedReview(null);
+    setSheetOpen(true);
+  }, []);
+
+  const handleEditDetail = useCallback((review: any) => {
+    handleEditReview(review);
+  }, [handleEditReview]);
+
+  const handleDeleteReview = useCallback(async (id: string) => {
+    showConfirm(
+      "방문록 삭제",
+      async () => {
+        try {
+          const success = await deleteReview(id);
+          if (success) {
+            setReviews(prev => prev.filter(r => r.id !== id));
+            showAlert("삭제 완료", "방문록이 삭제되었습니다.", "🗑️");
+            refreshMarkers();
+          } else {
+            showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
+          }
+        } catch (e) {
+          console.error(e);
+          showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
+        }
+      },
+      "정말 이 방문록을 삭제하시겠습니까? (영구 삭제)",
+      "🗑️"
+    );
+  }, [refreshMarkers, showAlert, showConfirm]);
+
+  const handleDeleteDetail = useCallback((id: string) => {
+    handleDeleteReview(id);
+  }, [handleDeleteReview]);
+
+  const verifyLocation = useCallback((targetLat?: number, targetLng?: number) => {
+    if (!navigator.geolocation) return;
+    setIsVerifying(true);
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const uLat = pos.coords.latitude;
+      const uLng = pos.coords.longitude;
+      const lat = targetLat || selectedCoord?.lat;
+      const lng = targetLng || selectedCoord?.lng;
+      if (lat && lng) {
+        const dist = calculateDistance(uLat, uLng, lat, lng);
+        setVerificationDistance(dist);
+        setIsVerified(dist <= 150);
+      }
+      setIsVerifying(false);
+    }, (err) => {
+      console.error("GPS Verification Error:", err);
+      setIsVerifying(false);
+    }, { enableHighAccuracy: true });
+  }, [selectedCoord]);
 
   // [환영 모달] 첫 방문 시 노출 여부 체크
   useEffect(() => {
@@ -416,290 +695,6 @@ export function Home() {
 
     migrateAndCleanupBookmarks();
   }, [isLoggedIn, user?.id]);
-
-  // [핸들러] 리뷰 상세 보기 관련 핸들러 안정화 (무한 루프 해결)
-  const handleCloseDetail = useCallback(() => setSelectedReview(null), []);
-
-  const calculateAverageRating = useCallback((reviewList: Review[]) => {
-    if (!reviewList || reviewList.length === 0) return "0.0";
-    const totalAvg = reviewList.reduce((acc, rev) => {
-      const revAvg = ((rev.ratings?.light || 0) + (rev.ratings?.noise || 0) + (rev.ratings?.water || 0)) / 3;
-      return acc + revAvg;
-    }, 0);
-    return (totalAvg / reviewList.length).toFixed(2);
-  }, []);
-
-  const refreshMarkers = useCallback(async () => {
-    if (!mapInstance.current) return;
-    try {
-      const snapshot = await getDocs(collection(db, "reviews"));
-      const allReviews: any[] = [];
-      snapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => allReviews.push({ id: d.id, ...d.data() }));
-
-      const groups: { [key: string]: any[] } = {};
-      allReviews.forEach(r => {
-        const key = normalizeBaseAddress(r.address || r.location);
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(r);
-      });
-
-      const data = Object.keys(groups).map(addr => {
-        const list = groups[addr];
-        const first = list[0];
-        return {
-          address: addr,
-          lat: first.lat,
-          lng: first.lng,
-          count: list.length,
-          avgRating: calculateAverageRating(list),
-        };
-      });
-
-      allMarkersRef.current.forEach(m => m.setMap(null));
-      allMarkersRef.current = [];
-      if (clusterRef.current) {
-        clusterRef.current.setMap(null);
-        clusterRef.current = null;
-      }
-
-      const markers = data.map(loc => {
-        const pos = new window.naver.maps.LatLng(loc.lat, loc.lng);
-        const m = new window.naver.maps.Marker({
-          position: pos,
-          map: mapInstance.current,
-          title: loc.address,
-          icon: {
-            content: `
-              <div class="marker-container">
-                <div class="marker-bubble">
-                  <span class="count">${loc.count}</span>
-                </div>
-              </div>
-            `,
-            anchor: new window.naver.maps.Point(21, 21),
-          }
-        });
-        (m as any).propertyCount = loc.count;
-        allMarkersRef.current.push(m);
-
-        window.naver.maps.Event.addListener(m, "click", () => {
-          const latLng = m.getPosition();
-          const curZoom = mapInstance.current.getZoom();
-          mapInstance.current.autoResize();
-
-          // 줌 레벨에 따른 단계별 확대 로직 (19 미만은 모달 노출 X)
-          if (curZoom < 17) {
-            mapInstance.current.morph(latLng, 17, { duration: 300, easing: "linear" });
-            if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
-            return;
-          }
-
-          if (curZoom < 19) {
-            mapInstance.current.morph(latLng, 19, { duration: 300, easing: "linear" });
-            if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
-            return;
-          }
-
-          // 줌 레벨 19 이상일 때만 모달 노출 로직 실행
-          // 줌 레벨 19 이상일 때만 모달 노출 로직 실행
-          mapInstance.current.panTo(latLng, { duration: 300, easing: "linear" });
-
-          // [개선] 찜하기 상태 확인 로직 (조회 성능 및 정확도 향상: ID로 직접 조회)
-          const checkBookmark = async () => {
-            let isBookmarked = false;
-            if (isLoggedIn && user) {
-              const stdAddr = normalizeBaseAddress(loc.address);
-              const bookmarkId = `bookmark_${user.id}_${stdAddr.replace(/\s+/g, '_')}`;
-              const bRef = doc(db, "bookmarks", bookmarkId);
-              const bSnap = await getDoc(bRef);
-              isBookmarked = bSnap.exists();
-            }
-
-            const isRes = checkIsResidential(loc.address);
-
-            // [추가] 중복 작성 체크 후 말풍선 오픈
-            const openInfoWindow = async () => {
-              let hasWritten = false;
-              if (isLoggedIn && user?.id) {
-                const q = query(
-                  collection(db, "reviews"),
-                  where("authorId", "==", user.id),
-                  where("address", "==", loc.address)
-                );
-                const snap = await getDocs(q);
-                hasWritten = !snap.empty;
-              }
-
-              const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
-              const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
-
-              infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-              infoWindowInstance.current.setContent(`
-                <div class="iw-container marker">
-                  <div class="iw-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                      <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
-                      ${isRes ? `
-                      <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${loc.address}', ${loc.lat}, ${loc.lng})">
-                        <svg width="24" height="24" viewBox="0 0 24 24" 
-                          fill="${isBookmarked ? '#FFD43B' : 'none'}" 
-                          stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
-                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                        </svg>
-                      </button>` : ''}
-                    </div>
-                    <div class="iw-address"><span>📍</span><span>${loc.address}</span></div>
-                    <div class="iw-stats">
-                      <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(loc.avgRating || 0).toFixed(2)}</span></div></div>
-                      <div class="iw-divider"></div>
-                      <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${loc.count}건</span></div></div>
-                    </div>
-                    <div class="iw-button-group">
-                      <button class="iw-button iw-button--read" onclick="window.__openReadList('${loc.address}')">방문록 보기</button>
-                      ${isRes ? `<button class="iw-button iw-button--write" ${disabledAttr} onclick="window.__openWriteSheet('${loc.address}', ${loc.lat}, ${loc.lng})">${buttonText}</button>` : ''}
-                    </div>
-                    ${!isRes ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
-                         <span style="font-size:14px;">🏠</span>
-                         <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
-                       </div>` : ''}
-                    <div class="iw-arrow"></div>
-                  </div>
-                </div>
-              `);
-              infoWindowInstance.current.open(mapInstance.current, latLng);
-            };
-
-            openInfoWindow();
-          };
-          checkBookmark();
-        });
-        return m;
-      });
-
-      clusterRef.current = new window.MarkerClustering({
-        minClusterSize: 2,
-        maxZoom: 18,
-        map: mapInstance.current,
-        markers: markers,
-        disableClickZoom: false,
-        gridSize: 180,
-        icons: [
-          { content: '<div class="cluster cluster-s"><div></div></div>', size: new window.naver.maps.Size(52, 52), anchor: new window.naver.maps.Point(26, 26) },
-          { content: '<div class="cluster cluster-m"><div></div></div>', size: new window.naver.maps.Size(60, 60), anchor: new window.naver.maps.Point(30, 30) },
-          { content: '<div class="cluster cluster-l"><div></div></div>', size: new window.naver.maps.Size(72, 72), anchor: new window.naver.maps.Point(36, 36) },
-        ],
-        stylingFunction: (clusterMarker: any, count: number) => {
-          const el = clusterMarker.getElement();
-          const div = el.querySelector('div');
-          if (div) {
-            if (!clusterRef.current) {
-              div.innerText = count;
-              return;
-            }
-            const clusterObj = clusterRef.current._clusters.find((c: any) => c._clusterMarker === clusterMarker);
-            if (clusterObj) {
-              const members = clusterObj.getClusterMember();
-              const totalSum = members.reduce((acc: number, m: any) => acc + (m.propertyCount || 0), 0);
-              div.innerText = totalSum > 999 ? "999+" : totalSum;
-              el.classList.remove('cluster-s', 'cluster-m', 'cluster-l');
-              if (totalSum < 10) el.classList.add('cluster-s');
-              else if (totalSum < 100) el.classList.add('cluster-m');
-              else el.classList.add('cluster-l');
-            } else {
-              div.innerText = count;
-            }
-          }
-        }
-      });
-
-      setTimeout(() => {
-        if (clusterRef.current) clusterRef.current._redraw();
-      }, 100);
-
-    } catch (e) { console.error("Marker refresh error:", e); }
-  }, [calculateAverageRating]);
-
-  const showAlert = useCallback((title: string, desc?: string, icon: string = "✅", onConfirm?: () => void) => {
-    setModalConfig({ isOpen: true, title, desc, icon, onConfirm, confirmText: "확인" });
-  }, []);
-
-  const showConfirm = useCallback((title: string, onConfirm: () => void, desc?: string, icon: string = "❓", onCancel?: () => void) => {
-    setModalConfig({
-      isOpen: true,
-      title,
-      desc,
-      icon,
-      onConfirm,
-      onCancel,
-      confirmText: "확인",
-      cancelText: "취소"
-    });
-  }, []);
-
-  const handleEditReview = useCallback((review: any) => {
-    setEditingReviewId(review.id);
-    setSelectedAddress(review.location);
-    setAddressDetail(review.addressDetail || "");
-    setSelectedCoord({ lat: review.lat || 37.5, lng: review.lng || 127.0 });
-    setComment(review.content);
-    setSelectedTags(review.tags || []);
-    setExperienceType(review.experienceType || "단순 방문");
-    setReadListOpen(false);
-    setSelectedReview(null);
-    setSheetOpen(true);
-  }, []);
-
-  const handleEditDetail = useCallback((review: any) => {
-    handleEditReview(review);
-  }, [handleEditReview]);
-
-  const handleDeleteReview = useCallback(async (id: string) => {
-    showConfirm(
-      "방문록 삭제",
-      async () => {
-        try {
-          const success = await deleteReview(id);
-          if (success) {
-            setReviews(prev => prev.filter(r => r.id !== id));
-            showAlert("삭제 완료", "방문록이 삭제되었습니다.", "🗑️");
-            refreshMarkers();
-          } else {
-            showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
-          }
-        } catch (e) {
-          console.error(e);
-          showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
-        }
-      },
-      "정말 이 방문록을 삭제하시겠습니까? (영구 삭제)",
-      "🗑️"
-    );
-  }, [refreshMarkers, showAlert, showConfirm]);
-
-  const handleDeleteDetail = useCallback((id: string) => {
-    handleDeleteReview(id);
-  }, [handleDeleteReview]);
-
-  const verifyLocation = useCallback((targetLat?: number, targetLng?: number) => {
-    if (!navigator.geolocation) return;
-    setIsVerifying(true);
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const uLat = pos.coords.latitude;
-      const uLng = pos.coords.longitude;
-      const lat = targetLat || selectedCoord?.lat;
-      const lng = targetLng || selectedCoord?.lng;
-      if (lat && lng) {
-        const dist = calculateDistance(uLat, uLng, lat, lng);
-        setVerificationDistance(dist);
-        setIsVerified(dist <= 150);
-      }
-      setIsVerifying(false);
-    }, (err) => {
-      console.error("GPS Verification Error:", err);
-      setIsVerifying(false);
-    }, { enableHighAccuracy: true });
-  }, [selectedCoord]);
 
   // [개선] 현재 검색된 주소지(혹은 선택된 장소)의 방문록 태그들 중 빈도가 높은 상위 5개를 동적으로 추출
   const dynamicNeighborhoodTags = useMemo(() => {

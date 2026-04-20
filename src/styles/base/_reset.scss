@@ -4,9 +4,6 @@
 // CSS 리셋 & html/body 기본값
 // ============================================================
 
-// 토스 TDS 컬러 토큰 (CSS 파일이므로 @import 사용 - @use 불가)
-@import '@toss/tds-colors/colors.css';
-
 *,
 *::before,
 *::after {
@@ -54,4 +51,3 @@ a {
   display: flex;
   flex-direction: column;
 }
-

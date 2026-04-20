@@ -6,6 +6,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { useAuth } from "../../hooks/useAuth";
 
 export function Layout() {
+  console.log("🗺️ [Layout] Rendering");
   const location = useLocation();
   const { user } = useAuth();
   const [hasUnread, setHasUnread] = useState(false);
