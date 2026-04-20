@@ -816,6 +816,16 @@ export function Home() {
     };
 
     window.__openWriteSheet = (address: string, lat?: number, lng?: number) => {
+      if (!isLoggedIn) {
+        showConfirm(
+          "앗! 로그인이 필요해요 🏠",
+          () => navigate('/mypage'),
+          "방문록을 작성하여 정보를 나누고, 다른 분들의 생생한 후기도 모두 확인해 보세요!",
+          "🔒",
+          () => {}
+        );
+        return;
+      }
       setSelectedAddress(address);
       if (lat && lng) setSelectedCoord({ lat, lng });
 
@@ -1773,7 +1783,19 @@ export function Home() {
         <div className="submit-wrapper">
           <button
             className="iw-button"
-            onClick={handleSubmitReview}
+            onClick={() => {
+              if (!isLoggedIn) {
+                showConfirm(
+                  "앗! 로그인이 필요해요 🏠",
+                  () => navigate('/mypage'),
+                  "방문록을 작성하려면 로그인이 필요해요. 로그인 후 소중한 발자국을 남겨주세요!",
+                  "🔒",
+                  () => {}
+                );
+                return;
+              }
+              handleSubmitReview();
+            }}
             disabled={comment.length < 5}
           >
             {editingReviewId ? "수정 완료하기" : "방문록 등록하기"}
@@ -1810,7 +1832,7 @@ export function Home() {
                         showConfirm(
                           "앗! 로그인이 필요해요 🏠",
                           () => navigate('/mypage'),
-                          "로그인하시면 내 동네의 생생한 방문록을 모두 확인할 수 있습니다.",
+                          "로그인 후 방문록을 단 하나만 작성해도 모든 방문록을 자유롭게 읽을 수 있어요! ✨",
                           "🔒",
                           () => {}
                         );
@@ -1826,8 +1848,8 @@ export function Home() {
                             window.__openWriteSheet(selectedAddress, pos.lat(), pos.lng());
                           }
                         },
-                        "회원님의 소중한 후기 하나가 다른 분들에게 큰 도움이 돼요! 딱 하나만 작성해 보실래요?",
-                        "✍️"
+                        "회원님의 소중한 후기 하나가 다른 분들에게 큰 도움이 돼요! 딱 하나만 작성해 보실래요? 🎤",
+                        "🥳"
                       );
                       return;
                     }
