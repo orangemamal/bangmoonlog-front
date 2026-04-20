@@ -1840,7 +1840,7 @@ export function Home() {
                             "방문록 작성하고 전체보기 ✨",
                             () => navigate('/mypage'),
                             commonMsg,
-                            "🔒",
+                            "📍",
                             () => {}
                           );
                           return;
