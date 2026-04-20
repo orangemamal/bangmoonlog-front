@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { checkEligibleForNewTitle } from "../utils/titleSystem";
 import { useAuth } from "../hooks/useAuth";
+import { handleNaverCallback } from "../services/authService";
 import { useRecentLogs } from "../hooks/useRecentLogs";
 import { useAccessControl } from "../hooks/useAccessControl";
 import { ReviewDetail } from "../components/ReviewDetail";
@@ -189,6 +190,20 @@ export function Home() {
   });
 
   const handleCloseDetail = useCallback(() => setSelectedReview(null), []);
+
+  // [네이버 로그인] 홈(지도) 복귀 시 해시 토큰 처리
+  useEffect(() => {
+    if (window.location.hash.includes('access_token=')) {
+      const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+      const token = hashParams.get('access_token');
+      if (token) {
+        handleNaverCallback(token).then(() => {
+          // Toast 추후 구현 가능, 우선 토큰 제거 및 정리
+        });
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, []);
 
   const calculateAverageRating = useCallback((reviewList: Review[]) => {
     if (!reviewList || reviewList.length === 0) return "0.0";

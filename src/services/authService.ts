@@ -72,7 +72,7 @@ export const signInWithNaver = async () => {
   const clientId = 'bHrWcLM6mH_duVHLXhzF';
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   // Vercel의 redirect 허용 목록에 localhost 주소나 배포 주소가 있어야 합니다.
-  const redirectUri = isLocal ? 'http://localhost:3000/mypage' : 'https://bangmoonlog.vercel.app/mypage';
+  const redirectUri = isLocal ? 'http://localhost:3000/' : 'https://bangmoonlog.vercel.app/';
   
   const state = Math.random().toString(36).substring(7);
   localStorage.setItem('naver_auth_state', state);
