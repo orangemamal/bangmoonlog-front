@@ -24,9 +24,36 @@ import logoSvg from "../assets/images/bangmoonlog_logo.svg";
 /** Set true when Firebase Storage is ready — shows profile photo + upload UI. */
 const ENABLE_PROFILE_PHOTO_UPLOAD = true;
 
+// FAQ 아이템 컴포넌트 (아코디언 방식)
+const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className={`mypage__faq-item ${isOpen ? 'open' : ''}`}>
+      <button className="mypage__faq-question" onClick={() => setIsOpen(!isOpen)}>
+        <span>{question}</span>
+        <Icons.ChevronDown className="mypage__faq-icon" size={20} />
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, easing: [0.4, 0, 0.2, 1] }}
+            className="mypage__faq-answer-wrapper"
+          >
+            <div className="mypage__faq-answer" dangerouslySetInnerHTML={{ __html: answer }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export function MyPage() {
   const { isLoggedIn, logout, user, updateProfile, loading } = useAuth();
   const [stats, setStats] = useState({ likes: 0, reviews: 0 });
+  const [selectedFaqCategory, setSelectedFaqCategory] = useState("이용");
   const [showTitleInfo, setShowTitleInfo] = useState(false);
   const [isBookmarkModalOpen, setBookmarkModalOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<any[]>([]);
@@ -49,6 +76,7 @@ export function MyPage() {
   // 1:1 문의 폼 상태
   const [inquiryEmail, setInquiryEmail] = useState("");
   const [inquiryType, setInquiryType] = useState("");
+  const [inquiryContent, setInquiryContent] = useState("");
   // 사용자 이름 수정 상태
   const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -181,17 +209,25 @@ export function MyPage() {
     }
   };
 
-  // 공유하기 기능
-  const handleShare = () => {
-    if (window.confirm("방문Log 서비스를 친구들에게 공유할까요?")) {
-      // 가상의 Toss 공유 링크 생성 로직
-      alert("공유 링크가 복사되었습니다!");
-    }
-  };
+  // 공유하기 기능 (Web Share API 사용)
+  const handleShare = async () => {
+    const shareData = {
+      title: "방문Log - 리얼한 주거 후기 지도",
+      text: "살아봐야만 알 수 있는 진짜 집 이야기, 방문Log에서 확인해보세요! 🏠✨",
+      url: window.location.origin
+    };
 
-  // 홈 화면 추가
-  const handleAddToHome = () => {
-    alert("브라우저 메뉴의 '홈 화면에 추가'를 눌러 앱처럼 사용해보세요! ✨");
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        // 브라우저가 Share API를 지원하지 않을 경우 링크 복사
+        await navigator.clipboard.writeText(window.location.origin);
+        alert("공유 링크가 복사되었습니다! 🔗");
+      }
+    } catch (err) {
+      console.log("Sharing failed", err);
+    }
   };
 
   if (loading) {
@@ -257,9 +293,12 @@ export function MyPage() {
           <div className="mypage__info-zone">
             <div className="mypage__name-line">
               {authorTitle && (
-                <span className="mypage__author-title">
-                  <span className="icon">{authorTitle.icon}</span>
-                  <span className="text">{authorTitle.title}</span>
+                <span className="mypage__author-title-group" onClick={() => setShowTitleInfo(true)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', verticalAlign: 'middle' }}>
+                  <span className="mypage__author-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    <span className="icon" style={{ display: 'inline-flex', alignItems: 'center' }}>{authorTitle.icon}</span>
+                    <span className="text">{authorTitle.title}</span>
+                  </span>
+                  <HelpCircle size={18} color="#B0B8C1" strokeWidth={2} />
                 </span>
               )}
               <div className="mypage__name-row">
@@ -326,7 +365,7 @@ export function MyPage() {
                   badge={item.label === "찜한 리스트" && bookmarks.length > 0 ? bookmarks.length : undefined}
                   onClick={() => {
                     if (item.label === "1:1 문의하기") {
-                      setInquiryEmail(user?.id ? `${user.id}@toss.im` : "");
+                      setInquiryEmail(user?.email || "");
                       setInquiryType("");
                       setInquiryContent("");
                       setActiveModal("inquiry");
@@ -336,7 +375,6 @@ export function MyPage() {
                     }
                     else if (item.path.startsWith("mailto:")) window.location.href = item.path;
                     else if (item.path === "share") handleShare();
-                    else if (item.path === "add-to-home") handleAddToHome();
                     else if (item.label === "찜한 리스트") setBookmarkModalOpen(true);
                     else if (item.label === "내가 쓴 방문록") setActiveModal("reviews");
                     else if (item.label === "최근 본 방문록") {
@@ -366,8 +404,8 @@ export function MyPage() {
       <AnimatePresence>
         {activeModal && (
           <motion.div
-            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300, mass: 0.8 }}
             className="mypage__full-modal"
           >
             <div className="mypage__modal-header">
@@ -454,7 +492,7 @@ export function MyPage() {
                   <button
                     className="mypage__partnership-submit glow-btn"
                     onClick={() => {
-                      setInquiryEmail(user?.id ? `${user.id}@toss.im` : "");
+                      setInquiryEmail(user?.email || "");
                       setInquiryType("제휴 문의");
                       setInquiryContent(`안녕하세요, 방문Log 팀!\n함께 세입자의 세상을 바꿀 제안을 드리고 싶습니다.\n\n- 업체/성함: \n- 연락처: \n- 제안 내용(자유롭게): \n\n위 내용을 적어 보내주시면 검토 후 2-3일 내로 회신드리겠습니다.`);
                       setActiveModal("inquiry");
@@ -465,70 +503,160 @@ export function MyPage() {
                 </div>
               )}
               {activeModal === "inquiry" && (
-                <div className="mypage__inquiry">
-                  <div className="mypage__inquiry-field">
-                    <label className="mypage__inquiry-label">답변받으실 이메일</label>
-                    <input
-                      type="email"
-                      placeholder="email@example.com"
-                      className="mypage__inquiry-input"
-                      value={inquiryEmail}
-                      onChange={(e) => setInquiryEmail(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="mypage__inquiry-field">
-                    <label className="mypage__inquiry-label">문의 유형</label>
-                    <div className="mypage__inquiry-input-wrap">
-                      <select
-                        className="mypage__inquiry-input mypage__inquiry-select"
-                        value={inquiryType}
-                        onChange={(e) => setInquiryType(e.target.value)}
-                      >
-                        <option value="" disabled>카테고리 선택</option>
-                        <option value="서비스 이용">서비스 이용 문의</option>
-                        <option value="오류 제보">오류/버그 제보</option>
-                        <option value="계정/인증">계정 및 인증 관련</option>
-                        <option value="불건전 게시물">불건전 게시물 신고</option>
-                        <option value="기타">기타 문의</option>
-                      </select>
-                      <Icons.ChevronDown size={20} color="#8B95A1" className="mypage__inquiry-select-icon" />
-                    </div>
-                  </div>
-
-                  <div className="mypage__inquiry-field">
-                    <label className="mypage__inquiry-label">문의 내용</label>
-                    <div className="mypage__inquiry-input-wrap">
-                      <textarea
-                        className="mypage__inquiry-textarea"
-                        placeholder="내용을 입력하세요."
-                        maxLength={1000}
-                        value={inquiryContent}
-                        onChange={(e) => setInquiryContent(e.target.value)}
+                <div className="mypage__inquiry-container">
+                  <div className="mypage__inquiry-content">
+                    <div className="mypage__inquiry-field">
+                      <label className="mypage__inquiry-label">답변받으실 이메일</label>
+                      <input
+                        type="email"
+                        placeholder="email@example.com"
+                        className="mypage__inquiry-input"
+                        value={inquiryEmail}
+                        onChange={(e) => setInquiryEmail(e.target.value)}
                       />
-                      <div className="mypage__inquiry-counter">{inquiryContent.length}/1000</div>
+                    </div>
+
+                    <div className="mypage__inquiry-field">
+                      <label className="mypage__inquiry-label">문의 유형</label>
+                      <div className="mypage__inquiry-input-wrap">
+                        <select
+                          className="mypage__inquiry-input mypage__inquiry-select"
+                          value={inquiryType}
+                          onChange={(e) => setInquiryType(e.target.value)}
+                        >
+                          <option value="" disabled>카테고리 선택</option>
+                          <option value="서비스 이용">서비스 이용 문의</option>
+                          <option value="오류 제보">오류/버그 제보</option>
+                          <option value="계정/인증">계정 및 인증 관련</option>
+                          <option value="불건전 게시물">불건전 게시물 신고</option>
+                          <option value="기타">기타 문의</option>
+                        </select>
+                        <Icons.ChevronDown size={20} color="#8B95A1" className="mypage__inquiry-select-icon" />
+                      </div>
+                    </div>
+
+                    <div className="mypage__inquiry-field">
+                      <label className="mypage__inquiry-label">문의 내용</label>
+                      <div className="mypage__inquiry-input-wrap">
+                        <textarea
+                          className="mypage__inquiry-textarea"
+                          placeholder="내용을 입력하세요."
+                          maxLength={1000}
+                          value={inquiryContent}
+                          onChange={(e) => setInquiryContent(e.target.value)}
+                        />
+                        <div className="mypage__inquiry-counter">{inquiryContent.length}/1000</div>
+                      </div>
                     </div>
                   </div>
 
-                  <button
-                    className="mypage__inquiry-submit"
-                    disabled={!inquiryEmail || !inquiryType || !inquiryContent}
-                    onClick={() => {
-                      const subject = encodeURIComponent(`[방문Log 1:1문의] ${inquiryType}`);
-                      const body = encodeURIComponent(
-                        `답변받으실 이메일: ${inquiryEmail}\n` +
-                        `문의 유형: ${inquiryType}\n\n` +
-                        `-- 문의 내용 --\n${inquiryContent}`
-                      );
-                      window.location.href = `mailto:roomlog.cs@gmail.com?subject=${subject}&body=${body}`;
-                      alert("작성하신 내용으로 메일 앱을 실행합니다. 메일 앱에서 전송 버튼을 눌러주세요!");
-                    }}
-                  >
-                    문의하기
-                  </button>
+                  <div className="mypage__inquiry-footer">
+                    <button
+                      className="mypage__inquiry-submit"
+                      disabled={!inquiryEmail || !inquiryType || !inquiryContent}
+                      onClick={() => {
+                        const subject = encodeURIComponent(`[방문Log 1:1문의] ${inquiryType}`);
+                        const body = encodeURIComponent(
+                          `답변받으실 이메일: ${inquiryEmail}\n` +
+                          `문의 유형: ${inquiryType}\n\n` +
+                          `-- 문의 내용 --\n${inquiryContent}`
+                        );
+                        window.location.href = `mailto:bangmoonlog.cs@gmail.com?subject=${subject}&body=${body}`;
+                        alert("작성하신 내용으로 메일 앱을 실행합니다. 메일 앱에서 전송 버튼을 눌러주세요!");
+                      }}
+                    >
+                      문의하기
+                    </button>
+                  </div>
                 </div>
               )}
-              {activeModal === "faq" && <div style={{ textAlign: 'center', padding: '40px', color: '#8B95A1' }}>준비 중인 서비스입니다.</div>}
+              {activeModal === "faq" && (
+                <div className="mypage__faq">
+                  <div className="mypage__faq-header">
+                    <div className="mypage__faq-header-content">
+                      <h2>자주 묻는 질문</h2>
+                      <p>궁금한 점을 빠르고 쉽게 해결해 드릴게요.</p>
+                    </div>
+                  </div>
+
+                  <div className="mypage__faq-tabs">
+                    {[
+                      { id: "이용", label: "이용방법", icon: <Icons.MapPin size={18} /> },
+                      { id: "신뢰", label: "신뢰/인증", icon: <Icons.ShieldCheck size={18} /> },
+                      { id: "개인정보", label: "보안/탈퇴", icon: <Icons.Lock size={18} /> }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        className={`mypage__faq-tab ${selectedFaqCategory === tab.id ? 'active' : ''}`}
+                        onClick={() => setSelectedFaqCategory(tab.id)}
+                      >
+                        {tab.icon}
+                        <span>{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <div className="mypage__faq-list">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={selectedFaqCategory}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="mypage__faq-card-group"
+                      >
+                        {selectedFaqCategory === "이용" && [
+                          { 
+                            q: "방문Log는 어떤 서비스인가요?", 
+                            a: "실제 그 공간을 방문하거나 거주해본 사람들이 남긴 <b>'진짜 리뷰'</b>를 공유하는 플랫폼입니다. 광고성 글이 아닌 소음, 채광, 하자 보수 등 실생활과 밀접한 정보를 지도로 한눈에 확인할 수 있습니다." 
+                          },
+                          { 
+                            q: "상대방의 방문록이 흐릿하게 보여요.", 
+                            a: "방문Log는 서로의 소중한 정보를 나누는 '상부상조' 커뮤니티입니다. 🏠<br/><br/>본인의 거주 경험이나 추천하고 싶은 장소의 방문록을 <b>딱 1개만 나누어 주세요!</b> 발자국을 하나 남기시면, 다른 분들이 남긴 모든 방문록을 자유롭게 읽으실 수 있습니다. (작성 후 1년 동안 열람 권한이 유지됩니다!)" 
+                          }
+                        ].map((item, idx) => (
+                          <FAQItem key={`use-${idx}`} question={item.q} answer={item.a} />
+                        ))}
+
+                        {selectedFaqCategory === "신뢰" && [
+                          { 
+                            q: "리뷰의 신뢰도는 어떻게 관리되나요?", 
+                            a: "<b>'인증된 방문록'</b> 기능을 통해 GPS 기반으로 실제 해당 장소 근처에서 작성된 리뷰인지 확인합니다. 또한 유저 간의 '공감' 기능을 통해 투명한 커뮤니티를 유지하고 있습니다." 
+                          },
+                          { 
+                            q: "허위 사실이나 비방글을 발견하면?", 
+                            a: "해당 게시물 우측의 <b>'더보기(...) > 신고하기'</b> 기능을 이용해 주세요. 운영진이 신속히 검토 후 약관에 따라 블라인드 처리 및 이용 제한 조치를 취하고 있습니다." 
+                          }
+                        ].map((item, idx) => (
+                          <FAQItem key={`trust-${idx}`} question={item.q} answer={item.a} />
+                        ))}
+
+                        {selectedFaqCategory === "개인정보" && [
+                          { 
+                            q: "제 개인정보는 안전한가요?", 
+                            a: "방문Log는 소셜 로그인 방식을 사용하여 비밀번호를 직접 수집하지 않으며, 서비스 운영에 필요한 최소한의 정보 외에는 엄격히 관리합니다." 
+                          },
+                          { 
+                            q: "회원 탈퇴는 어떻게 하나요?", 
+                            a: "[내 정보] 화면 상단의 <b>로그아웃 버튼 옆 '탈퇴'</b> 메뉴를 통해 언제든지 가능합니다. 탈퇴 시 관련 법령에 따라 모든 개인정보는 즉시 파기되니 안심하세요." 
+                          }
+                        ].map((item, idx) => (
+                          <FAQItem key={`privacy-${idx}`} question={item.q} answer={item.a} />
+                        ))}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+
+                  <div className="mypage__faq-cta">
+                    <div className="mypage__faq-cta-content">
+                      <h4>찾으시는 내용이 없나요?</h4>
+                      <p>1:1 문의를 남겨주시면 24시간 내에 답변해 드릴게요.</p>
+                    </div>
+                    <button onClick={() => setActiveModal("inquiry")}>문의하기</button>
+                  </div>
+                </div>
+              )}
               {activeModal === "recent" && (
                 recentLogs.length === 0 ? <p style={{ textAlign: 'center', color: '#8B95A1', padding: '40px' }}>최근 본 방문록이 없습니다.</p> :
                   <div className="mypage__card-list">
@@ -680,40 +808,43 @@ export function MyPage() {
                 </button>
               </div>
 
-              <div className="mypage__title-modal-desc-box">
-                <p>
-                  방문Log를 작성할수록 더 높은 등급의 칭호를 획득할 수 있습니다. <br />
-                  꾸준한 활동으로 <strong>방문록의 신</strong>에 도전해보세요!
-                </p>
-              </div>
+              <div className="mypage__title-modal-content">
+                <div className="mypage__title-modal-desc-box">
+                  <p>
+                    방문Log를 작성할수록 더 높은 등급의 칭호를 획득할 수 있습니다. <br />
+                    꾸준한 활동으로 <strong>방문록의 신</strong>에 도전해보세요!
+                  </p>
+                </div>
 
-              <div className="mypage__title-step-list">
-                {titleSteps.map((step) => (
-                  <div
-                    key={step.title}
-                    className={`mypage__title-step-item ${stats.reviews >= step.count ? 'active' : ''}`}
-                  >
-                    <div className="mypage__title-step-item-left">
-                      <span className="mypage__title-step-item-icon">{step.icon}</span>
-                      <div className="mypage__title-step-item-info">
-                        <span className="mypage__title-step-item-name">{step.title}</span>
-                        <span className="mypage__title-step-item-requirement">누적 방문록 {step.count}회 이상</span>
+                <div className="mypage__title-step-list">
+                  {titleSteps.map((step) => (
+                    <div
+                      key={step.title}
+                      className={`mypage__title-step-item ${stats.reviews >= step.count ? 'active' : ''}`}
+                    >
+                      <div className="mypage__title-step-item-left">
+                        <span className="mypage__title-step-item-icon">{step.icon}</span>
+                        <div className="mypage__title-step-item-info">
+                          <span className="mypage__title-step-item-name">{step.title}</span>
+                          <span className="mypage__title-step-item-requirement">누적 방문록 {step.count}회 이상</span>
+                        </div>
                       </div>
+                      {stats.reviews >= step.count && (
+                        <CheckCircle2 size={24} color="#3182F6" />
+                      )}
                     </div>
-                    {stats.reviews >= step.count && (
-                      <CheckCircle2 size={24} color="#3182F6" />
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              <button
-                className="mypage__login-btn"
-                style={{ marginTop: '32px', boxShadow: 'none' }}
-                onClick={() => setShowTitleInfo(false)}
-              >
-                닫기
-              </button>
+              <div className="mypage__title-modal-footer">
+                <button
+                  className="mypage__title-modal-bottom-btn"
+                  onClick={() => setShowTitleInfo(false)}
+                >
+                  닫기
+                </button>
+              </div>
             </motion.div>
           </>
         )}
@@ -980,46 +1111,53 @@ export function MyPage() {
               <div className="mypage__notif-item-list">
                 {/* 1. 찜한 매물 알림 */}
                 <div className="mypage__notif-item">
-                  <div className="mypage__notif-item-info">
-                    <span className="mypage__notif-item-title">찜한 매물 새 방문록</span>
-                    <span className="mypage__notif-item-desc">관심 있거나 살고 싶은 건물의 소식을 알려줘요</span>
+                  <div className="mypage__notif-item-left">
+                    <div className="mypage__notif-icon-box" style={{ backgroundColor: '#E8F3FF' }}><Icons.Bell size={20} color="#3182F6" /></div>
+                    <div className="mypage__notif-item-info">
+                      <span className="mypage__notif-item-title">찜한 매물 새 방문록</span>
+                      <span className="mypage__notif-item-desc">관심 있는 건물의 새 소식을 알려드려요</span>
+                    </div>
                   </div>
                   <ToggleButton
                     initialValue={notiSettings.bookmarks}
-                    onChange={() => handleToggleNotif('bookmarks')}
+                    onChange={() => setNotiSettings(prev => ({ ...prev, bookmarks: !prev.bookmarks }))}
                   />
                 </div>
 
                 {/* 2. 소셜 알림 */}
                 <div className="mypage__notif-item">
-                  <div className="mypage__notif-item-info">
-                    <span className="mypage__notif-item-title">좋아요 및 댓글</span>
-                    <span className="mypage__notif-item-desc">내 방문록에 대한 다른 사람들의 반응을 알려줘요</span>
+                  <div className="mypage__notif-item-left">
+                    <div className="mypage__notif-icon-box" style={{ backgroundColor: '#FFF0F3' }}><Icons.Heart size={20} color="#F04452" /></div>
+                    <div className="mypage__notif-item-info">
+                      <span className="mypage__notif-item-title">좋아요 및 댓글</span>
+                      <span className="mypage__notif-item-desc">내 방문록에 대한 반응을 알려드려요</span>
+                    </div>
                   </div>
                   <ToggleButton
                     initialValue={notiSettings.reactions}
-                    onChange={() => handleToggleNotif('reactions')}
+                    onChange={() => setNotiSettings(prev => ({ ...prev, reactions: !prev.reactions }))}
                   />
                 </div>
 
-                {/* 3. 서비스 공지 */}
+                {/* 3. 공지/혜택 알림 */}
                 <div className="mypage__notif-item">
-                  <div className="mypage__notif-item-info">
-                    <span className="mypage__notif-item-title">서비스 공지 및 혜택</span>
-                    <span className="mypage__notif-item-desc">중요한 서비스 공지와 혜택 정보를 놓치지 않게 알려줘요</span>
+                  <div className="mypage__notif-item-left">
+                    <div className="mypage__notif-icon-box" style={{ backgroundColor: '#F2F4F6' }}><Icons.Megaphone size={20} color="#4E5968" /></div>
+                    <div className="mypage__notif-item-info">
+                      <span className="mypage__notif-item-title">서비스 공지 및 혜택</span>
+                      <span className="mypage__notif-item-desc">중요한 공지와 혜택 소식을 알려드려요</span>
+                    </div>
                   </div>
                   <ToggleButton
                     initialValue={notiSettings.notices}
-                    onChange={() => handleToggleNotif('notices')}
+                    onChange={() => setNotiSettings(prev => ({ ...prev, notices: !prev.notices }))}
                   />
                 </div>
               </div>
 
               <div className="mypage__notif-footer">
-                <p>
-                  * 알림은 서비스 내부 알림 탭에서 확인하실 수 있습니다.<br />
-                  * 야간 시간대(오후 9시 ~ 오전 8시)에는 마케팅 관련 알림이 제한될 수 있습니다.
-                </p>
+                <p>• 알림은 서비스 내부 알림 탭에서도 확인하실 수 있습니다.</p>
+                <p>• 야간 시간대(오후 9시 ~ 오전 8시)에는 마케팅 관련 알림이 제한될 수 있습니다.</p>
               </div>
             </motion.div>
           </>
@@ -1068,9 +1206,9 @@ function ToggleButton({ initialValue, onChange }: { initialValue: boolean, onCha
     >
       <motion.div
         className="toggle-btn__thumb"
-        animate={{ x: isOn ? 19 : 3 }}
+        animate={{ x: isOn ? 22 : 0 }}
         initial={false}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        transition={{ type: "spring", stiffness: 400, damping: 28 }}
       />
     </button>
   );

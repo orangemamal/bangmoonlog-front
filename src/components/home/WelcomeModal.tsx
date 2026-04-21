@@ -32,8 +32,8 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
         <div className="welcome-scroll-area">
           <div className="welcome-header">
             <img src={LogoImg} alt="Logo" className="welcome-logo" />
-            <h2>진짜 집 이야기를<br />확인하세요</h2>
-            <p className="subtitle">방문Log는 세입자의 권리를 위해 만든 지식 공유 플랫폼입니다.</p>
+            <h2>세입자를 위해 만든<br />정보 공유 플랫폼입니다.</h2>
+            <p className="subtitle"></p>
           </div>
 
           <div className="welcome-content">

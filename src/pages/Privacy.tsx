@@ -8,11 +8,11 @@ const Privacy: React.FC = () => {
     <div className="policy-container">
       <header className="policy-header">
         <button onClick={() => navigate(-1)} className="back-button">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         </button>
         <h1>개인정보처리방침</h1>
       </header>
-      
+
       <main className="policy-content">
         <div className="policy-summary">
           방문Log는 이용자의 개인정보 보호를 최우선으로 생각합니다. 본 방침은 구글, 카카오, 네이버 소셜 로그인 및 위치 정보 처리에 관한 세부 사항을 담고 있습니다.
@@ -50,7 +50,7 @@ const Privacy: React.FC = () => {
 
         <section>
           <h2>5. 정보주체의 권리와 행사 방법</h2>
-          <p>이용자는 언제든지 자신의 정보를 조회, 수정하거나 서비스 내 '회원 탈퇴' 기능을 통해 동의를 철회할 수 있습니다. 개인정보와 관련된 문의는 고객센터(roomlog.cs@gmail.com)를 통해 처리 가능합니다.</p>
+          <p>이용자는 언제든지 자신의 정보를 조회, 수정하거나 서비스 내 '회원 탈퇴' 기능을 통해 동의를 철회할 수 있습니다. 개인정보와 관련된 문의는 고객센터(bangmoonlog.cs@gmail.com)를 통해 처리 가능합니다.</p>
         </section>
 
         <section className="policy-footer-section">

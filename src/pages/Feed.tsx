@@ -59,8 +59,8 @@ export function Feed() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { canRead, incrementReadCount, watchAd, isAdShowing } = useAccessControl();
-  const { login, user } = useAuth();
+  const { hasWatchedAd, incrementReadCount, watchAd, isAdShowing } = useAccessControl();
+  const { user } = useAuth();
 
   // [일시적] 잘못된 이미지(blob:) 데이터 자동 정리 로직
   useEffect(() => {
@@ -293,26 +293,38 @@ export function Feed() {
     }
   }, [activeTab, posts, addressParam, userLocation, localSortType, tagSearchQuery, selectedTag]);
 
-  const handlePostClick = async (postId: string) => {
-    if (!canRead) {
+  const handlePostClick = async (postId: string, index: number) => {
+    // 1. 혜택 권한(리뷰 작성자)이 있거나, 첫 번째 게시물인 경우 바로 열기
+    if (user?.canViewAll || index === 0) {
+      incrementReadCount();
+      setSelectedReviewId(postId);
+      setIsDetailOpen(true);
+      return;
+    }
+
+    // 2. 그 외 조건(두 번째 게시물부터)에서는 "방문록 작성하고 전체보기" 유도
+    const commonMsg = "모든 방문록을 보시려면 현재 거주 중인 집이나 전에 살던 집의 방문록을 남겨주세요. 모든 방문록이 즉시 열립니다! 🏠";
+
+    if (!user) {
       showConfirm(
-        "광고 시청 후 전체 보기",
-        async () => {
-          await watchAd();
-          incrementReadCount();
-          setSelectedReviewId(postId);
-          setIsDetailOpen(true);
-        },
-        "더 많은 방문록을 읽으려면 간단한 광고 시청이 필요합니다. 보시겠습니까?",
-        "📺",
-        "보러가기",
-        "다음에"
+        "방문록 작성하고 전체보기 ✨",
+        () => navigate('/mypage'),
+        commonMsg,
+        "📍",
+        "확인",
+        "취소"
       );
       return;
     }
-    incrementReadCount();
-    setSelectedReviewId(postId);
-    setIsDetailOpen(true);
+
+    showConfirm(
+      "방문록 작성하고 전체보기 ✨",
+      () => navigate('/'),
+      commonMsg,
+      "📍",
+      "확인",
+      "취소"
+    );
   };
 
   const handleCloseDetail = useCallback(() => setIsDetailOpen(false), []);
@@ -358,7 +370,7 @@ export function Feed() {
           onLoginRequired={() => {
             showConfirm(
               "로그인 필요",
-              () => login(),
+              () => navigate('/mypage'),
               "공감 및 댓글 기능은 로그인 후 이용 가능합니다.",
               "🔒"
             );
@@ -499,8 +511,12 @@ export function Feed() {
             {isLoading ? (
               <div className="loading-state">태그 피드를 불러오는 중...</div>
             ) : filteredData.length > 0 ? (
-              filteredData.map(post => (
-                <div key={post.id} className="tag-grid-item" onClick={() => handlePostClick(post.id)}>
+              filteredData.map((post, index) => (
+                <div 
+                  key={post.id} 
+                  className={`tag-grid-item ${index > 0 && !user?.canViewAll && !hasWatchedAd ? 'blurred' : ''}`} 
+                  onClick={() => handlePostClick(post.id, index)}
+                >
                   <div className="image-container">
                     <img src={post.image} alt="post" />
                     {post.images && post.images.length > 1 && (
@@ -578,8 +594,12 @@ export function Feed() {
             <p>방문록을 불러오는 중...</p>
           </div>
         ) : filteredData.length > 0 ? (
-          filteredData.map(post => (
-            <div key={post.id} className="feed__card" onClick={() => handlePostClick(post.id)}>
+          filteredData.map((post, index) => (
+            <div 
+              key={post.id} 
+              className={`feed__card ${index > 0 && !user?.canViewAll && !hasWatchedAd ? 'blurred' : ''}`} 
+              onClick={() => handlePostClick(post.id, index)}
+            >
               <div className="feed__card-header">
                 <div className="feed__card-meta">
                   {post.experienceType && (

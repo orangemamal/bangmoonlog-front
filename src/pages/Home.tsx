@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag } from "lucide-react";
+import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag, Crosshair } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db } from '../services/firebase';
@@ -121,7 +121,16 @@ export function Home() {
   console.log("🏠 [Home] Component Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isLoggedIn, user, login } = useAuth();
+  const { isLoggedIn, user } = useAuth();
+  
+  // 콜백 내 최신 상태 참조용 Ref
+  const isLoggedInRef = useRef(isLoggedIn);
+  const userRef = useRef(user);
+  useEffect(() => {
+    isLoggedInRef.current = isLoggedIn;
+    userRef.current = user;
+  }, [isLoggedIn, user]);
+
   const { hasWatchedAd, watchAd, isAdShowing } = useAccessControl();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
@@ -139,6 +148,7 @@ export function Home() {
   const [ratings, setRatings] = useState({ light: 3, noise: 3, water: 3 });
   const [addressDetail, setAddressDetail] = useState("");
   const [comment, setComment] = useState("");
+  const [isLocationActive, setIsLocationActive] = useState(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -174,6 +184,8 @@ export function Home() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [experienceType, setExperienceType] = useState("단순 방문");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [favoritedAddresses, setFavoritedAddresses] = useState<Set<string>>(new Set());
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -206,6 +218,31 @@ export function Home() {
     }
   }, []);
 
+  // [추가] 찜한 주소 목록 실시간 동기화 (마커 표시 및 필터링용)
+  useEffect(() => {
+    if (!isLoggedIn || !user?.id) {
+      setFavoritedAddresses(new Set());
+      return;
+    }
+
+    const q = query(collection(db, "bookmarks"), where("userId", "==", user.id));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const addresses = new Set<string>();
+      snapshot.forEach(d => {
+        const data = d.data();
+        if (data.address) {
+          addresses.add(normalizeBaseAddress(data.address));
+        }
+      });
+      setFavoritedAddresses(addresses);
+      console.log("⭐ [Sync] 찜한 주소 목록 업데이트:", addresses.size, "건");
+    }, (error) => {
+      console.error("Bookmarks sync error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [isLoggedIn, user?.id]);
+
   const calculateAverageRating = useCallback((reviewList: Review[]) => {
     if (!reviewList || reviewList.length === 0) return "0.0";
     const totalAvg = reviewList.reduce((acc, rev) => {
@@ -215,8 +252,10 @@ export function Home() {
     return (totalAvg / reviewList.length).toFixed(2);
   }, []);
 
+  const isRefreshingRef = useRef(false);
   const refreshMarkers = useCallback(async () => {
-    if (!mapInstance.current) return;
+    if (!mapInstance.current || isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     try {
       const snapshot = await getDocs(collection(db, "reviews"));
       const allReviews: any[] = [];
@@ -229,7 +268,8 @@ export function Home() {
         groups[key].push(r);
       });
 
-      const data = Object.keys(groups).map(addr => {
+      // 1. 리뷰가 있는 모든 주소 데이터 구성
+      const reviewRelatedData = Object.keys(groups).map(addr => {
         const list = groups[addr];
         const first = list[0];
         return {
@@ -238,8 +278,50 @@ export function Home() {
           lng: first.lng,
           count: list.length,
           avgRating: calculateAverageRating(list),
+          isFavorited: favoritedAddresses.has(addr),
+          isBookmarkStyle: showFavoritesOnly // 찜 필터가 켜져있을 때만 노란색 스타일 적용
         };
       });
+
+      // 2. 최종 데이터 구성 (필터 상태에 따라 분기)
+      let finalData: any[] = [];
+      if (showFavoritesOnly) {
+        // [찜 필터 ON] 찜한 장소들만 추출 (리뷰 없는 장소 포함)
+        if (isLoggedIn && user?.id) {
+          const bSnap = await getDocs(query(collection(db, "bookmarks"), where("userId", "==", user.id)));
+          const reviewAddrs = new Set(reviewRelatedData.map(d => d.address));
+          
+          // 리뷰 있는 찜 장소 우선 추가
+          finalData = reviewRelatedData.filter(d => d.isFavorited);
+
+          // 리뷰 없는 찜 장소 추가
+          bSnap.forEach(d => {
+            const bData = d.data();
+            const stdAddr = normalizeBaseAddress(bData.address);
+            if (!reviewAddrs.has(stdAddr) && bData.lat && bData.lng) {
+              finalData.push({
+                address: stdAddr,
+                lat: bData.lat,
+                lng: bData.lng,
+                count: 0,
+                avgRating: "0.0",
+                isFavorited: true,
+                isBookmarkStyle: true
+              });
+              reviewAddrs.add(stdAddr);
+            }
+          });
+        }
+      } else {
+        // [찜 필터 OFF] 리뷰가 있는 모든 장소 표시 (일반 파란 마커 스타일)
+        finalData = reviewRelatedData.map(rd => ({
+          ...rd,
+          isBookmarkStyle: false 
+        }));
+      }
+
+      // 전역 참조 업데이트 (클릭 이벤트 등에서 사용)
+      allLocationsRef.current = finalData;
 
       allMarkersRef.current.forEach(m => m.setMap(null));
       allMarkersRef.current = [];
@@ -248,7 +330,7 @@ export function Home() {
         clusterRef.current = null;
       }
 
-      const markers = data.map(loc => {
+      const markers = finalData.map(loc => {
         const pos = new window.naver.maps.LatLng(loc.lat, loc.lng);
         const m = new window.naver.maps.Marker({
           position: pos,
@@ -256,13 +338,13 @@ export function Home() {
           title: loc.address,
           icon: {
             content: `
-              <div class="marker-container">
+              <div class="marker-container ${loc.isBookmarkStyle ? 'style-bookmark' : ''}">
                 <div class="marker-bubble">
-                  <span class="count">${loc.count}</span>
+                  <span class="count">${!loc.isBookmarkStyle && loc.count > 0 ? loc.count : ''}</span>
                 </div>
               </div>
             `,
-            anchor: new window.naver.maps.Point(21, 21),
+            anchor: loc.isBookmarkStyle ? new window.naver.maps.Point(14, 14) : new window.naver.maps.Point(21, 21),
           }
         });
         (m as any).propertyCount = loc.count;
@@ -273,8 +355,8 @@ export function Home() {
           const curZoom = mapInstance.current.getZoom();
           mapInstance.current.autoResize();
 
-          if (curZoom < 17) {
-            mapInstance.current.morph(latLng, 17, { duration: 300, easing: "linear" });
+          if (curZoom < 16) {
+            mapInstance.current.morph(latLng, 16, { duration: 300, easing: "linear" });
             if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
             return;
           }
@@ -326,7 +408,7 @@ export function Home() {
                           fill="${isBookmarked ? '#FFD43B' : 'none'}" 
                           stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                         </svg>
                       </button>` : ''}
                     </div>
@@ -363,7 +445,7 @@ export function Home() {
         maxZoom: 18,
         map: mapInstance.current,
         markers: markers,
-        disableClickZoom: false,
+        disableClickZoom: true,
         gridSize: 180,
         icons: [
           { content: '<div class="cluster cluster-s"><div></div></div>', size: new window.naver.maps.Size(52, 52), anchor: new window.naver.maps.Point(26, 26) },
@@ -394,12 +476,31 @@ export function Home() {
         }
       });
 
+      window.naver.maps.Event.addListener(clusterRef.current, "clusterclick", (e: any) => {
+        const cluster = e.cluster || e;
+        const curZoom = mapInstance.current.getZoom();
+        const center = cluster.getCenter();
+        if (curZoom < 16) {
+          mapInstance.current.morph(center, 16, { duration: 300, easing: "linear" });
+        } else if (curZoom < 19) {
+          mapInstance.current.morph(center, 19, { duration: 300, easing: "linear" });
+        }
+      });
+
       setTimeout(() => {
         if (clusterRef.current) clusterRef.current._redraw();
       }, 100);
 
     } catch (e) { console.error("Marker refresh error:", e); }
-  }, [calculateAverageRating, isLoggedIn, user]);
+    finally {
+      isRefreshingRef.current = false;
+    }
+  }, [calculateAverageRating, isLoggedIn, user, showFavoritesOnly, favoritedAddresses]);
+
+  // [추가] 찜 필터 토글 시 마커 즉시 갱신
+  useEffect(() => {
+    refreshMarkers();
+  }, [showFavoritesOnly, refreshMarkers]);
 
   const showAlert = useCallback((title: string, desc?: string, icon: string = "✅", onConfirm?: () => void) => {
     setModalConfig({ isOpen: true, title, desc, icon, onConfirm, confirmText: "확인" });
@@ -576,17 +677,12 @@ export function Home() {
       // 즉시 이동 및 줌 설정
       mapInstance.current.setZoom(19);
       mapInstance.current.setCenter(targetPos);
+      setIsLocationActive(false); // [추가] 외부 좌표 이동 시 GPS 비활성화
 
       const triggerFocus = async () => {
         // [1] 데이터 로드 (찜 상태 및 거주용 여부)
-        let isBookmarked = false;
-        if (isLoggedIn && user) {
-          const bookmarkId = `bookmark_${user.id}_${addr.replace(/\s+/g, '_')}`;
-          const bRef = doc(db, "bookmarks", bookmarkId);
-          const bSnap = await getDoc(bRef);
-          isBookmarked = bSnap.exists();
-        }
-
+        // favoritedAddresses를 사용하여 즉시 동기화
+        const isBookmarked = favoritedAddresses.has(addr);
         const isRes = checkIsResidential(addr);
 
         // [2] 본인 작성 여부 체크
@@ -613,7 +709,7 @@ export function Home() {
                     fill="${isBookmarked ? '#FFD43B' : 'none'}" 
                     stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                   </svg>
                 </button>` : ''}
               </div>
@@ -628,12 +724,8 @@ export function Home() {
         `);
         infoWindowInstance.current.open(mapInstance.current, targetPos);
 
-        // [4] 파라미터 정리 (반복 실행 방지)
-        const nextParams = new URLSearchParams(searchParams);
-        nextParams.delete("lat");
-        nextParams.delete("lng");
-        nextParams.delete("address");
-        nextParams.delete("zoom");
+        // [4] 파라미터 정리
+        const nextParams = new URLSearchParams(); // 모두 정리
         setSearchParams(nextParams, { replace: true });
       };
 
@@ -816,7 +908,7 @@ export function Home() {
     };
 
     window.__openWriteSheet = (address: string, lat?: number, lng?: number) => {
-      if (!isLoggedIn) {
+      if (!isLoggedInRef.current) {
         showConfirm(
           "앗! 로그인이 필요해요 🏠",
           () => navigate('/mypage'),
@@ -839,15 +931,15 @@ export function Home() {
     };
 
     window.__toggleBookmark = async (address: string, lat: number, lng: number) => {
-      if (!isLoggedIn || !user?.id) {
-        showConfirm("로그인 필요", () => login(), "찜하기 기능은 로그인 후 이용 가능합니다.", "🔒");
+      if (!isLoggedInRef.current || !userRef.current?.id) {
+        showConfirm("로그인 필요", () => navigate('/mypage'), "찜하기 기능은 로그인 후 이용 가능합니다.", "🔒");
         return;
       }
 
       try {
         const normalizedAddr = normalizeBaseAddress(address);
         // 고유 ID 생성 (중복 방지 핵심)
-        const bookmarkId = `bookmark_${user.id}_${normalizedAddr.replace(/\s+/g, '_')}`;
+        const bookmarkId = `bookmark_${userRef.current.id}_${normalizedAddr.replace(/\s+/g, '_')}`;
         const bRef = doc(db, "bookmarks", bookmarkId);
         const bSnap = await getDoc(bRef);
 
@@ -855,7 +947,7 @@ export function Home() {
 
         if (isDelete) {
           // [중급 클린업] 혹시 만에 하나 다른 ID로 중복된 게 있다면 같이 삭제
-          const q = query(collection(db, "bookmarks"), where("userId", "==", user.id), where("address", "==", normalizedAddr));
+          const q = query(collection(db, "bookmarks"), where("userId", "==", userRef.current.id), where("address", "==", normalizedAddr));
           const snap = await getDocs(q);
           const batch = writeBatch(db);
           snap.forEach((d: QueryDocumentSnapshot<DocumentData>) => batch.delete(d.ref));
@@ -864,7 +956,7 @@ export function Home() {
           showAlert("찜 해제", "관심 건물에서 삭제되었습니다.", "💔");
         } else {
           await setDoc(bRef, {
-            userId: user.id,
+            userId: userRef.current.id,
             address: normalizedAddr, // [핵심 수정] 무조건 표준화된 주소로 저장
             lat,
             lng,
@@ -935,8 +1027,9 @@ export function Home() {
 
           // 초기 로딩 시 중심 이동 (한 번만)
           if (!isInitialNavRef.current && !userMarkerRef.current) {
+            console.log("📍 [GPS 초기 포커싱] 중심 이동 완료");
             mapInstance.current.setCenter(userPos);
-            mapInstance.current.setZoom(17); // 14 -> 17로 더 가깝게 초기화
+            mapInstance.current.setZoom(17);
           }
 
           if (userMarkerRef.current) {
@@ -953,17 +1046,9 @@ export function Home() {
                   </div>
                 `,
                 anchor: new window.naver.maps.Point(12, 12),
-              }
-            });
-
-            window.naver.maps.Event.addListener(userMarkerRef.current, "click", () => {
-              const curZoom = mapInstance.current.getZoom();
-              const latestPos = userMarkerRef.current.getPosition();
-              if (curZoom < 17) {
-                mapInstance.current.morph(latestPos, 17, { duration: 300, easing: "linear" });
-              } else if (curZoom < 19) {
-                mapInstance.current.morph(latestPos, 19, { duration: 300, easing: "linear" });
-              }
+              },
+              clickable: false,
+              zIndex: 100
             });
           }
 
@@ -974,8 +1059,8 @@ export function Home() {
           setIsLocating(false);
         }, {
           enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0 // 캐시된 위치 대신 항상 새로운 위치 요청
+          timeout: 20000,
+          maximumAge: 30000 // 30초 캐시 허용하여 재진입 시 즉각 응답 유도
         });
       }
 
@@ -988,8 +1073,12 @@ export function Home() {
         pixelOffset: new window.naver.maps.Point(0, -10), // [수정 포인트 1] 위치 보정 (현재 -10, 수동 수정 시 여기를 변경하세요)
       });
 
-
       refreshMarkers();
+
+      // 지도 조작 시 내 위치 추적 비활성화 (드래그, 핀치타입 줌, 마우스휠)
+      window.naver.maps.Event.addListener(mapInstance.current, "dragstart", () => setIsLocationActive(false));
+      window.naver.maps.Event.addListener(mapInstance.current, "pinch", () => setIsLocationActive(false));
+      window.naver.maps.Event.addListener(mapInstance.current, "mousewheel", () => setIsLocationActive(false));
 
       // [추가] 줌 레벨 최적화를 위한 실시간 로그 출력
       window.naver.maps.Event.addListener(mapInstance.current, "zoom_changed", () => {
@@ -1003,8 +1092,8 @@ export function Home() {
         const clickedPos = e.coord.clone ? e.coord.clone() : new window.naver.maps.LatLng(e.coord.y, e.coord.x);
 
         // 줌 레벨에 따른 단계별 확대 로직 (19 미만은 주소 체크 X)
-        if (curZoom < 17) {
-          mapInstance.current.morph(clickedPos, 17, { duration: 300, easing: "linear" });
+        if (curZoom < 16) {
+          mapInstance.current.morph(clickedPos, 16, { duration: 300, easing: "linear" });
           if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
           return;
         }
@@ -1062,7 +1151,7 @@ export function Home() {
                           fill="${isBookmarked ? '#FFD43B' : 'none'}" 
                           stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                         </svg>
                       </button>` : ''}
                     </div>
@@ -1124,7 +1213,7 @@ export function Home() {
                           fill="${isBookmarked ? '#FFD43B' : 'none'}" 
                           stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                         </svg>
                       </button>` : ''}
                     </div>
@@ -1169,7 +1258,14 @@ export function Home() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [editingReviewId, refreshMarkers, verifyLocation, isLoggedIn, user, showAlert, showConfirm, login]);
+  }, []); // Run map init only once on mount
+
+  // 별도 useEffect로 마커 갱신 관리 (상태 변경 시 호출)
+  useEffect(() => {
+    if (mapInstance.current) {
+      refreshMarkers();
+    }
+  }, [mapInstance.current, refreshMarkers, showFavoritesOnly, favoritedAddresses, isLoggedIn, user]);
 
   const handleTagToggle = (tag: string) => {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -1199,8 +1295,7 @@ export function Home() {
       showConfirm(
         "방문록 작성",
         async () => {
-          await login();
-          showAlert("로그인 완료", "이제 방문록을 작성할 수 있어요.", "🔓");
+          navigate('/mypage');
         },
         "방문록을 작성하려면 로그인하세요.",
         "🔓"
@@ -1209,7 +1304,7 @@ export function Home() {
     }
 
     try {
-      if (!user?.id) { login(); return; }
+      if (!user?.id) { navigate('/mypage'); return; }
 
       // 0. 매물 단위 중복 체크 (사용자 의견에 따라 엄격한 제한 대신 안내 후 허용으로 변경 가능)
       /* 
@@ -1479,14 +1574,37 @@ export function Home() {
       </div>
 
       <div ref={mapElement} className="home-map-container" />
+      
+      {/* 찜한 매물만 골라보기 버튼 (내 위치 버튼 위) */}
+      <button 
+        className={`home-favorites-btn ${showFavoritesOnly ? 'active' : ''}`}
+        onClick={() => {
+          if (!isLoggedIn) {
+            showConfirm(
+              "로그인이 필요해요 🏠",
+              () => navigate('/mypage'),
+              "찜한 매물만 모아보려면 로그인이 필요합니다.",
+              "🔒",
+              () => {}
+            );
+            return;
+          }
+          const next = !showFavoritesOnly;
+          setShowFavoritesOnly(next);
+        }}
+        title="찜한 매물만 보기"
+      >
+        <Star size={24} fill={showFavoritesOnly ? "#FFD43B" : "none"} strokeWidth={2} />
+      </button>
 
       {/* 내 위치로 이동 버튼 */}
       <button
-        className="home-location-btn"
+        className={`home-location-btn ${isLocationActive ? 'active' : ''}`}
         onClick={() => {
           if (!navigator.geolocation || !mapInstance.current) return;
 
           setIsLocating(true);
+          setIsLocationActive(true);
 
           // 이미 마커가 있다면 즉시 이동 후 새로고침
           if (userMarkerRef.current) {
@@ -1513,10 +1631,7 @@ export function Home() {
         }}
         title="내 위치로 이동"
       >
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3182F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 3v5M12 16v5M3 12h5M16 12h5" />
-        </svg>
+        <Crosshair size={24} color={isLocationActive ? "#3182F6" : "#A8AFB5"} strokeWidth={2} />
       </button>
 
       {isAddressSelected && dynamicNeighborhoodTags.length > 0 && (
@@ -1567,7 +1682,9 @@ export function Home() {
               window.naver.maps.Service.geocode({ query: full }, async (s: any, r: any) => {
                 if (s === window.naver.maps.Service.Status.OK && r.v2.addresses.length > 0) {
                   const p = new window.naver.maps.LatLng(r.v2.addresses[0].y, r.v2.addresses[0].x);
-                  mapInstance.current.setZoom(19); mapInstance.current.panTo(p);
+                  mapInstance.current.setZoom(19); 
+                  mapInstance.current.panTo(p);
+                  setIsLocationActive(false); // [추가] 주소 검색 이동 시 GPS 비활성화
 
                   // [추가] 검색 결과에서도 중복 체크 수행
                   let hasWritten = false;
@@ -1613,7 +1730,7 @@ export function Home() {
                                 fill="${isBookmarked ? '#FFD43B' : 'none'}" 
                                 stroke="${isBookmarked ? '#FFD43B' : '#A8AFB5'}" 
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                               </svg>
                             </button>` : ''}
                           </div>
@@ -2000,7 +2117,7 @@ export function Home() {
           onLoginRequired={() => {
             showConfirm(
               "로그인 필요",
-              () => login(),
+              () => navigate('/mypage'),
               "공감 및 댓글 기능은 로그인 후 이용 가능합니다.",
               "🔒"
             );
