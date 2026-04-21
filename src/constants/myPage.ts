@@ -18,5 +18,5 @@ export const MY_PAGE_MENU: MyPageMenuItem[] = [
 
   { label: "1:1 문의하기", path: "mailto:bangmoonlog.cs@gmail.com?subject=[1:1문의] 문의드립니다", icon: "MessageSquare", category: "지원" },
   { label: "자주 묻는 질문", path: "/faq", icon: "HelpCircleIcon", category: "지원" },
-  { label: "제휴 문의", path: "mailto:bangmoonlog.cs@gmail.com?subject=[제휴문의] 방문Log 파트너십 제안", icon: "Award", category: "지원" },
+  { label: "제휴 문의", path: "mailto:bangmoonlog.cs@gmail.com?subject=[제휴문의] 방문Log 파트너십 제안", icon: "Handshake", category: "지원" },
 ];

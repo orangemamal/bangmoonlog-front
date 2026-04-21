@@ -291,18 +291,25 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
             onScroll={handleScroll}
           >
             {review.images && review.images.length > 0 ? (
-              review.images.map((img: string, i: number) => (
-                <div key={i} className="detail-slider-item">
-                  <img src={img} alt={`detail-${i}`} />
-                </div>
-              ))
+              review.images.map((img: string, i: number) => {
+                const isVideo = img.includes('.mp4?') || img.includes('.mov?') || img.includes('.webm?');
+                return (
+                  <div key={i} className="detail-slider-item">
+                    {isVideo ? (
+                      <video src={img} controls autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <img src={img} alt={`detail-${i}`} />
+                    )}
+                  </div>
+                );
+              })
             ) : (
               <div className="detail-slider-item no-image">
                 <div className="no-image-placeholder">
                   <div className="placeholder-icon">
                     <ImageIcon size={40} color="#B0B8C1" />
                   </div>
-                  <span className="placeholder-text">등록된 사진이 없습니다.</span>
+                  <span className="placeholder-text">등록된 사진/영상이 없습니다.</span>
                 </div>
               </div>
             )}

@@ -1296,6 +1296,81 @@
     }
   }
 
+  &__reputation-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    cursor: pointer;
+  }
+
+  &__author-title {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    background-color: #F0F6FF;
+    border: 1px solid #E8F1FF;
+    border-radius: 100px;
+
+    .icon {
+      font-size: 13px;
+      margin-right: 4px;
+    }
+
+    .text {
+      font-size: 12px;
+      font-weight: 700;
+      color: #3182F6;
+      letter-spacing: -0.2px;
+    }
+  }
+
+  &__badge-ribbon {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-top: 4px;
+    padding: 2px 0;
+    cursor: pointer;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  &__ribbon-icon {
+    width: 22px;
+    height: 22px;
+    background-color: white;
+    border: 1px solid #F2F4F6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+    margin-right: -4px; // 겹치기 효과 (음수 마진 사용)
+
+    &:hover {
+      transform: translateY(-2px);
+      z-index: 5;
+    }
+  }
+
+  &__ribbon-more {
+    font-size: 10px;
+    color: #8B95A1;
+    font-weight: 700;
+    margin-left: 8px;
+    background-color: #F2F4F6;
+    padding: 2px 5px;
+    border-radius: 6px;
+  }
+
   &__title-step-list {
     display: flex;
     flex-direction: column;
@@ -1364,6 +1439,164 @@
     &:active {
       background-color: #E5E8EB;
     }
+  }
+
+  // Achievement Badge System Styles
+  &__badge-container {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    padding: 10px 4px 30px;
+  }
+
+  &__badge-section {
+    &-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #191F28;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+  }
+
+  &__badge-empty {
+    padding: 32px;
+    text-align: center;
+    color: #8B95A1;
+    font-size: 14px;
+    background-color: #F2F4F6;
+    border-radius: 16px;
+    line-height: 1.6;
+    word-break: keep-all;
+  }
+
+  &__badge-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  &__badge-box {
+    background-color: #F2F4F6;
+    border-radius: 20px;
+    padding: 20px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    border: 1.5px solid transparent;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0.6;
+
+    .icon {
+      font-size: 32px;
+      filter: grayscale(1);
+      transition: filter 0.3s;
+    }
+
+    .name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #4E5968;
+      text-align: center;
+      word-break: keep-all;
+    }
+
+    &.active {
+      background-color: white;
+      border-color: #3182F6;
+      box-shadow: 0 8px 20px rgba(49, 130, 246, 0.12);
+      opacity: 1;
+
+      .icon {
+        filter: grayscale(0);
+      }
+
+      .name {
+        color: #3182F6;
+      }
+    }
+
+    .lock {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      font-size: 12px;
+      opacity: 0.4;
+    }
+
+    &.selected {
+      background-color: #E8F3FF;
+      border-color: #3182F6;
+      box-shadow: 0 0 0 2px rgba(49, 130, 246, 0.2);
+    }
+
+    .selected-tag {
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #3182F6;
+      color: white;
+      font-size: 8px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 2;
+    }
+  }
+
+  &__badge-ribbon {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 2px 0;
+    cursor: pointer;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  &__ribbon-icon {
+    width: 24px;
+    height: 24px;
+    background-color: white;
+    border: 1px solid #F2F4F6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+
+    &:hover {
+      transform: translateY(-2px);
+      z-index: 5;
+    }
+
+    &:not(:first-child) {
+      margin-left: -6px; // 겹치기 효과
+    }
+  }
+
+  &__ribbon-more {
+    font-size: 11px;
+    color: #8B95A1;
+    font-weight: 700;
+    margin-left: 6px;
+    background-color: #F2F4F6;
+    padding: 2px 6px;
+    border-radius: 8px;
   }
 
   // FAQ Refined

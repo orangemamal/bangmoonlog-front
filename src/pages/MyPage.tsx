@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import * as Icons from "lucide-react";
 import {
   Award, Heart, ChevronRight, X, CheckCircle2, Trash2, MapPin, HelpCircle,
-  MoreHorizontal, Pencil, ArrowLeft
+  MoreHorizontal, Pencil, ArrowLeft, Handshake
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { db } from "../services/firebase";
@@ -19,6 +19,8 @@ import { MY_PAGE_MENU } from "../constants/myPage";
 import { formatAddressDetail } from "../utils/addressUtils";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { ProfileAvatarUpload } from "../components/mypage/ProfileAvatarUpload";
+import { calculateUserStats, getMyBadges } from "../utils/BadgeLogic";
+import { BADGES } from "../constants/badges";
 import logoSvg from "../assets/images/bangmoonlog_logo.svg";
 
 /** Set true when Firebase Storage is ready — shows profile photo + upload UI. */
@@ -62,6 +64,7 @@ export function MyPage() {
     reactions: true,
     notices: true
   });
+  const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -73,22 +76,21 @@ export function MyPage() {
   const [bookmarkDeleteTarget, setBookmarkDeleteTarget] = useState<{ id: string, address: string } | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
-  // 1:1 문의 폼 상태
-  const [inquiryEmail, setInquiryEmail] = useState("");
-  const [inquiryType, setInquiryType] = useState("");
+  // 관리자 전용 상태
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminList, setAdminList] = useState<string[]>(["bangmoonlog.cs@gmail.com"]);
+  const [reports, setReports] = useState<any[]>([]);
+  const [adminTab, setAdminTab] = useState("reports");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+
   const [inquiryContent, setInquiryContent] = useState("");
   // 사용자 이름 수정 상태
   const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
 
-  const titleSteps = [
-    { count: 0, title: "새내기", icon: "🌱" },
-    { count: 1, title: "초보 방문객", icon: "🚶‍♂️" },
-    { count: 5, title: "동네 탐험가", icon: "🏃‍♂️" },
-    { count: 20, title: "로컬 가이드", icon: "👟" },
-    { count: 50, title: "프로 발품러", icon: "🥾" },
-    { count: 100, title: "방문록의 신", icon: "👑" },
-  ];
+  // 칭호 통계 계산
+  const userStats = useMemo(() => calculateUserStats(myReviews), [myReviews]);
+  const earnedBadges = useMemo(() => getMyBadges(userStats), [userStats]);
 
   const navigate = useNavigate();
 
@@ -167,6 +169,9 @@ export function MyPage() {
         if (data.settings?.notifications) {
           setNotiSettings(data.settings.notifications);
         }
+        if (data.selectedBadgeId) {
+          setSelectedBadgeId(data.selectedBadgeId);
+        }
       } else {
         // 기본값으로 문서 생성
         await setDoc(userRef, {
@@ -185,9 +190,41 @@ export function MyPage() {
 
     loadUserSettings();
 
-    if (activeModal === "recent") loadRecentDetails();
+    // [관리자 체크 및 데이터 로드]
+    const checkAdminStatus = async () => {
+      const adminRef = doc(db, "config", "admins");
+      const adminSnap = await getDoc(adminRef);
+      let list = ["bangmoonlog.cs@gmail.com"];
 
-    return () => { unsubStats(); unsubBookmarks(); };
+      if (adminSnap.exists()) {
+        const data = adminSnap.data();
+        if (data.emails) list = Array.from(new Set([...list, ...data.emails]));
+      } else {
+        // 최초 생성
+        await setDoc(adminRef, { emails: list });
+      }
+
+      setAdminList(list);
+      const userEmail = user?.email || "";
+      if (list.includes(userEmail)) {
+        setIsAdmin(true);
+        // 제보 목록 실시간 로드
+        const qReports = query(collection(db, "reports"), where("status", "==", "pending"));
+        const unsubReports = onSnapshot(qReports, (snap) => {
+          setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return unsubReports;
+      }
+    };
+
+    let unsubReportsCleanup: any = null;
+    checkAdminStatus().then(cleanup => { unsubReportsCleanup = cleanup; });
+
+    return () => {
+      unsubStats();
+      unsubBookmarks();
+      if (unsubReportsCleanup) unsubReportsCleanup();
+    };
   }, [user?.id, activeModal, loadRecentDetails]);
 
   // 알림 설정 변경 핸들러
@@ -208,6 +245,31 @@ export function MyPage() {
       console.error("Failed to update notification settings:", e);
     }
   };
+
+  // 대표 칭호 변경 핸들러
+  const handleSelectBadge = async (badgeId: string) => {
+    const badge = earnedBadges.find(b => b.id === badgeId);
+    if (!badge) return;
+
+    setSelectedBadgeId(badgeId);
+    try {
+      const userRef = doc(db, "users", user!.id);
+      await setDoc(userRef, { selectedBadgeId: badgeId }, { merge: true });
+    } catch (e) {
+      console.error("Failed to update selected badge:", e);
+    }
+  };
+
+  // 현재 노출될 대표 칭호 결정
+  const currentTitle = useMemo(() => {
+    if (selectedBadgeId) {
+      const selected = earnedBadges.find(b => b.id === selectedBadgeId);
+      if (selected) return selected;
+    }
+    // 선택된 게 없으면 레벨 칭호 중 가장 높은 것 반환
+    const levelBadges = earnedBadges.filter(b => b.category === 'level');
+    return levelBadges[levelBadges.length - 1];
+  }, [earnedBadges, selectedBadgeId]);
 
   // 공유하기 기능 (Web Share API 사용)
   const handleShare = async () => {
@@ -291,29 +353,31 @@ export function MyPage() {
 
           {/* 2구역: 회원정보 */}
           <div className="mypage__info-zone">
-            <div className="mypage__name-line">
-              {authorTitle && (
-                <span className="mypage__author-title-group" onClick={() => setShowTitleInfo(true)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', verticalAlign: 'middle' }}>
-                  <span className="mypage__author-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    <span className="icon" style={{ display: 'inline-flex', alignItems: 'center' }}>{authorTitle.icon}</span>
-                    <span className="text">{authorTitle.title}</span>
+            <div className="mypage__reputation-zone" onClick={() => setShowTitleInfo(true)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {currentTitle && (
+                  <span className="mypage__author-title">
+                    <span className="icon">{currentTitle.icon}</span>
+                    <span className="text">{currentTitle.title}</span>
                   </span>
-                  <HelpCircle size={18} color="#B0B8C1" strokeWidth={2} />
-                </span>
-              )}
-              <div className="mypage__name-row">
-                <span className="mypage__name">{user?.displayName || user?.name || '방문인'} 님</span>
-                <button
-                  className="mypage__edit-name-btn"
-                  onClick={() => {
-                    setNewName(user?.displayName || user?.name || "");
-                    setIsEditNameModalOpen(true);
-                  }}
-                >
-                  <Pencil size={14} color="#8B95A1" />
-                </button>
+                )}
+                <HelpCircle size={16} color="#B0B8C1" />
               </div>
             </div>
+
+            <div className="mypage__name-row">
+              <span className="mypage__name">{user?.displayName || user?.name || '방문인'} 님</span>
+              <button
+                className="mypage__edit-name-btn"
+                onClick={() => {
+                  setNewName(user?.displayName || user?.name || "");
+                  setIsEditNameModalOpen(true);
+                }}
+              >
+                <Pencil size={14} color="#8B95A1" />
+              </button>
+            </div>
+
             <p className="mypage__email">{user?.email || (user?.isAnonymous ? '게스트 로그인 중' : '이메일 정보 없음')}</p>
           </div>
 
@@ -344,23 +408,45 @@ export function MyPage() {
       </div>
 
       <div className="mypage__menu-section">
+        {isAdmin && (
+          <div key="admin">
+            <h3 className="mypage__menu-heading" style={{ color: '#3182F6', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Icons.ShieldCheck size={16} /> 서비스 관리
+            </h3>
+            <MenuItem
+              icon={<Icons.Settings size={20} color="#3182F6" />}
+              title="제보 관리 및 권한 설정"
+              badge={reports.length > 0 ? reports.length : undefined}
+              onClick={() => setActiveModal("admin")}
+              isSpecial={true}
+            />
+            <div className="mypage__spacer" />
+          </div>
+        )}
         {["활동", "정보", "설정", "지원"].map((cat, catIdx, catArr) => (
           <div key={cat}>
             <h3 className="mypage__menu-heading">{cat === "활동" ? "나의 활동" : cat === "정보" ? "앱 설정 및 정보" : cat === "설정" ? "서비스 설정" : "고객 지원"}</h3>
             {MY_PAGE_MENU.filter(m => m.category === cat).map(item => {
               const IconComp = (Icons as any)[item.icon] || HelpCircle;
+              const iconSize = item.label === "제휴 문의" ? 40 : 20;
 
               const menuItem = item.label === "알림 설정" ? (
                 <MenuItem
                   key={item.label}
-                  icon={<IconComp size={20} color="#333D4B" />}
+                  icon={<IconComp size={iconSize} color="#333D4B" />}
                   title={item.label}
                   onClick={() => setIsNotifModalOpen(true)}
                 />
               ) : (
                 <MenuItem
                   key={item.label}
-                  icon={<IconComp size={20} color="#333D4B" />}
+                  icon={
+                    item.label === "제휴 문의" ? (
+                      <div style={{ fontSize: '40px', lineHeight: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>🤝</div>
+                    ) : (
+                      <IconComp size={iconSize} color="#333D4B" />
+                    )
+                  }
                   title={item.label}
                   badge={item.label === "찜한 리스트" && bookmarks.length > 0 ? bookmarks.length : undefined}
                   onClick={() => {
@@ -385,6 +471,7 @@ export function MyPage() {
                     else if (item.label === "자주 묻는 질문") setActiveModal("faq");
                   }}
                   isSpecial={item.label === "제휴 문의"}
+                  sublabel={item.label === "제휴 문의" ? "방문Log와 함께 세입자의 세상을 바꿀 파트너를 찾습니다" : undefined}
                 />
               );
 
@@ -415,11 +502,114 @@ export function MyPage() {
                   activeModal === "recent" ? "최근 본 방문록" :
                     activeModal === "announcements" ? "공지사항" :
                       activeModal === "inquiry" ? "문의하기" :
-                        activeModal === "partnership" ? "제휴 문의" : "자주 묻는 질문"}
+                        activeModal === "partnership" ? "제휴 문의" :
+                          activeModal === "admin" ? "관리자 대시보드" : "자주 묻는 질문"}
               </h2>
             </div>
 
             <div className="mypage__modal-content">
+              {activeModal === "admin" && (
+                <div className="mypage__admin">
+                  <div className="mypage__faq-tabs" style={{ marginBottom: '24px' }}>
+                    <button className={`mypage__faq-tab ${adminTab === 'reports' ? 'active' : ''}`} onClick={() => setAdminTab('reports')}>
+                      <Icons.Bell size={18} /> <span>제보 관리 ({reports.length})</span>
+                    </button>
+                    <button className={`mypage__faq-tab ${adminTab === 'settings' ? 'active' : ''}`} onClick={() => setAdminTab('settings')}>
+                      <Icons.Users size={18} /> <span>관리자 설정</span>
+                    </button>
+                  </div>
+
+                  {adminTab === 'reports' ? (
+                    <div className="mypage__admin-reports">
+                      {reports.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '60px 0', color: '#B0B8C1' }}>
+                          <Icons.CheckCircle size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
+                          <p>새로운 오판단 제보가 없습니다.</p>
+                        </div>
+                      ) : (
+                        <div className="mypage__card-list">
+                          {reports.map((rep) => (
+                            <div key={rep.id} className="mypage__card" style={{ cursor: 'default' }}>
+                              <div className="mypage__card-left" style={{ flex: 1 }}>
+                                <div className="mypage__card-info">
+                                  <div className="title" style={{ fontSize: '15px' }}>{rep.address}</div>
+                                  <div className="date" style={{ marginTop: '4px' }}>
+                                    제보자: {rep.reporterEmail} | {rep.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(rep.createdAt.toDate()) : '시간 정보 없음'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mypage__card-right" style={{ gap: '8px' }}>
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm("제보를 확인 처리하시겠습니까? (목록에서 삭제됩니다)")) {
+                                      await deleteDoc(doc(db, "reports", rep.id));
+                                    }
+                                  }}
+                                  style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#F2F4F6', color: '#4E5968', fontSize: '13px', fontWeight: 600, border: 'none' }}
+                                >
+                                  완료
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mypage__admin-settings">
+                      <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#333D4B' }}>관리자 추가</h4>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input
+                            type="email"
+                            placeholder="추가할 이메일 입력"
+                            value={newAdminEmail}
+                            onChange={(e) => setNewAdminEmail(e.target.value)}
+                            style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid #E5E8EB', fontSize: '14px' }}
+                          />
+                          <button
+                            onClick={async () => {
+                              if (!newAdminEmail.includes('@')) return alert("올바른 이메일 형식이 아닙니다.");
+                              const newList = Array.from(new Set([...adminList, newAdminEmail]));
+                              await setDoc(doc(db, "config", "admins"), { emails: newList });
+                              setAdminList(newList);
+                              setNewAdminEmail("");
+                              alert("관리자가 추가되었습니다.");
+                            }}
+                            style={{ padding: '0 16px', borderRadius: '8px', backgroundColor: '#3182F6', color: '#fff', fontSize: '14px', fontWeight: 600, border: 'none' }}
+                          >
+                            추가
+                          </button>
+                        </div>
+                      </div>
+
+                      <h4 style={{ margin: '0 0 12px 16px', fontSize: '14px', color: '#8B95A1' }}>현재 관리자 목록</h4>
+                      <div className="mypage__card-list">
+                        {adminList.map(email => (
+                          <div key={email} className="mypage__card" style={{ padding: '12px 16px', cursor: 'default' }}>
+                            <div style={{ fontSize: '14px', color: '#333D4B', fontWeight: 500 }}>{email}</div>
+                            {email !== "bangmoonlog.cs@gmail.com" && (
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(`${email} 님의 관리자 권한을 삭제하시겠습니까?`)) {
+                                    const newList = adminList.filter(e => e !== email);
+                                    await setDoc(doc(db, "config", "admins"), { emails: newList });
+                                    setAdminList(newList);
+                                  }
+                                }}
+                                style={{ color: '#F04452', fontSize: '12px', fontWeight: 600, border: 'none', background: 'none' }}
+                              >
+                                삭제
+                              </button>
+                            )}
+                            {email === "bangmoonlog.cs@gmail.com" && <span style={{ fontSize: '12px', color: '#B0B8C1' }}>마스터</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {activeModal === "announcements" && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {[...ANNOUNCEMENTS].sort((a, b) => {
@@ -595,7 +785,7 @@ export function MyPage() {
                       </button>
                     ))}
                   </div>
-                  
+
                   <div className="mypage__faq-list">
                     <AnimatePresence mode="wait">
                       <motion.div
@@ -607,39 +797,39 @@ export function MyPage() {
                         className="mypage__faq-card-group"
                       >
                         {selectedFaqCategory === "이용" && [
-                          { 
-                            q: "방문Log는 어떤 서비스인가요?", 
-                            a: "실제 그 공간을 방문하거나 거주해본 사람들이 남긴 <b>'진짜 리뷰'</b>를 공유하는 플랫폼입니다. 광고성 글이 아닌 소음, 채광, 하자 보수 등 실생활과 밀접한 정보를 지도로 한눈에 확인할 수 있습니다." 
+                          {
+                            q: "방문Log는 어떤 서비스인가요?",
+                            a: "실제 그 공간을 방문하거나 거주해본 사람들이 남긴 <b>'진짜 리뷰'</b>를 공유하는 플랫폼입니다. 광고성 글이 아닌 소음, 채광, 하자 보수 등 실생활과 밀접한 정보를 지도로 한눈에 확인할 수 있습니다."
                           },
-                          { 
-                            q: "상대방의 방문록이 흐릿하게 보여요.", 
-                            a: "방문Log는 서로의 소중한 정보를 나누는 '상부상조' 커뮤니티입니다. 🏠<br/><br/>본인의 거주 경험이나 추천하고 싶은 장소의 방문록을 <b>딱 1개만 나누어 주세요!</b> 발자국을 하나 남기시면, 다른 분들이 남긴 모든 방문록을 자유롭게 읽으실 수 있습니다. (작성 후 1년 동안 열람 권한이 유지됩니다!)" 
+                          {
+                            q: "상대방의 방문록이 흐릿하게 보여요.",
+                            a: "방문Log는 서로의 소중한 정보를 나누는 '상부상조' 커뮤니티입니다. 🏠<br/><br/>본인의 거주 경험이나 추천하고 싶은 장소의 방문록을 <b>딱 1개만 나누어 주세요!</b> 발자국을 하나 남기시면, 다른 분들이 남긴 모든 방문록을 자유롭게 읽으실 수 있습니다. (작성 후 1년 동안 열람 권한이 유지됩니다!)"
                           }
                         ].map((item, idx) => (
                           <FAQItem key={`use-${idx}`} question={item.q} answer={item.a} />
                         ))}
 
                         {selectedFaqCategory === "신뢰" && [
-                          { 
-                            q: "리뷰의 신뢰도는 어떻게 관리되나요?", 
-                            a: "<b>'인증된 방문록'</b> 기능을 통해 GPS 기반으로 실제 해당 장소 근처에서 작성된 리뷰인지 확인합니다. 또한 유저 간의 '공감' 기능을 통해 투명한 커뮤니티를 유지하고 있습니다." 
+                          {
+                            q: "리뷰의 신뢰도는 어떻게 관리되나요?",
+                            a: "<b>'인증된 방문록'</b> 기능을 통해 GPS 기반으로 실제 해당 장소 근처에서 작성된 리뷰인지 확인합니다. 또한 유저 간의 '공감' 기능을 통해 투명한 커뮤니티를 유지하고 있습니다."
                           },
-                          { 
-                            q: "허위 사실이나 비방글을 발견하면?", 
-                            a: "해당 게시물 우측의 <b>'더보기(...) > 신고하기'</b> 기능을 이용해 주세요. 운영진이 신속히 검토 후 약관에 따라 블라인드 처리 및 이용 제한 조치를 취하고 있습니다." 
+                          {
+                            q: "허위 사실이나 비방글을 발견하면?",
+                            a: "해당 게시물 우측의 <b>'더보기(...) > 신고하기'</b> 기능을 이용해 주세요. 운영진이 신속히 검토 후 약관에 따라 블라인드 처리 및 이용 제한 조치를 취하고 있습니다."
                           }
                         ].map((item, idx) => (
                           <FAQItem key={`trust-${idx}`} question={item.q} answer={item.a} />
                         ))}
 
                         {selectedFaqCategory === "개인정보" && [
-                          { 
-                            q: "제 개인정보는 안전한가요?", 
-                            a: "방문Log는 소셜 로그인 방식을 사용하여 비밀번호를 직접 수집하지 않으며, 서비스 운영에 필요한 최소한의 정보 외에는 엄격히 관리합니다." 
+                          {
+                            q: "제 개인정보는 안전한가요?",
+                            a: "방문Log는 소셜 로그인 방식을 사용하여 비밀번호를 직접 수집하지 않으며, 서비스 운영에 필요한 최소한의 정보 외에는 엄격히 관리합니다."
                           },
-                          { 
-                            q: "회원 탈퇴는 어떻게 하나요?", 
-                            a: "[내 정보] 화면 상단의 <b>로그아웃 버튼 옆 '탈퇴'</b> 메뉴를 통해 언제든지 가능합니다. 탈퇴 시 관련 법령에 따라 모든 개인정보는 즉시 파기되니 안심하세요." 
+                          {
+                            q: "회원 탈퇴는 어떻게 하나요?",
+                            a: "[내 정보] 화면 상단의 <b>로그아웃 버튼 옆 '탈퇴'</b> 메뉴를 통해 언제든지 가능합니다. 탈퇴 시 관련 법령에 따라 모든 개인정보는 즉시 파기되니 안심하세요."
                           }
                         ].map((item, idx) => (
                           <FAQItem key={`privacy-${idx}`} question={item.q} answer={item.a} />
@@ -811,29 +1001,95 @@ export function MyPage() {
               <div className="mypage__title-modal-content">
                 <div className="mypage__title-modal-desc-box">
                   <p>
-                    방문Log를 작성할수록 더 높은 등급의 칭호를 획득할 수 있습니다. <br />
-                    꾸준한 활동으로 <strong>방문록의 신</strong>에 도전해보세요!
+                    방문Log 활동을 통해 다양한 활동 칭호를 획득해보세요! <br />
+                    <strong>지역 보안관</strong>부터 <strong>스페셜 업적</strong>까지 도전할 수 있습니다.
                   </p>
                 </div>
 
-                <div className="mypage__title-step-list">
-                  {titleSteps.map((step) => (
-                    <div
-                      key={step.title}
-                      className={`mypage__title-step-item ${stats.reviews >= step.count ? 'active' : ''}`}
-                    >
-                      <div className="mypage__title-step-item-left">
-                        <span className="mypage__title-step-item-icon">{step.icon}</span>
-                        <div className="mypage__title-step-item-info">
-                          <span className="mypage__title-step-item-name">{step.title}</span>
-                          <span className="mypage__title-step-item-requirement">누적 방문록 {step.count}회 이상</span>
-                        </div>
-                      </div>
-                      {stats.reviews >= step.count && (
-                        <CheckCircle2 size={24} color="#3182F6" />
+                <div className="mypage__badge-container">
+                  {/* 1. 단계별 성장 */}
+                  <div className="mypage__badge-section">
+                    <h3 className="mypage__badge-section-title">👟 단계별 성장</h3>
+                    <div className="mypage__title-step-list">
+                      {BADGES.filter(b => b.category === 'level').map((badge) => {
+                        const isEarned = badge.condition(userStats);
+                        const isSelected = currentTitle?.id === badge.id;
+                        return (
+                          <div
+                            key={badge.id}
+                            className={`mypage__title-step-item ${isEarned ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
+                            onClick={() => isEarned && handleSelectBadge(badge.id)}
+                            style={{ cursor: isEarned ? 'pointer' : 'default' }}
+                          >
+                            <div className="mypage__title-step-item-left">
+                              <span className="mypage__title-step-item-icon">{badge.icon}</span>
+                              <div className="mypage__title-step-item-info">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span className="mypage__title-step-item-name">{badge.title}</span>
+                                  {isSelected && <span style={{ fontSize: '10px', backgroundColor: '#3182F6', color: '#fff', padding: '2px 6px', borderRadius: '4px' }}>착용중</span>}
+                                </div>
+                                <span className="mypage__title-step-item-requirement">{badge.description}</span>
+                              </div>
+                            </div>
+                            {isEarned && (isSelected ? <CheckCircle2 size={24} color="#3182F6" fill="#3182F6" /> : <CheckCircle2 size={24} color="#3182F6" />)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 2. 지역 점령 */}
+                  <div className="mypage__badge-section">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '12px' }}>
+                      <h3 className="mypage__badge-section-title" style={{ marginBottom: 0 }}>📍 지역 점령</h3>
+                      <span style={{ fontSize: '11px', color: '#8B95A1', fontWeight: 500 }}>지역별 방문록 10회 작성 시 획득</span>
+                    </div>
+                    <div className="mypage__badge-grid">
+                      {earnedBadges.filter(b => b.category === 'region').length > 0 ? (
+                        earnedBadges.filter(b => b.category === 'region').map(badge => {
+                          const isSelected = currentTitle?.id === badge.id;
+                          return (
+                            <div
+                              key={badge.id}
+                              className={`mypage__badge-box active ${isSelected ? 'selected' : ''}`}
+                              onClick={() => handleSelectBadge(badge.id)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <div className="icon">{badge.icon}</div>
+                              <div className="name">{badge.title}</div>
+                              {isSelected && <div className="selected-tag">착용중</div>}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="mypage__badge-empty">아직 점령한 지역이 없습니다.</div>
                       )}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* 3. 스페셜 업적 */}
+                  <div className="mypage__badge-section">
+                    <h3 className="mypage__badge-section-title">⭐ 스페셜 업적</h3>
+                    <div className="mypage__badge-grid">
+                      {BADGES.filter(b => b.category === 'special').map(badge => {
+                        const isEarned = badge.condition(userStats);
+                        const isSelected = currentTitle?.id === badge.id;
+                        return (
+                          <div
+                            key={badge.id}
+                            className={`mypage__badge-box ${isEarned ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
+                            onClick={() => isEarned && handleSelectBadge(badge.id)}
+                            style={{ cursor: isEarned ? 'pointer' : 'default' }}
+                          >
+                            <div className="icon">{badge.icon}</div>
+                            <div className="name">{badge.title}</div>
+                            {isEarned && isSelected && <div className="selected-tag">착용중</div>}
+                            {!isEarned && <div className="lock">🔒</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1168,7 +1424,7 @@ export function MyPage() {
   );
 }
 
-function MenuItem({ icon, title, onClick, badge, isSpecial }: { icon: React.ReactNode; title: string; onClick?: () => void; badge?: number, isSpecial?: boolean }) {
+function MenuItem({ icon, title, onClick, badge, isSpecial, sublabel }: { icon: React.ReactNode; title: string; onClick?: () => void; badge?: number, isSpecial?: boolean, sublabel?: string }) {
   return (
     <button
       className={`mypage__menu-item ${isSpecial ? 'mypage__menu-item--special' : ''}`}
@@ -1178,7 +1434,7 @@ function MenuItem({ icon, title, onClick, badge, isSpecial }: { icon: React.Reac
         {icon}
         <div className="mypage__menu-item-info">
           <span className="mypage__menu-item-label">{title}</span>
-          {isSpecial && <span className="mypage__menu-item-sublabel">방문Log와 함께 세입자의 세상을 바꿀 파트너를 찾습니다 🤝</span>}
+          {sublabel && <span className="mypage__menu-item-sublabel">{sublabel}</span>}
         </div>
         {badge !== undefined && (
           <span className="mypage__menu-item-badge">

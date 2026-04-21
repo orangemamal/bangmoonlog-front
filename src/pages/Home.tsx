@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag, Crosshair } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
-import { db } from '../services/firebase';
+import { db, storage } from '../services/firebase';
 import {
   collection,
   getDocs,
@@ -18,8 +18,10 @@ import {
   QuerySnapshot,
   QueryDocumentSnapshot,
   doc,
-  getDoc
+  getDoc,
+  serverTimestamp
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { checkEligibleForNewTitle } from "../utils/titleSystem";
@@ -68,7 +70,7 @@ const checkIsResidential = (addr: string) => {
   // 1. 명백한 주거용 키워드 (화이트리스트 - 오탐 방지)
   const whiteList = [
     "아파트", "빌라", "맨션", "주택", "오피스텔", "다세대", "다가구", "원룸",
-    "투룸", "고시원", "고시텔", "빌리지", "리빙텔", "캐슬", "파크뷰", "단지"
+    "투룸", "고시원", "고시텔", "빌리지", "리빙텔", "캐슬", "파크뷰", "단지", "전원", "다중"
   ];
   if (whiteList.some(keyword => addr.includes(keyword))) return true;
 
@@ -79,24 +81,18 @@ const checkIsResidential = (addr: string) => {
   ];
   if (strongBlacklist.some(keyword => addr.includes(keyword))) return false;
 
-  // 3. 시설/카테고리 기반 블랙리스트 (공원, 학교, 관공서, 유적지 등 대폭 강화)
+  // 3. 절대 거주할 수 없는 명백한 공공/시설 블랙리스트 (최소화)
   const infrastructureBlacklist = [
-    "역", "출구", "공원", "광장", "교차로", "쉼터", "숲", "유원지", "산", "계곡",
-    "초등학교", "중학교", "고등학교", "대학교", "캠퍼스", "학원",
-    "경찰서", "파출소", "소방서", "우체국", "시청", "구청", "동주민센터", "행정복지센터",
-    "교회", "성당", "사찰", "절", "박물관", "미술관", "공연장", "문화센터",
-    "궁", "문화재", "유적지", "능", "단", "묘", "성곽", "성터", "비석",
-    "체육관", "경기장", "운동장", "수영장", "골프장",
-    "병원", "의료원", "보건소", "요양원",
-    "터미널", "공항", "선착장", "항구",
-    "시장", "백화점", "마트", "아울렛", "몰", "상가", "빌딩", "타워",
-    "호텔", "콘도", "리조트", "펜션", "모텔", "여인숙"
+    "역", "출구", "공원", "광장", "교차로", "숲", "유원지", "산", "계곡",
+    "지하철", "역사내", "승강장", "환승센터", "터미널", "공항", "시장",
+    "경찰서", "파출소", "소방서", "우체국", "시청", "구청", "동주민센터",
+    "궁", "문화재", "유적지", "능", "단", "묘", "성곽", "경기장", "운동장"
   ];
 
-  // 4. 패턴 기반 차단 (단순히 단어가 포함된 게 아니라 명칭으로 존재하는지 체크)
+  // 4. 패턴 기반 차단 (단어 자체가 독립적으로 쓰일 때만 차단)
   const isBlocked = infrastructureBlacklist.some(keyword => {
-    // 단어 뒤에 공백, 숫자, 호선, 번, 역사 등이 붙거나 바로 끝날 때만 차단
-    const regex = new RegExp(`${keyword}(\\s|\\d|호선|번|사|내|전|$)`);
+    // 예: '서울역', '올림픽공원' 등 명백한 경우만 차단
+    const regex = new RegExp(`(^|\\s)${keyword}($|\\s|\\d)`);
     return regex.test(addr);
   });
 
@@ -137,6 +133,7 @@ declare global {
     __openWriteSheet: (address: string, lat?: number, lng?: number) => void;
     __openReadList: (address: string) => void;
     __toggleBookmark: (address: string, lat: number, lng: number) => void;
+    __reportInaccuracy: (address: string) => void;
   }
 }
 // [유틸리티] 이미지 로컬 압축 및 Base64 변환 (Firestore 저장용)
@@ -161,6 +158,15 @@ const compressAndEncodeImage = (file: File): Promise<string> => {
       };
     };
   });
+};
+
+// [유틸리티] 비디오 및 대용량 파일용 Firebase Storage 업로드
+const uploadMediaToStorage = async (file: File): Promise<string> => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `media_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const storageRef = ref(storage, `reviews/${fileName}`);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
 };
 interface InfoWindowParams {
   address: string;
@@ -246,6 +252,25 @@ export function Home() {
   }, [isLoggedIn, user]);
 
   const { hasWatchedAd, watchAd, isAdShowing } = useAccessControl();
+
+  // [신규] 오판단 제보 전역 함수 등록
+  useEffect(() => {
+    window.__reportInaccuracy = async (addr: string) => {
+      try {
+        await addDoc(collection(db, "reports"), {
+          address: addr,
+          reporterEmail: userRef.current?.email || "비회원",
+          reporterId: userRef.current?.id || "anonymous",
+          status: "pending",
+          createdAt: serverTimestamp()
+        });
+        alert("제보가 성공적으로 접수되었습니다. 관리자 검토 후 24시간 내에 반영하겠습니다.");
+      } catch (e) {
+        console.error("Report failed:", e);
+        alert("제보 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      }
+    };
+  }, []);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
@@ -276,6 +301,9 @@ export function Home() {
   const userMarkerRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
   const allMarkersRef = useRef<any[]>([]);
+
+  // [신규] 건축물 확인 결과 캐시 (성능 최적화용)
+  const buildingCacheRef = useRef<Record<string, boolean>>({});
 
   // 검색 기록 상태
   const [isLocating, setIsLocating] = useState(false);
@@ -464,7 +492,7 @@ export function Home() {
         (m as any).propertyCount = loc.count;
         allMarkersRef.current.push(m);
 
-        window.naver.maps.Event.addListener(m, "click", () => {
+        window.naver.maps.Event.addListener(m, "click", async () => {
           const latLng = m.getPosition();
           const curZoom = mapInstance.current.getZoom();
           mapInstance.current.autoResize();
@@ -483,50 +511,98 @@ export function Home() {
 
           mapInstance.current.panTo(latLng, { duration: 300, easing: "linear" });
 
-          const checkBookmark = async () => {
-            let isBookmarked = false;
-            if (isLoggedIn && user) {
-              const stdAddr = normalizeBaseAddress(loc.address);
-              const bookmarkId = `bookmark_${user.id}_${stdAddr.replace(/\s+/g, '_')}`;
-              const bRef = doc(db, "bookmarks", bookmarkId);
-              const bSnap = await getDoc(bRef);
-              isBookmarked = bSnap.exists();
-            }
+          // [최적화] 즉각적인 로딩 팝업 노출
+          infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+          infoWindowInstance.current.setContent(`
+            <div class="iw-container marker loading">
+              <div class="iw-card" style="padding:24px 20px; display:flex; flex-direction:column; align-items:center; gap:12px; min-width:180px;">
+                <div class="spinner" style="width:24px; height:24px; border:3px solid #F2F4F6; border-top-color:#3182F6; border-radius:50%; animation:iw-spin 0.8s linear infinite;"></div>
+                <span style="font-size:13px; color:#8B95A1; font-weight:600;">건물 정보 확인 중...</span>
+              </div>
+            </div>
+          `);
+          infoWindowInstance.current.open(mapInstance.current, latLng);
 
-            const isRes = checkIsResidential(loc.address);
+          // [캐시 및 비동기 UX 최적화]
+          const address = normalizeBaseAddress(loc.address);
+          infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
 
-            const openInfoWindow = async () => {
+          // 1. 캐시 확인 시 즉시 노출
+          if (buildingCacheRef.current[address] !== undefined) {
+            const isRes = buildingCacheRef.current[address];
+            const loadAndShow = async () => {
+              let isBookmarked = false;
+              if (isLoggedIn && user) {
+                const bId = `bookmark_${user.id}_${address.replace(/\s+/g, '_')}`;
+                const bSnap = await getDoc(doc(db, "bookmarks", bId));
+                isBookmarked = bSnap.exists();
+              }
               let hasWritten = false;
               if (isLoggedIn && user?.id) {
-                const q = query(
-                  collection(db, "reviews"),
-                  where("authorId", "==", user.id),
-                  where("address", "==", loc.address)
-                );
+                const q = query(collection(db, "reviews"), where("authorId", "==", user.id), where("address", "==", address));
                 const snap = await getDocs(q);
                 hasWritten = !snap.empty;
               }
-
-              const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
-              const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
-
-              infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
               infoWindowInstance.current.setContent(getInfoWindowMarkup({
-                address: loc.address,
-                lat: loc.lat,
-                lng: loc.lng,
-                isBookmarked,
-                isResidential: isRes,
-                reviewCount: loc.count || 0,
-                avgRating: loc.avgRating || 0,
-                hasWritten
+                address, lat: loc.lat, lng: loc.lng, isBookmarked, isResidential: isRes,
+                reviewCount: loc.count || 0, avgRating: loc.avgRating || 0, hasWritten
               }));
               infoWindowInstance.current.open(mapInstance.current, latLng);
             };
+            loadAndShow();
+            return;
+          }
 
-            openInfoWindow();
-          };
-          checkBookmark();
+          // 2. 캐시 없으면 로딩창 먼저 띄움
+          infoWindowInstance.current.setContent(`
+            <div class="iw-container marker loading">
+              <div class="iw-card" style="padding:20px; display:flex; flex-direction:column; align-items:center; gap:12px;">
+                <div class="spinner" style="width:24px; height:24px; border:3px solid #E5E8EB; border-top-color:#3182F6; border-radius:50%; animation:iw-spin 0.8s linear infinite;"></div>
+                <span style="font-size:13px; color:#8B95A1; font-weight:600;">건물 확인 중...</span>
+              </div>
+            </div>
+          `);
+          infoWindowInstance.current.open(mapInstance.current, latLng);
+
+          // 3. 백그라운드 정밀 검사
+          window.naver.maps.Service.reverseGeocode({ coords: latLng, orders: "roadaddr,addr" }, async (status: any, res: any) => {
+            let isRes = checkIsResidential(address);
+            if (status === window.naver.maps.Service.Status.OK) {
+              const addrRes = res.v2.results.find((r: any) => r.name === 'addr' || r.name === 'roadaddr');
+              const bName = (addrRes && addrRes.land && addrRes.land.name) ? addrRes.land.name : "";
+              isRes = isRes && (!bName || checkIsResidential(bName));
+
+              const addrResult = res.v2.results.find((r: any) => r.name === 'addr');
+              if (addrResult) {
+                const code = addrResult.code?.id;
+                const land = addrResult.land;
+                if (code && land?.number1) {
+                  const apiRes = await checkBuildingRegistry(code.substring(0, 5), code.substring(5, 10), land.number1, land.number2);
+                  if (apiRes !== null) isRes = apiRes;
+                }
+              }
+            }
+            buildingCacheRef.current[address] = isRes;
+
+            // 상세 데이터 로드 후 업데이트
+            let isBookmarked = false;
+            if (isLoggedIn && user) {
+              const bId = `bookmark_${user.id}_${address.replace(/\s+/g, '_')}`;
+              const bSnap = await getDoc(doc(db, "bookmarks", bId));
+              isBookmarked = bSnap.exists();
+            }
+            let hasWritten = false;
+            if (isLoggedIn && user?.id) {
+              const q = query(collection(db, "reviews"), where("authorId", "==", user.id), where("address", "==", address));
+              const snap = await getDocs(q);
+              hasWritten = !snap.empty;
+            }
+
+            infoWindowInstance.current.setContent(getInfoWindowMarkup({
+              address, lat: loc.lat, lng: loc.lng, isBookmarked, isResidential: isRes,
+              reviewCount: loc.count || 0, avgRating: loc.avgRating || 0, hasWritten
+            }));
+          });
         });
         return m;
       });
@@ -1198,6 +1274,18 @@ export function Home() {
         // 줌 레벨 19 이상일 때만 주소 체크 및 모달 노출 로직 실행
         mapInstance.current.panTo(clickedPos, { duration: 300, easing: "linear" });
 
+        // [최적화] 즉시 팝업 노출 (낙관적 UX)
+        infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+        infoWindowInstance.current.setContent(`
+          <div class="iw-container marker loading">
+            <div class="iw-card" style="padding:24px 20px; display:flex; flex-direction:column; align-items:center; gap:12px; min-width:180px;">
+              <div class="iw-loader"></div>
+              <span style="font-size:13px; color:#8B95A1; font-weight:600;">건물 정보 확인 중...</span>
+            </div>
+          </div>
+        `);
+        infoWindowInstance.current.open(mapInstance.current, clickedPos);
+
         if (!window.naver.maps.Service) return;
 
         window.naver.maps.Service.reverseGeocode({ coords: clickedPos, orders: "roadaddr,addr" }, async (status: any, res: any) => {
@@ -1219,8 +1307,10 @@ export function Home() {
           const address = normalizeBaseAddress(rawAddress);
           const isKorea = address !== "주소를 찾을 수 없는 지역입니다.";
 
-          // 1차: 주소 및 건물명 기반 빠른 체크
-          let isResidential = checkIsResidential(address) && (!buildingName || checkIsResidential(buildingName));
+          // 1차: 주소 및 건물명 기반 빠른 체크 (명백한 블랙리스트 검사)
+          // ⚠️ [유도리 개편] isResidential은 무조건 true로 시작하고, 아주 심각한 기피 대상일때만 false로 깎인다.
+          const isStrictlyBlocked = !checkIsResidential(address) || (buildingName && !checkIsResidential(buildingName));
+          let isResidential = !isStrictlyBlocked;
 
           // 2차: 건축물대장 API를 통한 정밀 체크
           const addrResult = res.v2.results.find((r: any) => r.name === 'addr');
@@ -1234,7 +1324,11 @@ export function Home() {
               const sigunguCd = code.substring(0, 5);
               const bjdongCd = code.substring(5, 10);
               const apiResult = await checkBuildingRegistry(sigunguCd, bjdongCd, bun, ji);
-              if (apiResult !== null) isResidential = apiResult;
+              // ⚠️ [유도리 개편 핵심] API가 주거용(true)이라 하면 무조건 살린다. 
+              // API가 비주거용(false)이라 해도, 앞서 블랙리스트에 안 걸렸으면 그냥 넘긴다 (isResidential 유지).
+              if (apiResult === true) {
+                isResidential = true;
+              }
             }
           }
 
@@ -1418,11 +1512,22 @@ export function Home() {
       }
       */
 
-      // 0. 이미지 압축 및 Base64 변환 (Firestore 저장 방식)
+      // 0. 미디어 업로드 (이미지는 Base64 압축, 비디오는 Storage 업로드)
       const imageUrls: string[] = [];
+      const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB 제한
+      
       for (const file of selectedImages) {
-        const dataUrl = await compressAndEncodeImage(file);
-        imageUrls.push(dataUrl);
+        if (file.type.startsWith('video/')) {
+          if (file.size > MAX_VIDEO_SIZE) {
+            showAlert("용량 초과", "동영상은 50MB 이하만 업로드 가능합니다.", "⚠️");
+            return;
+          }
+          const videoUrl = await uploadMediaToStorage(file);
+          imageUrls.push(videoUrl);
+        } else {
+          const dataUrl = await compressAndEncodeImage(file);
+          imageUrls.push(dataUrl);
+        }
       }
 
       // 1. 리뷰 데이터 가공
@@ -1792,7 +1897,22 @@ export function Home() {
 
                   window.naver.maps.Service.reverseGeocode({ coords: p, orders: "roadaddr,addr" }, async (statusRev: any, resRev: any) => {
                     let standardAddress = full;
-                    let isRes = checkIsResidential(full) && (!data.buildingName || checkIsResidential(data.buildingName)); // 기본 키워드 + 건물명 체크
+                    
+                    // [최적화] 검색 위치로 이동 즉시 로딩 팝업 노출
+                    infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+                    infoWindowInstance.current.setContent(`
+                      <div class="iw-container marker loading">
+                        <div class="iw-card" style="padding:24px 20px; display:flex; flex-direction:column; align-items:center; gap:12px; min-width:180px;">
+                          <div class="iw-loader"></div>
+                          <span style="font-size:13px; color:#8B95A1; font-weight:600;">건물 정보 확인 중...</span>
+                        </div>
+                      </div>
+                    `);
+                    infoWindowInstance.current.open(mapInstance.current, p);
+
+                    // [유도리 개편] 1차 키워드 검사 (역, 공원 등 절대 금지 구역 여부)
+                    const isStrictlyBlocked = !checkIsResidential(full) || (data.buildingName && !checkIsResidential(data.buildingName));
+                    let isRes = !isStrictlyBlocked;
 
                     if (statusRev === window.naver.maps.Service.Status.OK) {
                       const v2Addr = resRev.v2?.address;
@@ -1806,7 +1926,9 @@ export function Home() {
                         const ji = addrResult.land?.number2;
                         if (code && bun) {
                           const apiResult = await checkBuildingRegistry(code.substring(0, 5), code.substring(5, 10), bun, ji);
-                          if (apiResult !== null) isRes = apiResult;
+                          // API가 주거용이라 하면 당연히 허용, 
+                          // 비주거라고 해도 블랙리스트(역, 공원 등)만 아니면 '유도리' 있게 허용 상태(isRes=true) 유지
+                          if (apiResult === true) isRes = true;
                         }
                       }
                     }
@@ -1926,17 +2048,21 @@ export function Home() {
           <div>
             <div className="section-title">
               <ImageIcon size={16} color="#3182F6" />
-              <span>방문 사진</span>
+              <span>방문 사진 및 동영상</span>
             </div>
             <div className="photo-section">
               <button className="photo-button" onClick={() => fileInputRef.current?.click()}>
                 <Camera size={24} />
                 <span>{selectedImages.length}/10</span>
               </button>
-              <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={e => setSelectedImages(prev => [...prev, ...Array.from(e.target.files || [])])} className="hidden-file-input" />
+              <input type="file" multiple accept="image/*,video/*" ref={fileInputRef} onChange={e => setSelectedImages(prev => [...prev, ...Array.from(e.target.files || [])])} className="hidden-file-input" />
               {selectedImages.map((file, i) => (
                 <div key={i} className="preview-item">
-                  <img src={URL.createObjectURL(file)} onClick={() => setViewerImage(URL.createObjectURL(file))} />
+                  {file.type.startsWith('video/') ? (
+                    <video src={URL.createObjectURL(file)} muted className="preview-video" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => setViewerImage(URL.createObjectURL(file))} />
+                  ) : (
+                    <img src={URL.createObjectURL(file)} onClick={() => setViewerImage(URL.createObjectURL(file))} />
+                  )}
                   <button className="preview-remove" onClick={(ev) => { ev.stopPropagation(); handleRemoveImage(i); }}>✕</button>
                 </div>
               ))}
