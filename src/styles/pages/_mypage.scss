@@ -508,6 +508,7 @@
   &__modal-content {
     padding: 20px;
     background-color: #F9FAFB;
+    min-height: 100vh;
   }
 
   // 카드 리스트 및 아이템 스타일 (최근 본 목록, 내가 쓴 방문록 공용)
@@ -563,7 +564,26 @@
         color: #333D4B;
         margin-bottom: 2px;
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
+        width: 100%;
+        min-width: 0;
+
+        .address-text {
+          width: 100%;
+          max-width: 85%;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: block;
+        }
+
+        .detail-text {
+          color: #3182F6;
+          font-weight: 600;
+          font-size: 13px;
+          margin-top: 2px;
+        }
       }
 
       .date {
@@ -979,7 +999,9 @@
     gap: 32px;
 
     // 스크롤바 숨기기
-    &::-webkit-scrollbar { display: none; }
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   &__inquiry-footer {
@@ -1022,7 +1044,9 @@
         box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.1);
       }
 
-      &::placeholder { color: #B0B8C1; }
+      &::placeholder {
+        color: #B0B8C1;
+      }
     }
 
     &-select {
@@ -1059,7 +1083,9 @@
         box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.1);
       }
 
-      &::placeholder { color: #B0B8C1; }
+      &::placeholder {
+        color: #B0B8C1;
+      }
     }
 
     &-counter {
@@ -1229,18 +1255,19 @@
       flex: 1;
     }
 
-    &-title { 
-      font-size: 16px; 
-      font-weight: 700; 
-      color: #333D4B; 
+    &-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #333D4B;
       margin-bottom: 2px;
       display: block;
     }
-    &-desc { 
-      font-size: 13px; 
-      color: #8B95A1; 
-      line-height: 1.4; 
-      word-break: keep-all; 
+
+    &-desc {
+      font-size: 13px;
+      color: #8B95A1;
+      line-height: 1.4;
+      word-break: keep-all;
     }
   }
 
@@ -1258,7 +1285,7 @@
     padding: 24px;
     background-color: #F9FAFB;
     border-radius: 0 0 32px 32px;
-    
+
     p {
       font-size: 12px;
       color: #8B95A1;
@@ -1357,6 +1384,7 @@
           color: #191f28;
           margin-bottom: 8px;
         }
+
         p {
           font-size: 15px;
           color: #4e5968;
@@ -1426,6 +1454,7 @@
           transform: rotate(180deg);
           color: #3182f6;
         }
+
         .mypage__faq-question {
           color: #3182f6;
         }
@@ -1487,6 +1516,7 @@
           font-weight: 700;
           margin-bottom: 4px;
         }
+
         p {
           font-size: 13px;
           opacity: 0.9;

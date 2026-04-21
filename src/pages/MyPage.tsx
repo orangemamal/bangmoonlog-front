@@ -678,9 +678,9 @@ export function MyPage() {
                           </div>
                           <div className="mypage__card-info">
                             <div className="title">
-                              {r.location || r.address || "방문록 장소"}
+                              <span className="address-text">{r.location || r.address || "방문록 장소"}</span>
                               {r.addressDetail && (
-                                <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '4px' }}>
+                                <span className="detail-text">
                                   {formatAddressDetail(r.addressDetail)}
                                 </span>
                               )}
@@ -716,9 +716,9 @@ export function MyPage() {
                           </div>
                           <div className="mypage__card-info">
                             <div className="title">
-                              {r.location || r.address || "방문록 장소"}
+                              <span className="address-text">{r.location || r.address || "방문록 장소"}</span>
                               {r.addressDetail && (
-                                <span style={{ color: '#3182F6', fontWeight: 600, marginLeft: '4px' }}>
+                                <span className="detail-text">
                                   {formatAddressDetail(r.addressDetail)}
                                 </span>
                               )}

@@ -502,20 +502,9 @@
     }
 
     .experience-badge {
-      background: #F2F8FF;
+      background: #E8F3FF;
       color: #3182F6;
       border: 1px solid rgba(49, 130, 246, 0.1);
-
-      &.resident {
-        background: #FFF0F0;
-        color: #E84040;
-        border-color: rgba(232, 64, 64, 0.1);
-      }
-      &.visit {
-        background: #E8F3FF;
-        color: #3182F6;
-        border-color: rgba(49, 130, 246, 0.1);
-      }
     }
 
     .card-verify-badge {
