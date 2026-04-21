@@ -60,9 +60,15 @@ export default async function handler(
     
     /**
      * 주용도코드명(mainPurpsCdNm) 확인
-     * 주거용 키워드: 아파트, 단독주택, 공동주택, 오피스텔, 다세대주택, 다가구주택 등
+     * [유도리 개편] 최대한 많은 주거 가능 건물을 허용함
      */
-    const residentialKeywords = ['아파트', '주택', '오피스텔', '다세대', '다가구', '기숙사'];
+    const residentialKeywords = [
+      '아파트', '주택', '단독', '연립', '다세대', '다가구', '오피스텔', '기숙사', 
+      '근린생활', // 상가주택 포함
+      '업무시설', // 오피스텔이 업무시설로 분류됨
+      '노유자',   // 실버타운 등
+      '교정 및 군사' // 군관사 등
+    ];
     
     const buildings = itemList.map((item: any) => ({
       name: item.bldNm,
@@ -70,7 +76,7 @@ export default async function handler(
       isResidential: residentialKeywords.some(kw => item.mainPurpsCdNm?.includes(kw))
     }));
 
-    // 하나라도 주거용이 있으면 주거용으로 판단 (상가주택 등 고려)
+    // 하나라도 주거용 키워드가 포함되어 있으면 주거용으로 판단
     const isResidential = buildings.some(b => b.isResidential);
 
     return res.status(200).json({
