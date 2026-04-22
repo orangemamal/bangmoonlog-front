@@ -13,7 +13,9 @@ import {
   X,
   Layers,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronRight,
+  PlayCircle
 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -26,6 +28,7 @@ import { ReviewDetail } from "../components/ReviewDetail";
 import { formatAddressDetail } from "../utils/addressUtils";
 import { calculateDistance } from "../utils/geoUtils";
 import { RefreshCw } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Post {
   id: string;
@@ -159,6 +162,8 @@ export function Feed() {
     confirmText?: string;
     onCancel?: () => void;
   }>({ isOpen: false, title: "" });
+
+  const [isCleansingModalOpen, setIsCleansingModalOpen] = useState(false);
 
   const showAlert = useCallback((title: string, desc?: string, icon: string = "✅") => {
     setModalConfig({ isOpen: true, title, desc, icon, confirmText: "확인" });
@@ -330,15 +335,23 @@ export function Feed() {
   const handleCloseDetail = useCallback(() => setIsDetailOpen(false), []);
 
   const handleDeletePost = useCallback(async (postId: string) => {
+    console.log("🗑️ [Feed Delete] 삭제를 요청했습니다:", postId);
     showConfirm(
       "방문록 삭제",
       async () => {
-        const success = await deleteReview(postId);
-        if (success) {
-          setIsDetailOpen(false);
-          setPosts(prev => prev.filter(p => p.id !== postId));
-          showAlert("삭제 완료", "방문록이 삭제되었습니다.", "🗑️");
-        } else {
+        try {
+          console.log("🗑️ [Feed Delete] 삭제를 확정했습니다:", postId);
+          const success = await deleteReview(postId);
+          if (success) {
+            setIsDetailOpen(false);
+            setSelectedReviewId(null);
+            setPosts(prev => prev.filter(p => p.id !== postId));
+            showAlert("삭제 완료", "방문록이 삭제되었습니다.", "🗑️");
+          } else {
+            showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
+          }
+        } catch (e) {
+          console.error(e);
           showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
         }
       },
@@ -356,6 +369,7 @@ export function Feed() {
   }, [activeTab]);
 
   const handleEditPost = (id: string) => {
+    console.log("✏️ [Feed Edit] 수정을 위해 홈으로 이동합니다:", id);
     navigate(`/?edit=${id}`);
   };
 
@@ -399,9 +413,29 @@ export function Feed() {
                   onClick={() => setActiveTab(tab)}
                   className={`feed__tab${activeTab === tab ? " feed__tab--active" : ""}`}
                 >
-                  {tab === "hot" ? "인기 방문록" : tab === "local" ? "내 주변 방문록" : "#태그"}
+                  <span className="feed__tab-text">
+                    {tab === "hot" ? "인기 방문록" : tab === "local" ? "내 주변 방문록" : "#태그"}
+                  </span>
+                  {activeTab === tab && (
+                    <motion.div
+                      layoutId="activeTabIndicator"
+                      className="feed__tab-underline"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                    />
+                  )}
                 </button>
               ))}
+            </div>
+
+            {/* 리뷰 클렌징 시스템 배너 */}
+            <div className="feed__cleansing-banner" onClick={() => setIsCleansingModalOpen(true)}>
+              <div className="banner-left">
+                <div className="ai-icon">
+                  <div className="dot"></div>
+                </div>
+                <span>리뷰 클렌징 시스템 <strong>작동 중</strong>입니다</span>
+              </div>
+              <ChevronRight size={16} color="#8B95A1" />
             </div>
 
             {activeTab === 'tag' && (
@@ -491,11 +525,16 @@ export function Feed() {
                   <button
                     key={sort.id}
                     onClick={() => setLocalSortType(sort.id as any)}
-                    className={`feed__sort-btn${localSortType === sort.id ? " feed__sort-btn--active" : ""}`}
+                    className={`feed__sort-btn${localSortType === sort.id ? " active" : ""}`}
+                    style={{ position: 'relative' }}
                   >
-                    {sort.label}
+                    <span className="btn-inner">{sort.label}</span>
                     {localSortType === sort.id && (
-                      <div className="feed__sort-indicator" />
+                      <motion.div
+                        layoutId="feedSortPill"
+                        className="active-pill"
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                      />
                     )}
                   </button>
                 ))}
@@ -518,7 +557,16 @@ export function Feed() {
                   onClick={() => handlePostClick(post.id, index)}
                 >
                   <div className="image-container">
-                    <img src={post.image} alt="post" />
+                    {(post.image.includes('.mp4?') || post.image.includes('.webm?') || post.image.includes('.mov?') || post.image.includes('media_')) ? (
+                      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                        <video src={post.image} muted autoPlay loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', opacity: 0.8 }}>
+                          <PlayCircle size={24} color="#fff" fill="rgba(0,0,0,0.2)" />
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={post.image} alt="post" />
+                    )}
                     {post.images && post.images.length > 1 && (
                       <div className="image-count-badge">
                         +{post.images.length - 1}
@@ -658,14 +706,23 @@ export function Feed() {
                 <p className="feed__card-content">{post.content}</p>
                 <div className="feed__card-thumbnail">
                   {post.image ? (
-                    <>
-                      <img src={post.image} alt="thumb" />
+                    <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
+                      {(post.image.includes('.mp4?') || post.image.includes('.webm?') || post.image.includes('.mov?') || post.image.includes('media_')) ? (
+                        <>
+                          <video src={post.image} muted autoPlay loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', opacity: 0.8 }}>
+                            <PlayCircle size={32} color="#fff" fill="rgba(0,0,0,0.2)" />
+                          </div>
+                        </>
+                      ) : (
+                        <img src={post.image} alt="thumb" />
+                      )}
                       {post.images && post.images.length > 1 && (
                         <div className="image-count-badge">
                           +{post.images.length - 1}
                         </div>
                       )}
-                    </>
+                    </div>
                   ) : (
                     <div className="no-image-thumb">이미지 없음</div>
                   )}
@@ -747,6 +804,37 @@ export function Feed() {
           </div>
         </div>
       )}
+
+      {/* 리뷰 클렌징 시스템 안내 모달 */}
+      <AnimatePresence>
+        {isCleansingModalOpen && (
+          <div className="tds-modal-overlay tds-modal-overlay--dark" onClick={() => setIsCleansingModalOpen(false)}>
+            <motion.div 
+              className="cleansing-modal"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="cleansing-header">
+                <div className="ai-bot-icon">
+                  <div className="eyes"></div>
+                  <div className="blush"></div>
+                  <div className="signal"></div>
+                </div>
+                <h2>리뷰 클렌징 시스템 <strong>작동중입니다</strong></h2>
+              </div>
+              <div className="cleansing-body">
+                <p>방문Log 기준에 따라 높은 수준의 신뢰도가 확인된 리뷰만 노출되도록 <strong>AI 클렌징 시스템</strong>이 작동 중입니다.</p>
+                <p>허위 방문인증, 광고성 리뷰 작성, 부적절한 미디어(사진/영상) 첨부 등의 이상 패턴이 탐지되면 해당 리뷰는 별도의 통지 없이 즉시 미노출되며, 서비스 이용에 제한을 받을 수 있습니다.</p>
+              </div>
+              <div className="cleansing-footer">
+                <button onClick={() => setIsCleansingModalOpen(false)}>확인</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

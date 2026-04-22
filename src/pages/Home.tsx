@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Camera, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag, Crosshair } from "lucide-react";
+import { Camera, Video, PlayCircle, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag, Crosshair } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db, storage } from '../services/firebase';
@@ -21,7 +21,7 @@ import {
   getDoc,
   serverTimestamp
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { checkEligibleForNewTitle } from "../utils/titleSystem";
@@ -36,6 +36,7 @@ import { normalizeAddressDetail, formatAddressDetail, normalizeBaseAddress } fro
 import { calculateDistance } from "../utils/geoUtils";
 import { Toast } from "../components/common/Toast";
 import LogoImg from "../assets/images/favicon.svg";
+import { analyzeReviewWithAI } from "../utils/gemini";
 
 interface Review {
   id: string;
@@ -64,44 +65,48 @@ interface Review {
 
 // [유틸리티] 거주용 건물 여부 판단 (비거주 시설 필터링)
 // [유틸리티] 거주용 건물 여부 판단 (비거주 시설 필터링 고도화)
-const checkIsResidential = (addr: string) => {
-  if (!addr) return false;
+// [유틸리티] 거주용 건물 여부 판단 (비거주 시설 필터링 고도화)
+const checkIsResidential = (text: string) => {
+  if (!text) return false;
 
-  // 1. 명백한 주거용 키워드 (화이트리스트 - 오탐 방지)
+  // 1. 명백한 주거용 키워드 (화이트리스트 - 최우선 순위)
   const whiteList = [
     "아파트", "빌라", "맨션", "주택", "오피스텔", "다세대", "다가구", "원룸",
-    "투룸", "고시원", "고시텔", "빌리지", "리빙텔", "캐슬", "파크뷰", "단지", "전원", "다중"
+    "투룸", "고시원", "고시텔", "빌리지", "리빙텔", "캐슬", "파크뷰", "단지", "전원", "다중", "쉐어하우스"
   ];
-  if (whiteList.some(keyword => addr.includes(keyword))) return true;
+  if (whiteList.some(keyword => text.includes(keyword))) return true;
 
   // 2. 명백한 비거주지 강력 블랙리스트 (단어 포함 시 즉시 차단)
   const strongBlacklist = [
     "지하철", "지하상가", "지하쇼핑", "가로판매대", "구두수선", "지하차도", "보도육교",
-    "공영주차장", "공공주차장", "환승센터", "지하역사", "역사내"
+    "공영주차장", "공공주차장", "환승센터", "지하역사", "역사내", "승강장", "터미널"
   ];
-  if (strongBlacklist.some(keyword => addr.includes(keyword))) return false;
+  if (strongBlacklist.some(keyword => text.includes(keyword))) return false;
 
-  // 3. 절대 거주할 수 없는 명백한 공공/시설 블랙리스트 (최소화)
-  const infrastructureBlacklist = [
+  // 3. 인프라 시설 블랙리스트 (텍스트가 해당 단어로 끝나거나 공여/시설 명칭인 경우)
+  const infrastructureKeywords = [
     "역", "출구", "공원", "광장", "교차로", "숲", "유원지", "산", "계곡",
-    "지하철", "역사내", "승강장", "환승센터", "터미널", "공항", "시장",
-    "경찰서", "파출소", "소방서", "우체국", "시청", "구청", "동주민센터",
+    "공항", "시장", "경찰서", "파출소", "소방서", "우체국", "시청", "구청", "동주민센터",
     "궁", "문화재", "유적지", "능", "단", "묘", "성곽", "경기장", "운동장"
   ];
 
-  // 4. 패턴 기반 차단 (단어 자체가 독립적으로 쓰일 때만 차단)
-  const isBlocked = infrastructureBlacklist.some(keyword => {
-    // 예: '서울역', '올림픽공원' 등 명백한 경우만 차단
-    const regex = new RegExp(`(^|\\s)${keyword}($|\\s|\\d)`);
-    return regex.test(addr);
+  const isBlocked = infrastructureKeywords.some(keyword => {
+    // [개선] 단어 자체가 독립적이거나(서울 역), 특정 명칭의 접미사로 쓰인 경우(탑골공원) 차단
+    // 단, 한 글자 키워드(역, 산 등)는 오탐 방지를 위해 앞에 공백이 있거나 두 글자 이상의 고유명사 뒤에 붙은 경우만 정교하게 체크
+    if (keyword.length === 1) {
+      const singleRegex = new RegExp(`[가-힣]{2,}${keyword}$|(^|\\s)${keyword}($|\\s)`);
+      return singleRegex.test(text);
+    }
+    // 두 글자 이상(공원, 광장 등)은 텍스트 내 포함 여부로 더 넓게 차단 (이미 화이트리스트에서 주거지는 걸러짐)
+    return text.includes(keyword);
   });
 
-  // 5. 특정 고유명사 직접 차단 (경복궁, 롯데월드 등)
+  // 4. 특정 명승지/랜드마크 직접 차단
   const specificLandmarks = [
     "경복궁", "창덕궁", "덕수궁", "창경궁", "종묘", "남산타워", "서울타워",
-    "어린이대공원", "올림픽공원", "서울숲", "월드컵공원", "한강공원"
+    "어린이대공원", "올림픽공원", "서울숲", "월드컵공원", "한강공원", "탑골공원"
   ];
-  if (specificLandmarks.some(name => addr.includes(name))) return false;
+  if (specificLandmarks.some(name => text.includes(name))) return false;
 
   return !isBlocked;
 };
@@ -111,7 +116,7 @@ const checkBuildingRegistry = async (sigunguCd: string, bjdongCd: string, bun: s
   try {
     const res = await fetch(`/api/getBuildingInfo?sigunguCd=${sigunguCd}&bjdongCd=${bjdongCd}&bun=${bun}&ji=${ji}`);
     if (!res.ok) return null;
-    
+
     // JSON 응답인지 확인 (HTML 에러 페이지가 올 경우 대비)
     const contentType = res.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
@@ -160,13 +165,108 @@ const compressAndEncodeImage = (file: File): Promise<string> => {
   });
 };
 
-// [유틸리티] 비디오 및 대용량 파일용 Firebase Storage 업로드
-const uploadMediaToStorage = async (file: File): Promise<string> => {
-  const fileExt = file.name.split('.').pop();
-  const fileName = `media_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-  const storageRef = ref(storage, `reviews/${fileName}`);
-  await uploadBytes(storageRef, file);
-  return getDownloadURL(storageRef);
+// [유틸리티] 동영상 클라이언트 사이드 압축 (MediaRecorder 활용)
+// 고화질 원본을 720p급 비트레이트로 재인코딩하여 업로드 속도 5~10배 개선
+const compressVideo = (file: File): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const videoUrl = URL.createObjectURL(file);
+    video.src = videoUrl;
+    video.muted = true;
+    video.playsInline = true;
+
+    video.onloadedmetadata = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // 최대 가로 1280px (720p급) 유지하며 비율 조정
+      const MAX_WIDTH = 1280;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+      
+      if (width > MAX_WIDTH) {
+        height = (MAX_WIDTH / width) * height;
+        width = MAX_WIDTH;
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+
+      // 브라우저가 지원하는 코덱 확인 (WebM이 가장 범용적이며 압축률 좋음)
+      const mimeType = 'video/webm;codecs=vp8';
+      const stream = canvas.captureStream(30); // 30fps
+      const recorder = new MediaRecorder(stream, {
+        mimeType: mimeType,
+        videoBitsPerSecond: 1500000 // 1.5Mbps (모바일 스트리밍 적정 수준)
+      });
+
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = () => {
+        const compressedBlob = new Blob(chunks, { type: 'video/webm' });
+        console.log(`📹 [Compression] Original: ${(file.size/1024/1024).toFixed(2)}MB -> Compressed: ${(compressedBlob.size/1024/1024).toFixed(2)}MB`);
+        URL.revokeObjectURL(videoUrl);
+        resolve(compressedBlob);
+      };
+
+      recorder.start();
+      video.play();
+
+      // 매 프레임 캔버스에 그리기
+      const drawFrame = () => {
+        if (video.paused || video.ended) return;
+        ctx?.drawImage(video, 0, 0, width, height);
+        requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+
+      video.onended = () => {
+        recorder.stop();
+      };
+    };
+
+    video.onerror = (err) => {
+      URL.revokeObjectURL(videoUrl);
+      reject(err);
+    };
+    
+    // 타임아웃 방지 (최대 30초)
+    setTimeout(() => {
+      if (video.paused) {
+        URL.revokeObjectURL(videoUrl);
+        reject(new Error("Compression Timeout"));
+      }
+    }, 30000);
+  });
+};
+
+// [유틸리티] 비디오 및 대용량 파일용 Firebase Storage 업로드 (진행률 추적 지원)
+const uploadMediaToStorage = (
+  file: File | Blob, 
+  onProgress?: (percent: number) => void
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    // Blob일 경우 name이 없을 수 있으므로 안전하게 처리
+    const fileNameAttr = (file as any).name || `compressed_${Date.now()}.webm`;
+    const fileExt = fileNameAttr.split('.').pop();
+    const fileName = `media_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const storageRef = ref(storage, `reviews/${fileName}`);
+    
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', 
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        if (onProgress) onProgress(progress);
+      }, 
+      (error) => reject(error), 
+      () => {
+        getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+          resolve(downloadURL);
+        });
+      }
+    );
+  });
 };
 interface InfoWindowParams {
   address: string;
@@ -289,8 +389,12 @@ export function Home() {
   const [comment, setComment] = useState("");
   const [isLocationActive, setIsLocationActive] = useState(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [selectedImages, setSelectedImages] = useState<(File | string)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cleansingStatus, setCleansingStatus] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const mapElement = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const infoWindowInstance = useRef<any>(null);
@@ -321,6 +425,9 @@ export function Home() {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [customTag, setCustomTag] = useState("");
   const [viewerImage, setViewerImage] = useState<string | null>(null);
+  const [isPanoramaOpen, setIsPanoramaOpen] = useState(false);
+  const [isRoadviewMode, setIsRoadviewMode] = useState(false); // 로드뷰 탐색 모드
+  const [mapCenterCoord, setMapCenterCoord] = useState<{ lat: number, lng: number } | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [verificationDistance, setVerificationDistance] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -556,9 +663,9 @@ export function Home() {
           // 2. 캐시 없으면 로딩창 먼저 띄움
           infoWindowInstance.current.setContent(`
             <div class="iw-container marker loading">
-              <div class="iw-card" style="padding:20px; display:flex; flex-direction:column; align-items:center; gap:12px;">
-                <div class="spinner" style="width:24px; height:24px; border:3px solid #E5E8EB; border-top-color:#3182F6; border-radius:50%; animation:iw-spin 0.8s linear infinite;"></div>
-                <span style="font-size:13px; color:#8B95A1; font-weight:600;">건물 확인 중...</span>
+              <div class="iw-card" style="padding:24px 20px; display:flex; flex-direction:column; align-items:center; gap:12px; min-width:180px;">
+                <div class="iw-loader"></div>
+                <span style="font-size:13px; color:#8B95A1; font-weight:600;">건물 정보 확인 중...</span>
               </div>
             </div>
           `);
@@ -702,6 +809,7 @@ export function Home() {
     setSelectedCoord({ lat: review.lat || 37.5, lng: review.lng || 127.0 });
     setComment(review.content);
     setSelectedTags(review.tags || []);
+    setSelectedImages(review.images || []);
     setExperienceType(review.experienceType || "단순 방문");
     setReadListOpen(false);
     setSelectedReview(null);
@@ -709,6 +817,7 @@ export function Home() {
   }, []);
 
   const handleEditDetail = useCallback((review: any) => {
+    console.log("✏️ [Detail Edit] 상세 보기에서 수정을 시작합니다:", review.id);
     handleEditReview(review);
   }, [handleEditReview]);
 
@@ -717,10 +826,12 @@ export function Home() {
       "방문록 삭제",
       async () => {
         try {
+          console.log("🗑️ [Delete] 삭제를 확정했습니다:", id);
           const success = await deleteReview(id);
           if (success) {
             setReviews(prev => prev.filter(r => r.id !== id));
             showAlert("삭제 완료", "방문록이 삭제되었습니다.", "🗑️");
+            setSelectedReview(null); // 삭제 성공 시 상세 창 닫기
             refreshMarkers();
           } else {
             showAlert("삭제 실패", "삭제 중 오류가 발생했습니다.", "⚠️");
@@ -736,6 +847,7 @@ export function Home() {
   }, [refreshMarkers, showAlert, showConfirm]);
 
   const handleDeleteDetail = useCallback((id: string) => {
+    console.log("🗑️ [Detail Delete] 상세 보기에서 삭제를 요청했습니다:", id);
     handleDeleteReview(id);
   }, [handleDeleteReview]);
 
@@ -778,6 +890,12 @@ export function Home() {
     window.history.pushState({ isHome: true }, '', window.location.href);
 
     const handlePopState = (e: PopStateEvent) => {
+      // 0. 등록 중에는 모든 이탈 행위를 강력히 차단
+      if (isSubmitting) {
+        window.history.pushState({ isHome: true }, '', window.location.href);
+        return;
+      }
+
       // 1. 열려있는 레이어(모달, 시트 등)가 있다면 뒤로가기 시 레이어를 먼저 닫습니다.
       if (isPostcodeOpen) { setPostcodeOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
       if (isSheetOpen) { setSheetOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
@@ -803,7 +921,20 @@ export function Home() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isPostcodeOpen, isSheetOpen, isReadListOpen, selectedReview, viewerImage, isHistoryOpen, modalConfig.isOpen]);
+  }, [isPostcodeOpen, isSheetOpen, isReadListOpen, selectedReview, viewerImage, isHistoryOpen, modalConfig.isOpen, isSubmitting]);
+
+  // [추가] 브라우저 종료/새로고침 방지 (등록 중)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isSubmitting) {
+        e.preventDefault();
+        e.returnValue = "현재 방문록을 등록 중입니다. 페이지를 벗어나면 등록이 취소될 수 있습니다.";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isSubmitting]);
 
   // 수정 파라미터 감지 및 로드
   useEffect(() => {
@@ -819,6 +950,7 @@ export function Home() {
             setComment(r.content || "");
             setRatings(r.ratings || { light: 3, noise: 3, water: 3 });
             setSelectedTags(r.tags || []);
+            setSelectedImages(r.images || []);
             setSelectedAddress(r.address || r.location || "");
             setIsVerified(!!r.isVerified);
             if (r.lat && r.lng) {
@@ -1093,6 +1225,7 @@ export function Home() {
         verifyLocation(lat, lng);
       }
 
+      setIsSubmitting(false); // 작성 시트 열 때 이전 로딩 상태 초기화
       setSheetOpen(true);
       if (infoWindowInstance.current?.getMap()) infoWindowInstance.current.close();
     };
@@ -1242,14 +1375,23 @@ export function Home() {
 
       refreshMarkers();
 
+      // 지도 중심 이동 트래킹 (로드뷰 썸네일 용)
+      window.naver.maps.Event.addListener(mapInstance.current, "idle", () => {
+        const center = mapInstance.current.getCenter();
+        setMapCenterCoord({ lat: center.lat(), lng: center.lng() });
+      });
+
       // 지도 조작 시 내 위치 추적 비활성화 (드래그, 핀치타입 줌, 마우스휠)
       window.naver.maps.Event.addListener(mapInstance.current, "dragstart", () => setIsLocationActive(false));
       window.naver.maps.Event.addListener(mapInstance.current, "pinch", () => setIsLocationActive(false));
       window.naver.maps.Event.addListener(mapInstance.current, "mousewheel", () => setIsLocationActive(false));
 
-      // [추가] 줌 레벨 최적화를 위한 실시간 로그 출력
+      // [추가] 줌 레벨 변경 시 기존에 열린 정보 창(InfoWindow) 자동 닫기
       window.naver.maps.Event.addListener(mapInstance.current, "zoom_changed", () => {
         console.log("🔍 [Map Zoom] Current Zoom Level:", mapInstance.current.getZoom());
+        if (infoWindowInstance.current?.getMap()) {
+          infoWindowInstance.current.close();
+        }
       });
 
       window.naver.maps.Event.addListener(mapInstance.current, "click", (e: any) => {
@@ -1293,12 +1435,12 @@ export function Home() {
 
           let rawAddress = "주소를 찾을 수 없는 지역입니다.";
           const v2Addr = res.v2?.address;
-          let buildingName = "";
           if (v2Addr) {
             rawAddress = v2Addr.roadAddress || v2Addr.jibunAddress || rawAddress;
           }
 
           // [핵심 추가] 네이버 상세 결과에서 건물 명칭(POI 명칭) 추출
+          let buildingName = "";
           const addrRes = res.v2.results.find((r: any) => r.name === 'addr' || r.name === 'roadaddr');
           if (addrRes && addrRes.land && addrRes.land.name) {
             buildingName = addrRes.land.name;
@@ -1440,7 +1582,7 @@ export function Home() {
     const SCRIPT_ID = "naver-map-script";
     if (!document.getElementById(SCRIPT_ID)) {
       const s = document.createElement("script");
-      s.id = SCRIPT_ID; s.src = "https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dj5vfj5th7&submodules=geocoder";
+      s.id = SCRIPT_ID; s.src = "https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dj5vfj5th7&submodules=geocoder,panorama";
       s.async = true;
       s.onload = () => {
         const cs = document.createElement("script");
@@ -1501,8 +1643,26 @@ export function Home() {
       return;
     }
 
+    setIsSubmitting(true);
+    setCleansingStatus("AI 클렌징 시스템이 내용을 분석 중입니다...");
+    
     try {
       if (!user?.id) { navigate('/mypage'); return; }
+
+      // 0. AI 클렌징 시스템 - 진짜 Gemini AI 분석 가동
+      setCleansingStatus("AI 클렌징 시스템이 내용을 정밀 분석 중입니다...");
+      const aiResult = await analyzeReviewWithAI(comment);
+
+      if (!aiResult.isPassed) {
+        setCleansingStatus(null);
+        setIsSubmitting(false);
+        showAlert("AI 클렌징 알림", `부적절한 내용이 감지되었습니다. (${aiResult.reason})\n건전한 방문록 문화를 위해 내용을 수정해주세요.`, "🤖");
+        return;
+      }
+
+      setCleansingStatus("AI 분석 통과! 미디어를 업로드합니다...");
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setCleansingStatus("미디어 업로드 중...");
 
       // 0. 매물 단위 중복 체크 (사용자 의견에 따라 엄격한 제한 대신 안내 후 허용으로 변경 가능)
       /* 
@@ -1512,23 +1672,50 @@ export function Home() {
       }
       */
 
-      // 0. 미디어 업로드 (이미지는 Base64 압축, 비디오는 Storage 업로드)
-      const imageUrls: string[] = [];
+      // 0. 미디어 업로드 (압축 -> 병렬 처리 + 개별 진행률 추적)
       const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB 제한
-      
-      for (const file of selectedImages) {
+      const fileCount = selectedImages.length;
+      const progressMap = new Map<number, number>();
+
+      const uploadPromises = selectedImages.map(async (file, index) => {
+        if (typeof file === 'string') {
+          progressMap.set(index, 100);
+          return file;
+        }
+
         if (file.type.startsWith('video/')) {
           if (file.size > MAX_VIDEO_SIZE) {
-            showAlert("용량 초과", "동영상은 50MB 이하만 업로드 가능합니다.", "⚠️");
-            return;
+            throw new Error("VIDEO_SIZE_LIMIT");
           }
-          const videoUrl = await uploadMediaToStorage(file);
-          imageUrls.push(videoUrl);
+          
+          // [추가] 동영상 압축 시도 (5MB 이상일 경우에만 진행하여 작은 파일은 즉시 업로드)
+          let uploadTarget: File | Blob = file;
+          if (file.size > 5 * 1024 * 1024) {
+            setIsCompressing(true);
+            try {
+              uploadTarget = await compressVideo(file);
+            } catch (err) {
+              console.warn("Video compression failed, uploading original:", err);
+            } finally {
+              setIsCompressing(false);
+            }
+          }
+
+          return await uploadMediaToStorage(uploadTarget as File, (p) => {
+            progressMap.set(index, p);
+            const totalP = Array.from(progressMap.values()).reduce((a, b) => a + b, 0) / fileCount;
+            setUploadProgress(Math.round(totalP));
+          });
         } else {
-          const dataUrl = await compressAndEncodeImage(file);
-          imageUrls.push(dataUrl);
+          const res = await compressAndEncodeImage(file);
+          progressMap.set(index, 100);
+          const totalP = Array.from(progressMap.values()).reduce((a, b) => a + b, 0) / fileCount;
+          setUploadProgress(Math.round(totalP));
+          return res;
         }
-      }
+      });
+
+      const imageUrls = await Promise.all(uploadPromises);
 
       // 1. 리뷰 데이터 가공
       const reviewData: any = {
@@ -1582,12 +1769,12 @@ export function Home() {
             await addDoc(collection(db, "notifications"), {
               toUserId: user.id,
               type: "system",
-              content: `축하합니다! 방문록 ${totalAfter}회 작성을 달성하여 '${newBadge.title}' 뱃지를 획득했습니다. ${newBadge.icon}`,
+              content: `축하합니다! 방문록 ${totalAfter}회 작성을 달성하여 '${newBadge.title}' 칭호를 획득했습니다. ${newBadge.icon}`,
               reviewId: docRef.id,
               createdAt: Timestamp.now(),
               isRead: false
             });
-            showAlert("🎖️ 새로운 칭호 획득!", `방문록 ${totalAfter}회 작성 기념으로 '${newBadge.title}' 뱃지를 얻었습니다.`, "🏆");
+            showAlert("👑 새로운 칭호 획득!", `방문록 ${totalAfter}회 작성 기념으로 '${newBadge.title}' 칭호를 얻었습니다.`, "🏆");
           }
         }
 
@@ -1596,7 +1783,7 @@ export function Home() {
           await addDoc(collection(db, "notifications"), {
             toUserId: user.id,
             type: "system",
-            content: `회원님이 남기신 방문록의 방문자 인증이 완료되었습니다. 뱃지를 획득했습니다!`,
+            content: `회원님이 남기신 방문록의 방문자 인증이 완료되었습니다. 칭호를 획득했습니다!`,
             reviewId: docRef.id,
             createdAt: Timestamp.now(),
             isRead: false
@@ -1642,6 +1829,8 @@ export function Home() {
       setSheetOpen(false); setComment(""); setAddressDetail(""); setSelectedTags([]); setSelectedImages([]);
       setEditingReviewId(null); setIsVerified(false); setVerificationDistance(null);
       setExperienceType("단순 방문");
+      setIsSubmitting(false);
+      setUploadProgress(0);
       refreshMarkers();
     } catch (e: any) {
       console.error("Submit Error:", e);
@@ -1654,12 +1843,19 @@ export function Home() {
 
         setSheetOpen(false); // 창 닫기
         setComment(""); setSelectedImages([]); setSelectedTags([]);
+        setIsSubmitting(false);
+        setUploadProgress(0);
 
         showAlert("등록 요청 완료", "현재 서버 접속자가 많아 동기화가 지연되고 있습니다. 곧 반영될 예정입니다! ✨", "🚀");
         return;
       }
 
-      showAlert("오류 발생", "처리 중 문제가 생겼습니다. 다시 시도해 주세요.", "❌");
+      setIsSubmitting(false);
+      if (e.message === "VIDEO_SIZE_LIMIT") {
+        showAlert("용량 초과", "동영상은 50MB 이하만 업로드 가능합니다.", "⚠️");
+      } else {
+        showAlert("오류 발생", "처리 중 문제가 생겼습니다. 다시 시도해 주세요.", "❌");
+      }
     }
   };
 
@@ -1784,6 +1980,79 @@ export function Home() {
 
       <div ref={mapElement} className="home-map-container" />
 
+      {/* 중앙 로드뷰 조준경 & 썸네일 (정밀 앵커 시스템) */}
+      <div className="map-center-anchor">
+        <AnimatePresence>
+          {isRoadviewMode && (
+            <motion.div
+              className="map-center-guide"
+              initial={{ opacity: 0, scale: 0.8, y: 15, x: "-50%" }}
+              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+              exit={{ opacity: 0, scale: 0.8, y: 15, x: "-50%" }}
+              transition={{ type: "spring", damping: 20, stiffness: 200 }}
+            >
+              <div
+                className="center-thumbnail-wrapper"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedCoord(mapCenterCoord);
+
+                  window.naver.maps.Service.reverseGeocode({
+                    coords: new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng),
+                    orders: "roadaddr,addr"
+                  }, (status: any, res: any) => {
+                    if (status === window.naver.maps.Service.Status.OK) {
+                      const addr = res.v2.address.roadAddress || res.v2.address.jibunAddress;
+                      setSelectedAddress(addr);
+                    }
+                    setIsPanoramaOpen(true);
+                  });
+                }}
+              >
+                <div className="thumbnail-box" key={`${mapCenterCoord?.lat}-${mapCenterCoord?.lng}`}>
+                  <div
+                    className="mini-panorama"
+                    ref={(el) => {
+                      if (el && window.naver?.maps?.Panorama && mapCenterCoord) {
+                        new window.naver.maps.Panorama(el, {
+                          position: new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng),
+                          size: new window.naver.maps.Size(150, 104), // 애니메이션 중 렌더링 축소를 방지하기 위한 명시적 사이즈
+                          aroundControl: false,
+                          zoomControl: false,
+                          logoControl: false,
+                          padding: { top: 0, right: 0, bottom: 0, left: 0 }
+                        });
+                      }
+                    }}
+                  />
+                  <div className="thumbnail-click-overlay">크게보기</div>
+                </div>
+                <div className="thumbnail-tail" />
+              </div>
+
+              {/* 세련된 블루 컬러의 클래식 맵 핀 마커 */}
+              <div className="map-pin-marker">
+                <div className="pin-main">
+                  <MapPin size={32} fill="#3182F6" color="#fff" strokeWidth={1} />
+                </div>
+                <div className="pin-shadow" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* 로드뷰 (스트릿뷰) 탐색 모드 토글 버튼 */}
+      <button
+        className={`home-panorama-btn ${isRoadviewMode ? 'active' : ''}`}
+        onClick={() => {
+          setIsRoadviewMode(!isRoadviewMode);
+        }}
+        title={isRoadviewMode ? "로드뷰 탐색 종료" : "로드뷰 탐색 시작"}
+      >
+        <MapPin size={24} strokeWidth={2} />
+      </button>
+
       {/* 찜한 매물만 골라보기 버튼 (내 위치 버튼 위) */}
       <button
         className={`home-favorites-btn ${showFavoritesOnly ? 'active' : ''}`}
@@ -1803,7 +2072,7 @@ export function Home() {
         }}
         title="찜한 매물만 보기"
       >
-        <Star size={24} fill={showFavoritesOnly ? "#FFD43B" : "none"} strokeWidth={2} />
+        <Star size={24} strokeWidth={2} />
       </button>
 
       {/* 내 위치로 이동 버튼 */}
@@ -1840,7 +2109,7 @@ export function Home() {
         }}
         title="내 위치로 이동"
       >
-        <Crosshair size={24} color={isLocationActive ? "#3182F6" : "#A8AFB5"} strokeWidth={2} />
+        <Crosshair size={24} strokeWidth={2} />
       </button>
 
       {isAddressSelected && dynamicNeighborhoodTags.length > 0 && (
@@ -1897,7 +2166,7 @@ export function Home() {
 
                   window.naver.maps.Service.reverseGeocode({ coords: p, orders: "roadaddr,addr" }, async (statusRev: any, resRev: any) => {
                     let standardAddress = full;
-                    
+
                     // [최적화] 검색 위치로 이동 즉시 로딩 팝업 노출
                     infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
                     infoWindowInstance.current.setContent(`
@@ -1986,7 +2255,10 @@ export function Home() {
 
       <BottomSheet
         isOpen={isSheetOpen}
-        onClose={() => { setSheetOpen(false); setEditingReviewId(null); setComment(""); setSelectedTags([]); setSelectedImages([]); setIsVerified(false); setVerificationDistance(null); }}
+        onClose={() => { 
+          if (isSubmitting) return; // 등록 중에는 닫기 불가
+          setSheetOpen(false); setEditingReviewId(null); setComment(""); setSelectedTags([]); setSelectedImages([]); setIsVerified(false); setVerificationDistance(null); setIsSubmitting(false); 
+        }}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {editingReviewId ? <Pencil size={20} color="#3182F6" /> : <Star size={20} color="#F5A623" fill="#F5A623" />}
@@ -2036,7 +2308,8 @@ export function Home() {
                   key={type.label}
                   type="button"
                   className={`experience-chip ${experienceType === type.label ? 'active' : ''}`}
-                  onClick={() => setExperienceType(type.label)}
+                  onClick={() => !isSubmitting && setExperienceType(type.label)}
+                  style={isSubmitting ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 >
                   <span className="icon">{type.icon}</span>
                   {type.label}
@@ -2047,25 +2320,43 @@ export function Home() {
 
           <div>
             <div className="section-title">
-              <ImageIcon size={16} color="#3182F6" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ImageIcon size={16} color="#3182F6" />
+              </div>
               <span>방문 사진 및 동영상</span>
+              <span style={{ fontSize: '11px', color: '#3182F6', marginLeft: 'auto', backgroundColor: '#E8F3FF', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>동영상 가능</span>
             </div>
             <div className="photo-section">
-              <button className="photo-button" onClick={() => fileInputRef.current?.click()}>
+              <button 
+                className="photo-button" 
+                onClick={() => !isSubmitting && fileInputRef.current?.click()}
+                disabled={isSubmitting}
+              >
                 <Camera size={24} />
                 <span>{selectedImages.length}/10</span>
               </button>
-              <input type="file" multiple accept="image/*,video/*" ref={fileInputRef} onChange={e => setSelectedImages(prev => [...prev, ...Array.from(e.target.files || [])])} className="hidden-file-input" />
-              {selectedImages.map((file, i) => (
-                <div key={i} className="preview-item">
-                  {file.type.startsWith('video/') ? (
-                    <video src={URL.createObjectURL(file)} muted className="preview-video" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => setViewerImage(URL.createObjectURL(file))} />
-                  ) : (
-                    <img src={URL.createObjectURL(file)} onClick={() => setViewerImage(URL.createObjectURL(file))} />
-                  )}
-                  <button className="preview-remove" onClick={(ev) => { ev.stopPropagation(); handleRemoveImage(i); }}>✕</button>
-                </div>
-              ))}
+              <input type="file" multiple accept="image/*,video/*" ref={fileInputRef} onChange={e => !isSubmitting && setSelectedImages(prev => [...prev, ...Array.from(e.target.files || [])])} className="hidden-file-input" disabled={isSubmitting} />
+              {selectedImages.map((file, i) => {
+                const isUrl = typeof file === 'string';
+                const isVideo = isUrl ? (file.toLowerCase().includes('.mp4') || file.toLowerCase().includes('media_')) : file.type.startsWith('video/');
+                const src = isUrl ? file : URL.createObjectURL(file);
+
+                return (
+                  <div key={i} className="preview-item">
+                    {isVideo ? (
+                      <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
+                        <video src={src} muted autoPlay loop playsInline className="preview-video" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => setViewerImage(src)} />
+                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
+                          <PlayCircle size={20} color="#fff" fill="rgba(0,0,0,0.3)" />
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={src} onClick={() => setViewerImage(src)} />
+                    )}
+                    <button className="preview-remove" onClick={(ev) => { ev.stopPropagation(); !isSubmitting && handleRemoveImage(i); }} disabled={isSubmitting}>✕</button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -2088,6 +2379,7 @@ export function Home() {
                 outline: 'none'
               }}
               placeholder="예: 101동 201호, 2층 왼쪽, 반지하 등"
+              readOnly={isSubmitting}
               value={addressDetail}
               onChange={e => setAddressDetail(e.target.value)}
             />
@@ -2097,11 +2389,28 @@ export function Home() {
           </div>
 
           <div>
-            <div className="section-title">
-              <MessageSquare size={16} color="#3182F6" />
-              <span>솔직한 방문 후기</span>
+            <div className="section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MessageSquare size={16} color="#3182F6" />
+                <span>솔직한 방문 후기</span>
+              </div>
+              <div className="ai-notice-badge" style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '4px', 
+                backgroundColor: '#F2F4F6', 
+                padding: '4px 10px', 
+                borderRadius: '20px',
+                border: '1px solid #E5E8EB'
+              }}>
+                <div className="ai-pulse-dot" style={{ width: '6px', height: '6px', backgroundColor: '#3182F6', borderRadius: '50%', boxShadow: '0 0 6px rgba(49, 130, 246, 0.5)' }}></div>
+                <span style={{ fontSize: '11px', color: '#4E5968', fontWeight: 600 }}>AI 클린 모니터링 중</span>
+              </div>
             </div>
-            <textarea className="comment-textarea" placeholder="방문록을 작성해주세요.(5자 이상)" value={comment} onChange={e => setComment(e.target.value)} />
+            <textarea className="comment-textarea" placeholder="방문록을 작성해주세요.(5자 이상)" value={comment} onChange={e => setComment(e.target.value)} readOnly={isSubmitting} />
+            <p style={{ fontSize: '11px', color: '#8B95A1', marginTop: '8px', marginLeft: '4px', lineHeight: '1.5' }}>
+              * 비속어, 비하 발언, 허위 정보 포함 시 AI 시스템에 의해 <strong>등록이 거부</strong>될 수 있습니다.
+            </p>
           </div>
 
           <div>
@@ -2109,9 +2418,9 @@ export function Home() {
               <Heart size={16} color="#F04452" fill="#F04452" />
               <span>항목별 만족도</span>
             </div>
-            <RatingRow label="채광" value={ratings.light} onChange={v => setRatings(r => ({ ...r, light: v }))} />
-            <RatingRow label="소음" value={ratings.noise} onChange={v => setRatings(r => ({ ...r, noise: v }))} />
-            <RatingRow label="수압" value={ratings.water} onChange={v => setRatings(r => ({ ...r, water: v }))} />
+            <RatingRow label="채광" value={ratings.light} onChange={v => setRatings(r => ({ ...r, light: v }))} disabled={isSubmitting} />
+            <RatingRow label="소음" value={ratings.noise} onChange={v => setRatings(r => ({ ...r, noise: v }))} disabled={isSubmitting} />
+            <RatingRow label="수압" value={ratings.water} onChange={v => setRatings(r => ({ ...r, water: v }))} disabled={isSubmitting} />
           </div>
 
           <div>
@@ -2119,9 +2428,9 @@ export function Home() {
               <Tag size={16} color="#3182F6" />
               <span>태그</span>
             </div>
-            {selectedTags.length > 0 && (<div className="selected-tags-container">{selectedTags.map(t => (<button key={t} onClick={() => handleTagToggle(t)} className="tag-chip active">{t} <span className="delete-icon">✕</span></button>))}</div>)}
-            <div className="custom-tag-field-wrapper"><span className="tag-prefix">#</span><input type="text" placeholder="태그 직접 입력" value={customTag} onChange={e => setCustomTag(e.target.value.replace('#', ''))} onKeyDown={e => e.key === "Enter" && (e.preventDefault(), handleAddCustomTag())} className="custom-tag-field-input" /><button className="tag-add-btn" onClick={handleAddCustomTag}><Plus size={20} /></button></div>
-            <div className="recommend-tag-section"><p className="recommend-title">추천 태그</p><div className="tags-wrapper">{tags.filter(t => !selectedTags.includes(t)).map(t => (<button key={t} onClick={() => handleTagToggle(t)} className="tag-chip recommended">{t}</button>))}</div></div>
+            {selectedTags.length > 0 && (<div className="selected-tags-container" style={isSubmitting ? { pointerEvents: 'none', opacity: 0.7 } : {}}>{selectedTags.map(t => (<button key={t} onClick={() => handleTagToggle(t)} className="tag-chip active">{t} <span className="delete-icon">✕</span></button>))}</div>)}
+            <div className="custom-tag-field-wrapper" style={isSubmitting ? { opacity: 0.6 } : {}}><span className="tag-prefix">#</span><input type="text" placeholder="태그 직접 입력" value={customTag} onChange={e => setCustomTag(e.target.value.replace('#', ''))} onKeyDown={e => e.key === "Enter" && (e.preventDefault(), !isSubmitting && handleAddCustomTag())} className="custom-tag-field-input" readOnly={isSubmitting} /><button className="tag-add-btn" onClick={() => !isSubmitting && handleAddCustomTag()} disabled={isSubmitting}><Plus size={20} /></button></div>
+            <div className="recommend-tag-section" style={isSubmitting ? { pointerEvents: 'none', opacity: 0.5 } : {}}><p className="recommend-title">추천 태그</p><div className="tags-wrapper">{tags.filter(t => !selectedTags.includes(t)).map(t => (<button key={t} onClick={() => handleTagToggle(t)} className="tag-chip recommended">{t}</button>))}</div></div>
           </div>
         </div>
         <div className="submit-wrapper">
@@ -2140,9 +2449,28 @@ export function Home() {
               }
               handleSubmitReview();
             }}
-            disabled={comment.length < 5}
+            disabled={comment.length < 5 || isSubmitting}
+            style={isSubmitting ? { backgroundColor: '#B0B8C1', cursor: 'not-allowed' } : {}}
           >
-            {editingReviewId ? "수정 완료하기" : "방문록 등록하기"}
+            {isSubmitting ? (
+              <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {cleansingStatus?.includes("분석") ? (
+                    <div className="ai-icon-small" style={{ width: '14px', height: '14px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: '6px', height: '6px', backgroundColor: '#fff', borderRadius: '50%', boxShadow: '0 0 6px #fff' }}></div>
+                    </div>
+                  ) : (
+                    <RefreshCw size={18} className="animate-spin" />
+                  )}
+                  <span style={{ fontSize: '14.5px' }}>{cleansingStatus || (isCompressing ? '영상을 압축하고 있어요...' : `업로드 중... ${uploadProgress}%`)}</span>
+                </div>
+                <div style={{ width: '80%', height: '4px', backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
+                  <div style={{ width: `${(cleansingStatus || isCompressing) ? 50 : uploadProgress}%`, height: '100%', backgroundColor: '#fff', transition: 'width 0.3s ease' }}></div>
+                </div>
+              </div>
+            ) : (
+              editingReviewId ? "수정 완료하기" : "방문록 등록하기"
+            )}
           </button>
         </div>
       </BottomSheet>
@@ -2284,7 +2612,18 @@ export function Home() {
                       <p className="card-content">{review.content}</p>
                       <div className="card-thumb">
                         {review.images && review.images.length > 0 ? (
-                          <img src={review.images[0]} alt="thumb" />
+                          <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: '8px' }}>
+                            {(review.images[0].includes('.mp4?') || review.images[0].includes('.mov?') || review.images[0].includes('.webm?')) ? (
+                              <video src={review.images[0]} muted autoPlay loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <img src={review.images[0]} alt="thumb" />
+                            )}
+                            {(review.images[0].includes('.mp4?') || review.images[0].includes('.mov?') || review.images[0].includes('.webm?')) && (
+                              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
+                                <PlayCircle size={20} color="#fff" fill="rgba(0,0,0,0.3)" />
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <div className="no-image-thumb">이미지 없음</div>
                         )}
@@ -2421,10 +2760,46 @@ export function Home() {
         onClose={() => setShowExitToast(false)}
         icon={LogoImg}
       />
+      <AnimatePresence>
+        {isPanoramaOpen && selectedCoord && (
+          <motion.div
+            className="panorama-overlay"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+          >
+            <div className="panorama-header">
+              <div className="info">
+                <span className="label">실물 확인 중</span>
+                <h2 className="addr">{selectedAddress}</h2>
+              </div>
+              <button className="close-btn" onClick={() => setIsPanoramaOpen(false)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div
+              className="panorama-container"
+              ref={(el) => {
+                if (el && window.naver?.maps?.Panorama) {
+                  new window.naver.maps.Panorama(el, {
+                    position: new window.naver.maps.LatLng(selectedCoord.lat, selectedCoord.lng),
+                    pov: {
+                      pan: 0,
+                      tilt: 0,
+                      fov: 100
+                    },
+                    logoControl: false
+                  });
+                }
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function RatingRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return (<div className="rating-row"><span className="rating-label">{label}</span><div className="stars">{[1, 2, 3, 4, 5].map(s => (<button key={s} onClick={() => onChange(s)} className={`star-button ${s <= value ? "active" : ""}`}><Star size={28} className={s <= value ? "fill-active" : "fill-inactive"} /></button>))}</div></div>);
+function RatingRow({ label, value, onChange, disabled }: { label: string; value: number; onChange: (v: number) => void; disabled?: boolean }) {
+  return (<div className="rating-row" style={disabled ? { opacity: 0.6, pointerEvents: 'none' } : {}}><span className="rating-label">{label}</span><div className="stars">{[1, 2, 3, 4, 5].map(s => (<button key={s} onClick={() => !disabled && onChange(s)} className={`star-button ${s <= value ? "active" : ""}`} disabled={disabled}><Star size={28} className={s <= value ? "fill-active" : "fill-inactive"} /></button>))}</div></div>);
 }

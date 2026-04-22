@@ -5,7 +5,7 @@ import {
   MoreHorizontal, Pencil, ArrowLeft, Handshake
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { db } from "../services/firebase";
+import { auth, db } from "../services/firebase";
 import {
   collection, query, where, onSnapshot, doc, deleteDoc, getDoc, setDoc
 } from "firebase/firestore";
@@ -83,10 +83,21 @@ export function MyPage() {
   const [adminTab, setAdminTab] = useState("reports");
   const [newAdminEmail, setNewAdminEmail] = useState("");
 
-  const [inquiryContent, setInquiryContent] = useState("");
   // 사용자 이름 수정 상태
   const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
+
+  // 회원 탈퇴 관련 상태
+  const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  // 로그아웃 확인 상태
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  // 문의하기 관련 상태
+  const [inquiryEmail, setInquiryEmail] = useState("");
+  const [inquiryType, setInquiryType] = useState("");
+  const [inquiryContent, setInquiryContent] = useState("");
 
   // 칭호 통계 계산
   const userStats = useMemo(() => calculateUserStats(myReviews), [myReviews]);
@@ -271,6 +282,55 @@ export function MyPage() {
     return levelBadges[levelBadges.length - 1];
   }, [earnedBadges, selectedBadgeId]);
 
+  // 회원 탈퇴 처리 함수
+  const handleWithdrawal = async () => {
+    if (!user?.id || !auth.currentUser) return;
+    
+    setIsWithdrawing(true);
+    try {
+      const { writeBatch, collection, getDocs, query, where, doc } = await import("firebase/firestore");
+      const batch = writeBatch(db);
+
+      // 1. 작성한 리뷰 삭제
+      const qReviews = query(collection(db, "reviews"), where("authorId", "==", user.id));
+      const reviewsSnap = await getDocs(qReviews);
+      reviewsSnap.forEach((d) => batch.delete(d.ref));
+
+      // 2. 찜 목록 삭제
+      const qBookmarks = query(collection(db, "bookmarks"), where("userId", "==", user.id));
+      const bookmarksSnap = await getDocs(qBookmarks);
+      bookmarksSnap.forEach((d) => batch.delete(d.ref));
+
+      // 3. 알림 내역 삭제
+      const qNotis = query(collection(db, "notifications"), where("toUserId", "==", user.id));
+      const notisSnap = await getDocs(qNotis);
+      notisSnap.forEach((d) => batch.delete(d.ref));
+
+      // 4. 유저 프로필 삭제
+      batch.delete(doc(db, "users", user.id));
+
+      // 데이터 일괄 삭제 실행
+      await batch.commit();
+
+      // 5. Firebase 인증 계정 삭제
+      await auth.currentUser.delete();
+      
+      alert("회원 탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.");
+      navigate("/");
+    } catch (e: any) {
+      console.error("Membership withdrawal failed:", e);
+      if (e.code === 'auth/requires-recent-login') {
+        alert("보안을 위해 다시 로그인한 후 탈퇴를 진행해주세요.");
+        logout();
+      } else {
+        alert("탈퇴 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      }
+    } finally {
+      setIsWithdrawing(false);
+      setIsWithdrawalModalOpen(false);
+    }
+  };
+
   // 공유하기 기능 (Web Share API 사용)
   const handleShare = async () => {
     const shareData = {
@@ -329,8 +389,6 @@ export function MyPage() {
     );
   }
 
-  const authorTitle = getUserTitle(stats.reviews);
-
   return (
     <div className="mypage">
       <div className="mypage__profile">
@@ -383,7 +441,7 @@ export function MyPage() {
 
           {/* 3구역: 로그아웃 */}
           <div className="mypage__logout-zone">
-            <button className="mypage__logout-btn" onClick={logout}>
+            <button className="mypage__logout-btn" onClick={() => setIsLogoutModalOpen(true)}>
               로그아웃
             </button>
           </div>
@@ -430,14 +488,7 @@ export function MyPage() {
               const IconComp = (Icons as any)[item.icon] || HelpCircle;
               const iconSize = item.label === "제휴 문의" ? 40 : 20;
 
-              const menuItem = item.label === "알림 설정" ? (
-                <MenuItem
-                  key={item.label}
-                  icon={<IconComp size={iconSize} color="#333D4B" />}
-                  title={item.label}
-                  onClick={() => setIsNotifModalOpen(true)}
-                />
-              ) : (
+              const menuItem = (
                 <MenuItem
                   key={item.label}
                   icon={
@@ -450,7 +501,13 @@ export function MyPage() {
                   title={item.label}
                   badge={item.label === "찜한 리스트" && bookmarks.length > 0 ? bookmarks.length : undefined}
                   onClick={() => {
-                    if (item.label === "1:1 문의하기") {
+                    if (item.label === "알림 설정") {
+                      setIsNotifModalOpen(true);
+                    }
+                    else if (item.label === "회원 탈퇴") {
+                      setIsWithdrawalModalOpen(true);
+                    }
+                    else if (item.label === "1:1 문의하기") {
                       setInquiryEmail(user?.email || "");
                       setInquiryType("");
                       setInquiryContent("");
@@ -459,16 +516,28 @@ export function MyPage() {
                     else if (item.label === "제휴 문의") {
                       setActiveModal("partnership");
                     }
-                    else if (item.path.startsWith("mailto:")) window.location.href = item.path;
-                    else if (item.path === "share") handleShare();
-                    else if (item.label === "찜한 리스트") setBookmarkModalOpen(true);
-                    else if (item.label === "내가 쓴 방문록") setActiveModal("reviews");
+                    else if (item.path.startsWith("mailto:")) {
+                      window.location.href = item.path;
+                    }
+                    else if (item.path === "share") {
+                      handleShare();
+                    }
+                    else if (item.label === "찜한 리스트") {
+                      setBookmarkModalOpen(true);
+                    }
+                    else if (item.label === "내가 쓴 방문록") {
+                      setActiveModal("reviews");
+                    }
                     else if (item.label === "최근 본 방문록") {
                       loadRecentDetails();
                       setActiveModal("recent");
                     }
-                    else if (item.label === "공지사항") setActiveModal("announcements");
-                    else if (item.label === "자주 묻는 질문") setActiveModal("faq");
+                    else if (item.label === "공지사항") {
+                      setActiveModal("announcements");
+                    }
+                    else if (item.label === "자주 묻는 질문") {
+                      setActiveModal("faq");
+                    }
                   }}
                   isSpecial={item.label === "제휴 문의"}
                   sublabel={item.label === "제휴 문의" ? "방문Log와 함께 세입자의 세상을 바꿀 파트너를 찾습니다" : undefined}
@@ -511,11 +580,37 @@ export function MyPage() {
               {activeModal === "admin" && (
                 <div className="mypage__admin">
                   <div className="mypage__faq-tabs" style={{ marginBottom: '24px' }}>
-                    <button className={`mypage__faq-tab ${adminTab === 'reports' ? 'active' : ''}`} onClick={() => setAdminTab('reports')}>
-                      <Icons.Bell size={18} /> <span>제보 관리 ({reports.length})</span>
+                    <button
+                      className={`mypage__faq-tab ${adminTab === 'reports' ? 'active' : ''}`}
+                      onClick={() => setAdminTab('reports')}
+                      style={{ position: 'relative' }}
+                    >
+                      <div className="tab-inner">
+                        <Icons.Bell size={18} /> <span>제보 관리 ({reports.length})</span>
+                      </div>
+                      {adminTab === 'reports' && (
+                        <motion.div
+                          layoutId="adminTabPill"
+                          className="active-pill"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                        />
+                      )}
                     </button>
-                    <button className={`mypage__faq-tab ${adminTab === 'settings' ? 'active' : ''}`} onClick={() => setAdminTab('settings')}>
-                      <Icons.Users size={18} /> <span>관리자 설정</span>
+                    <button
+                      className={`mypage__faq-tab ${adminTab === 'settings' ? 'active' : ''}`}
+                      onClick={() => setAdminTab('settings')}
+                      style={{ position: 'relative' }}
+                    >
+                      <div className="tab-inner">
+                        <Icons.Users size={18} /> <span>관리자 설정</span>
+                      </div>
+                      {adminTab === 'settings' && (
+                        <motion.div
+                          layoutId="adminTabPill"
+                          className="active-pill"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                        />
+                      )}
                     </button>
                   </div>
 
@@ -718,7 +813,7 @@ export function MyPage() {
                           <option value="서비스 이용">서비스 이용 문의</option>
                           <option value="오류 제보">오류/버그 제보</option>
                           <option value="계정/인증">계정 및 인증 관련</option>
-                          <option value="불건전 게시물">불건전 게시물 신고</option>
+                          <option value="불건전 게시물">게시물 관련 제보</option>
                           <option value="기타">기타 문의</option>
                         </select>
                         <Icons.ChevronDown size={20} color="#8B95A1" className="mypage__inquiry-select-icon" />
@@ -779,9 +874,19 @@ export function MyPage() {
                         key={tab.id}
                         className={`mypage__faq-tab ${selectedFaqCategory === tab.id ? 'active' : ''}`}
                         onClick={() => setSelectedFaqCategory(tab.id)}
+                        style={{ position: 'relative' }}
                       >
-                        {tab.icon}
-                        <span>{tab.label}</span>
+                        <div className="tab-inner">
+                          {tab.icon}
+                          <span>{tab.label}</span>
+                        </div>
+                        {selectedFaqCategory === tab.id && (
+                          <motion.div
+                            layoutId="faqTabPill"
+                            className="active-pill"
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                          />
+                        )}
                       </button>
                     ))}
                   </div>
@@ -815,8 +920,8 @@ export function MyPage() {
                             a: "<b>'인증된 방문록'</b> 기능을 통해 GPS 기반으로 실제 해당 장소 근처에서 작성된 리뷰인지 확인합니다. 또한 유저 간의 '공감' 기능을 통해 투명한 커뮤니티를 유지하고 있습니다."
                           },
                           {
-                            q: "허위 사실이나 비방글을 발견하면?",
-                            a: "해당 게시물 우측의 <b>'더보기(...) > 신고하기'</b> 기능을 이용해 주세요. 운영진이 신속히 검토 후 약관에 따라 블라인드 처리 및 이용 제한 조치를 취하고 있습니다."
+                            q: "부적절한 리뷰를 발견하면?",
+                            a: "방문Log는 쾌적한 커뮤니티를 위해 상시 모니터링을 진행하고 있습니다. 혹시 부적절한 게시물을 발견하신다면 <b>'문의하기'</b>를 통해 제보해 주세요. 운영진이 확인 후 조치하겠습니다."
                           }
                         ].map((item, idx) => (
                           <FAQItem key={`trust-${idx}`} question={item.q} answer={item.a} />
@@ -829,7 +934,7 @@ export function MyPage() {
                           },
                           {
                             q: "회원 탈퇴는 어떻게 하나요?",
-                            a: "[내 정보] 화면 상단의 <b>로그아웃 버튼 옆 '탈퇴'</b> 메뉴를 통해 언제든지 가능합니다. 탈퇴 시 관련 법령에 따라 모든 개인정보는 즉시 파기되니 안심하세요."
+                            a: "[내 정보] 하단의 <b>'서비스 설정 > 회원 탈퇴'</b> 메뉴를 통해 언제든지 가능합니다. 탈퇴 시 관련 법령에 따라 모든 개인정보는 즉시 파기되니 안심하세요."
                           }
                         ].map((item, idx) => (
                           <FAQItem key={`privacy-${idx}`} question={item.q} answer={item.a} />
@@ -859,7 +964,18 @@ export function MyPage() {
                         <div className="mypage__card-left">
                           <div className="mypage__card-icon recent" style={{ width: '48px', height: '48px', minWidth: '48px', overflow: 'hidden', padding: 0, borderRadius: '12px', backgroundColor: '#F2F4F6' }}>
                             {r.images && r.images.length > 0 ? (
-                              <img src={r.images[0]} alt="thumb" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                                {(r.images[0].includes('.mp4?') || r.images[0].includes('.mov?') || r.images[0].includes('.webm?')) ? (
+                                  <video src={r.images[0]} muted autoPlay loop playsInline style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                                ) : (
+                                  <img src={r.images[0]} alt="thumb" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                                )}
+                                {(r.images[0].includes('.mp4?') || r.images[0].includes('.mov?') || r.images[0].includes('.webm?')) && (
+                                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+                                    <Icons.PlayCircle size={16} color="#fff" fill="rgba(0,0,0,0.3)" />
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <div style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F4F6' }}>
                                 <Icons.Image size={24} color="#B0B8C1" />
@@ -897,7 +1013,18 @@ export function MyPage() {
                         <div className="mypage__card-left">
                           <div className="mypage__card-icon review" style={{ width: '48px', height: '48px', minWidth: '48px', overflow: 'hidden', padding: 0, borderRadius: '12px', backgroundColor: '#F2F4F6' }}>
                             {r.images && r.images.length > 0 ? (
-                              <img src={r.images[0]} alt="thumb" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                                {(r.images[0].includes('.mp4?') || r.images[0].includes('.mov?') || r.images[0].includes('.webm?')) ? (
+                                  <video src={r.images[0]} muted autoPlay loop playsInline style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                                ) : (
+                                  <img src={r.images[0]} alt="thumb" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                                )}
+                                {(r.images[0].includes('.mp4?') || r.images[0].includes('.mov?') || r.images[0].includes('.webm?')) && (
+                                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+                                    <Icons.PlayCircle size={16} color="#fff" fill="rgba(0,0,0,0.3)" />
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <div style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F4F6' }}>
                                 <Icons.Image size={24} color="#B0B8C1" />
@@ -1236,6 +1363,15 @@ export function MyPage() {
           <ReviewDetail
             reviewId={selectedReviewId}
             onClose={() => setSelectedReviewId(null)}
+            onEdit={() => {
+              console.log("✏️ [MyPage Edit] 수정을 위해 홈으로 이동합니다:", selectedReviewId);
+              navigate(`/?edit=${selectedReviewId}`);
+            }}
+            onDelete={() => {
+              console.log("🗑️ [MyPage Delete] 삭제를 요청했습니다:", selectedReviewId);
+              setDeleteTargetId(selectedReviewId);
+              setSelectedReviewId(null); // 삭제 확인 모달을 띄우기 위해 상세창은 먼저 닫음
+            }}
           />
         )}
       </AnimatePresence>
@@ -1420,6 +1556,196 @@ export function MyPage() {
         )}
       </AnimatePresence>
 
+      {/* 회원 탈퇴 확인 모달 (정렬까지 완벽하게!) */}
+      <AnimatePresence>
+        {isWithdrawalModalOpen && (
+          <motion.div 
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ 
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px'
+            }}
+            onClick={() => !isWithdrawing && setIsWithdrawalModalOpen(false)}
+          >
+            <motion.div 
+              className="mypage__withdrawal-modal"
+              initial={{ scale: 0.95, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 30 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              style={{
+                width: '100%',
+                maxWidth: '360px',
+                backgroundColor: 'white',
+                borderRadius: '28px',
+                padding: '36px 24px',
+                textAlign: 'center',
+                boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+                border: '1px solid rgba(0,0,0,0.05)',
+                pointerEvents: 'auto'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ 
+                  width: '64px', height: '64px', backgroundColor: '#FFF0F0', 
+                  borderRadius: '24px', display: 'flex', alignItems: 'center', 
+                  justifyContent: 'center', margin: '0 auto 20px',
+                  transform: 'rotate(-5deg)'
+                }}>
+                  <Icons.UserMinus size={32} color="#F04452" />
+                </div>
+                <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#191F28', marginBottom: '12px', letterSpacing: '-0.5px' }}>정말 탈퇴하시겠어요?</h2>
+                <p style={{ fontSize: '15px', color: '#4E5968', lineHeight: '1.6', wordBreak: 'keep-all' }}>
+                  탈퇴 시 작성하신 모든 방문록과 찜 목록이<br/>
+                  <strong style={{ color: '#F04452', fontWeight: '700' }}>영구적으로 삭제</strong>되며 절대 복구할 수 없습니다.
+                </p>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <button 
+                  onClick={handleWithdrawal}
+                  disabled={isWithdrawing}
+                  style={{
+                    width: '100%',
+                    padding: '18px',
+                    borderRadius: '16px',
+                    border: 'none',
+                    backgroundColor: '#F04452',
+                    color: 'white',
+                    fontSize: '16px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 16px rgba(240, 68, 82, 0.2)'
+                  }}
+                >
+                  {isWithdrawing ? "안전하게 탈퇴 처리 중..." : "위 내용을 확인했으며, 탈퇴합니다"}
+                </button>
+                <button 
+                  onClick={() => setIsWithdrawalModalOpen(false)}
+                  disabled={isWithdrawing}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    borderRadius: '16px',
+                    border: 'none',
+                    backgroundColor: '#F2F4F6',
+                    color: '#4E5968',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  아니요, 더 써볼게요
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 로그아웃 확인 모달 */}
+      <AnimatePresence>
+        {isLogoutModalOpen && (
+          <motion.div 
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ 
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px'
+            }}
+            onClick={() => setIsLogoutModalOpen(false)}
+          >
+            <motion.div 
+              className="mypage__logout-confirm-modal"
+              initial={{ scale: 0.95, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 30 }}
+              style={{
+                width: '100%',
+                maxWidth: '320px',
+                backgroundColor: 'white',
+                borderRadius: '24px',
+                padding: '32px 24px',
+                textAlign: 'center',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                pointerEvents: 'auto'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ 
+                  width: '56px', height: '56px', backgroundColor: '#F2F4F6', 
+                  borderRadius: '18px', display: 'flex', alignItems: 'center', 
+                  justifyContent: 'center', margin: '0 auto 16px'
+                }}>
+                  <Icons.LogOut size={28} color="#4E5968" />
+                </div>
+                <h2 style={{ fontSize: '19px', fontWeight: '800', color: '#191F28', marginBottom: '8px' }}>로그아웃 하시겠어요?</h2>
+                <p style={{ fontSize: '15px', color: '#8B95A1', lineHeight: '1.5' }}>
+                  지금 로그아웃 하시면<br/>
+                  나중에 다시 로그인해야 합니다.
+                </p>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={() => setIsLogoutModalOpen(false)}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    borderRadius: '14px',
+                    border: 'none',
+                    backgroundColor: '#F2F4F6',
+                    color: '#4E5968',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={() => {
+                    logout();
+                    setIsLogoutModalOpen(false);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    borderRadius: '14px',
+                    border: 'none',
+                    backgroundColor: '#3182F6',
+                    color: 'white',
+                    fontSize: '15px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  로그아웃
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

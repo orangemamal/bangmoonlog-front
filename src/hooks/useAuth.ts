@@ -12,7 +12,10 @@ interface User {
   isAnonymous?: boolean;
   canViewAll?: boolean;
   canViewAllUntil?: any;
+  isAdmin?: boolean;
 }
+
+const ADMIN_EMAILS = ["bangmoonlog.cs@gmail.com"];
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -56,7 +59,8 @@ export function useAuth() {
           photoURL,
           isAnonymous: firebaseUser.isAnonymous,
           canViewAll,
-          canViewAllUntil
+          canViewAllUntil,
+          isAdmin: ADMIN_EMAILS.includes(email || "")
         });
       } else {
         setUser(null);

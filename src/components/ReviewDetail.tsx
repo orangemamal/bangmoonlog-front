@@ -10,7 +10,8 @@ import {
   Trash2,
   Home as HomeIcon,
   Search,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ImageIcon
 } from "lucide-react";
 import {
   doc,
@@ -24,6 +25,8 @@ import {
   QuerySnapshot,
   DocumentData,
   QueryDocumentSnapshot,
+  addDoc,
+  serverTimestamp
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -31,6 +34,7 @@ import { incrementViews, toggleLike, addComment } from "../services/reviewServic
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getUserTitle } from "../utils/titleSystem";
 import { formatAddressDetail } from "../utils/addressUtils";
+import { analyzeReviewWithAI } from "../utils/gemini";
 
 interface ReviewDetailProps {
   reviewId: string;
@@ -61,6 +65,8 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
   const [commentPhotoByUserId, setCommentPhotoByUserId] = useState<Record<string, string | undefined>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showMenuPopup, setShowMenuPopup] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+
 
   const hasIncremented = useRef<string | null>(null);
 
@@ -225,20 +231,38 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
       else alert("로그인이 필요합니다.");
       return;
     }
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || isSubmittingComment) return;
 
-    const success = await addComment(
-      reviewId,
-      user!.id,
-      user!.name || "익명 사용자",
-      newComment,
-      review?.authorId
-    );
+    setIsSubmittingComment(true);
+    try {
+      // AI 검열 시스템 가동
+      const aiResult = await analyzeReviewWithAI(newComment);
+      
+      if (!aiResult.isPassed) {
+        alert(`AI 클렌징 알림: ${aiResult.reason}\n건전한 커뮤니티를 위해 내용을 수정해주세요. 🤖`);
+        setIsSubmittingComment(false);
+        return;
+      }
 
-    if (success) {
-      setNewComment("");
+      const success = await addComment(
+        reviewId,
+        user!.id,
+        user!.name || "익명 사용자",
+        newComment,
+        review?.authorId
+      );
+
+      if (success) {
+        setNewComment("");
+      }
+    } catch (err) {
+      console.error("Comment submission error:", err);
+    } finally {
+      setIsSubmittingComment(false);
     }
-  }, [isLoggedIn, newComment, reviewId, user, onLoginRequired, review?.authorId]);
+  }, [isLoggedIn, newComment, reviewId, user, onLoginRequired, review?.authorId, isSubmittingComment]);
+
+
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const idx = Math.round(e.currentTarget.scrollLeft / e.currentTarget.offsetWidth);
@@ -254,32 +278,52 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
         <button className="back-btn" onClick={onClose}><ArrowLeft size={24} /></button>
         <span className="title" style={{ flex: 1, textAlign: 'center' }}>방문록 상세보기</span>
 
-        {user?.id === review?.authorId ? (
+        {isLoggedIn && (
           <div style={{ position: 'relative' }}>
-            <button className="back-btn" onClick={() => setShowMenuPopup(prev => !prev)}>
-              <MoreHorizontal size={24} />
+            <button 
+              className="back-btn" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenuPopup(prev => !prev);
+              }} 
+              style={{ padding: '8px' }}
+            >
+              <MoreHorizontal size={24} color="#4E5968" />
             </button>
             {showMenuPopup && (
-              <div style={{ position: 'absolute', right: 0, top: '40px', background: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, display: 'flex', flexDirection: 'column', padding: '4px', minWidth: '120px' }}>
-                <button
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}
-                  onClick={() => { setShowMenuPopup(false); onEdit?.(); }}
-                >
-                  <Pencil size={18} /> 수정하기
-                </button>
-                <div style={{ height: '1px', background: '#F2F4F6', margin: '0 4px' }} />
-                <button
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#E84040' }}
-                  onClick={() => { setShowMenuPopup(false); onDelete?.(); }}
-                >
-                  <Trash2 size={18} /> 삭제하기
-                </button>
+              <div style={{ position: 'absolute', right: 0, top: '40px', background: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '4px', minWidth: '140px' }}>
+                {(user?.id === review?.authorId || user?.isAdmin) && (
+                  <>
+                    <button
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#333D4B', width: '100%' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log("ReviewDetail: Edit Button Clicked");
+                        setShowMenuPopup(false);
+                        if (onEdit) onEdit();
+                      }}
+                    >
+                      <Pencil size={18} /> 수정하기
+                    </button>
+                    <div style={{ height: '1px', background: '#F2F4F6', margin: '0 4px' }} />
+                    <button
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#E84040', width: '100%' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log("ReviewDetail: Delete Button Clicked");
+                        setShowMenuPopup(false);
+                        if (onDelete) onDelete();
+                      }}
+                    >
+                      <Trash2 size={18} /> 삭제하기
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
-        ) : (
-          <div style={{ width: 24 }} />
         )}
+        {!isLoggedIn && <div style={{ width: 44 }} />}
       </div>
 
       <div className="review-detail-body">
@@ -471,11 +515,21 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
             onChange={(e) => setNewComment(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
           />
-          <button className="send-btn" onClick={handleAddComment}>
-            <Send size={18} />
+          <button 
+            className="send-btn" 
+            onClick={handleAddComment} 
+            disabled={isSubmittingComment || !newComment.trim()}
+          >
+            {isSubmittingComment ? (
+              <div className="spinner-small" style={{ width: 16, height: 16, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'iw-spin 0.8s linear infinite' }} />
+            ) : (
+              <Send size={18} />
+            )}
           </button>
         </div>
       </div>
+ 
+
     </div>
   );
 }

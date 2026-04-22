@@ -43,7 +43,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
               </div>
               <div className="text-box">
                 <strong>생생한 경험 공유</strong>
-                <p>내가 살았던 곳, 혹은 살고 있는 곳의 방문록을 남겨 다음 세입자에게 도움을 주세요.</p>
+                <p>살았던 곳의 후기를 남겨 다음 세입자에게 도움을 주세요.</p>
               </div>
             </div>
 
@@ -53,7 +53,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
               </div>
               <div className="text-box">
                 <strong>매물의 진짜 정보 확인</strong>
-                <p>지도를 탐색해 실제 거주자나 방문자가 남긴 장단점 후기와 사진을 확인해보세요.</p>
+                <p>실제 거주자가 남긴 생생한 장단점과 사진을 확인하세요.</p>
               </div>
             </div>
 
@@ -63,8 +63,16 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
               </div>
               <div className="text-box">
                 <strong>익명성 및 신뢰보장</strong>
-                <p>모든 데이터는 익명으로 보호되며, GPS 인증을 통해 실제 방문 여부를 검증합니다.</p>
+                <p>데이터는 익명으로 보호되며 GPS로 실제 방문을 검증합니다.</p>
               </div>
+            </div>
+
+            <div className="location-notice">
+              <div className="notice-header">
+                <MapPin size={14} color="#3182F6" />
+                <span>위치 권한이 왜 필요한가요?</span>
+              </div>
+              <p>권한을 허용해주시면 <strong>실제 방문자 인증 뱃지</strong>를 획득할 수 있고, <strong>내 주변의 실시간 방문록</strong>을 바로 확인할 수 있어요! (미허용 시 일부 기능이 제한됩니다)</p>
             </div>
           </div>
         </div>

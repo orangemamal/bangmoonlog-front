@@ -538,6 +538,8 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      flex: 1;
+      min-width: 0;
     }
 
     &-icon {
@@ -558,6 +560,9 @@
     }
 
     &-info {
+      flex: 1;
+      min-width: 0;
+
       .title {
         font-size: 15px;
         font-weight: 600;
@@ -592,6 +597,13 @@
       }
     }
 
+    &-right {
+      flex-shrink: 0;
+      margin-left: 12px;
+      display: flex;
+      align-items: center;
+    }
+
     &-more-btn {
       width: 32px;
       height: 32px;
@@ -618,7 +630,7 @@
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
       border: 1px solid #F2F4F6;
       z-index: 10;
-      min-width: 100px;
+      min-width: 120px;
       overflow: hidden;
 
       button {
@@ -831,8 +843,9 @@
     }
 
     &-card {
-      background: linear-gradient(135deg, #191f28 0%, #333d4b 100%);
+      background: linear-gradient(135deg, #131821 0%, #46505f 100%);
       border-radius: 24px;
+      border: 1px solid #7e8da3;
       padding: 32px 28px;
       color: white;
       margin-bottom: 32px;
@@ -876,7 +889,6 @@
             border-radius: 8px;
             object-fit: contain;
             background-color: white;
-            padding: 4px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
           }
 
@@ -1314,7 +1326,6 @@
 
     .icon {
       font-size: 13px;
-      margin-right: 4px;
     }
 
     .text {
@@ -1627,9 +1638,9 @@
 
     &-tabs {
       background-color: white;
-      padding: 0 20px 16px;
+      padding: 4px 20px 16px;
       display: flex;
-      gap: 8px;
+      gap: 6px;
       position: sticky;
       top: 0;
       z-index: 10;
@@ -1637,30 +1648,57 @@
 
     &-tab {
       flex: 1;
-      padding: 10px 0;
+      padding: 0;
+      height: 44px;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
       background: none;
       border: none;
       border-radius: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      position: relative;
       color: #8b95a1;
+      -webkit-tap-highlight-color: transparent;
 
-      span {
-        font-size: 13px;
-        font-weight: 600;
+      .tab-inner {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        transition: all 0.2s;
+
+        span {
+          font-size: 11px;
+          font-weight: 700;
+        }
+
+        svg {
+          width: 18px;
+          height: 18px;
+        }
       }
 
       &.active {
-        background-color: #f2f4f6;
         color: #3182f6;
+
+        .tab-inner {
+          transform: translateY(-1px);
+        }
+      }
+
+      .active-pill {
+        position: absolute;
+        inset: 0;
+        background-color: #f2f4f6;
+        border-radius: 12px;
+        z-index: 1;
       }
 
       &:active {
-        transform: scale(0.95);
+        opacity: 0.7;
       }
     }
 
@@ -1772,6 +1810,143 @@
         }
       }
     }
+  }
+
+  // Confirm Modal & Nickname Edit Modal Styles
+  &__confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 5000;
+    backdrop-filter: blur(4px);
+  }
+
+  &__confirm-modal {
+    background-color: white;
+    border-radius: 28px;
+    width: 100%;
+    max-width: 320px;
+    padding: 32px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  }
+
+  &__confirm-icon {
+    font-size: 40px;
+    margin-bottom: 20px;
+  }
+
+  &__confirm-title {
+    font-size: 19px;
+    font-weight: 800;
+    color: #191F28;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+
+  &__confirm-desc {
+    font-size: 15px;
+    color: #4E5968;
+    line-height: 1.5;
+    text-align: center;
+    margin-bottom: 24px;
+    word-break: keep-all;
+  }
+
+  &__confirm-actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+  }
+
+  &__confirm-cancel, &__confirm-ok {
+    flex: 1;
+    height: 52px;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:active {
+      transform: scale(0.96);
+    }
+  }
+
+  &__confirm-cancel {
+    background-color: #F2F4F6;
+    color: #4E5968;
+
+    &:hover {
+      background-color: #E5E8EB;
+    }
+  }
+
+  &__confirm-ok {
+    background-color: #3182F6;
+    color: white;
+
+    &:disabled {
+      background-color: #D1D6DB;
+      cursor: not-allowed;
+    }
+
+    &:hover:not(:disabled) {
+      background-color: #1B64DA;
+    }
+  }
+
+  // Inquiry & Input Styles (used in nickname edit as well)
+  &-input-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  &-input, &-textarea {
+    width: 100%;
+    background-color: #F2F4F6;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #191F28;
+    transition: all 0.2s;
+    outline: none;
+
+    &::placeholder {
+      color: #B0B8C1;
+    }
+
+    &:focus {
+      background-color: white;
+      border-color: #3182F6;
+      box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.1);
+    }
+  }
+
+  &-textarea {
+    height: 200px;
+    resize: none;
+    line-height: 1.6;
+  }
+
+  &-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #8B95A1;
+    margin-bottom: 8px;
+    display: block;
   }
 }
 
