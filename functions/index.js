@@ -124,7 +124,7 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
       `;
 
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
         {
           contents: [{ parts: [{ text: prompt }] }]
         },
@@ -149,7 +149,7 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
       
       return res.status(500).json({ 
         isPassed: false, 
-        reason: `AI 분석 호출 실패: ${errorDetail}. 열쇠(API Key) 설정이나 권한을 확인해주세요.`
+        reason: `AI 분석 호출 실패(v1beta-check): ${errorDetail}. 열쇠(API Key) 설정이나 권한을 확인해주세요.`
       });
     }
   });
