@@ -1,4 +1,4 @@
-const { onRequest } = require("firebase-functions/v2/https");
+﻿const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const axios = require("axios");
@@ -65,7 +65,7 @@ exports.naverAuth = onRequest(async (req, res) => {
           throw error;
         }
       }
-      
+
       const customToken = await admin.auth().createCustomToken(uid);
 
       // 3. 토큰 반환
@@ -112,7 +112,7 @@ exports.moderateContent = onRequest(async (req, res) => {
 
     try {
       const { VertexAI } = require('@google-cloud/vertexai');
-      
+
       // Firebase 프로젝트 정보로 Vertex AI 초기화 (API 키 불필요)
       const vertex_ai = new VertexAI({ project: 'bangmoonlog-bdf9a', location: 'asia-northeast3' });
       const model = vertex_ai.getGenerativeModel({
@@ -120,31 +120,36 @@ exports.moderateContent = onRequest(async (req, res) => {
       });
 
       const prompt = `
-        너는 부동산 리뷰 플랫폼의 '절대 타협하지 않는 아주 엄격한 보안관 AI'야.
-        다음 [리뷰 내용]에 아주 미세한 욕설, 비하, 불쾌감을 주는 표현이 하나라도 있으면 무조건 REJECT 해야 해.
+        당신은 부동산 리뷰 플랫폼 '방문Log'의 아주 쿨하고 유도리 있는 전문 검수관입니다. 
+        사용자들이 자유롭고 활기차게 소통할 수 있도록, 웬만한 건 다 'PASS' 시키는 것이 당신의 철학입니다.
 
-        [검열 기준]
-        1. 욕설 및 비속어: 직접/변형/영어 욕설 모두 포함.
-        2. 혐오 및 비하: 지역/성별/나이/직업 비하.
-        3. 불쾌한 표현: 성적 암시, 폭력적 묘사, 공격적 말투.
-        4. 광고 및 도배: 홍보성 문구, 무의미한 반복.
+        [너그러운 허용 기준 - 묻지도 따지지도 말고 PASS]
+        1. 웃음소리: 'ㅋㅋㅋ', 'ㅎㅎㅎ', '!!!' 등 한국인의 흥겨운 추임새가 아무리 길어도 무조건 PASS.
+        2. 거친 극찬: '개좋음', '존맛', '미친 뷰', '대박' 등 단어는 거칠어도 내용을 극찬하는 경우 무조건 PASS.
+        3. 솔직한 비판: "방음 쓰레기임", "주인 진짜 불친절함", "곰팡이 쩔음" 등 단순 불평이나 비판은 서비스의 본질이므로 무조건 PASS.
+        4. 짧은 인사: "굿", "좋아요", "추천" 등 짧은 내용도 사용자의 의사표시이므로 PASS.
 
-        [응답 형식]
-        - 적절한 내용: 'PASS'
-        - 부적절한 내용: 'REJECT: [짧은 이유]'
-        - 결과 외에 다른 설명은 절대 하지 마.
+        [엄격한 차단 기준 - 이것만 REJECT 하세요]
+        1. 범죄적 발언: 패드립, 심각한 인격 모독, 살해 협박, 특정인 비하.
+        2. 성적 금기: 구체적이고 불쾌한 성적 묘사, 성희롱, 음란성 문구.
+        3. 불법 광고: 부동산과 전혀 상관없는 도박, 마약, 불법 대출, 스팸 광고.
 
-        [분석할 내용]
+        [응답 형식 - 엄격 준수]
+        - 적절하면: PASS
+        - 선을 넘었다면: REJECT: [간결한 사유]
+        - 결과 외에 다른 부연 설명이나 인사는 절대 하지 마세요.
+
+        [분석할 리뷰 내용]
         "${content}"
       `;
 
       const result = await model.generateContent(prompt);
       const aiResponse = result.response.candidates[0].content.parts[0].text.trim() || "";
-      
+
       if (aiResponse.toUpperCase().startsWith("PASS")) {
         return res.status(200).json({ isPassed: true });
       } else {
-        const reason = aiResponse.includes("REJECT") 
+        const reason = aiResponse.includes("REJECT")
           ? aiResponse.split(":")[1]?.trim() || "부적절한 내용 감지"
           : "부적절한 표현이 포함되어 있습니다.";
         return res.status(200).json({ isPassed: false, reason });
