@@ -102,10 +102,6 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
     apiKey = apiKey.replace(/[^\x20-\x7E]/g, "").trim();
 
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      // [핵심] 검증된 최신 모델명 사용
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
       const prompt = `
         너는 부동산 리뷰 플랫폼의 '절대 타협하지 않는 아주 엄격한 보안관 AI'야.
         다음 [리뷰 내용]에 아주 미세한 욕설, 비하, 불쾌감을 주는 표현이 하나라도 있으면 무조건 REJECT 해야 해.
@@ -125,8 +121,17 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
         "${content}"
       `;
 
-      const result = await model.generateContent(prompt);
-      const aiResponse = result.response.text().trim() || "";
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`,
+        {
+          contents: [{ parts: [{ text: prompt }] }]
+        },
+        {
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+      
+      const aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
       
       console.log("🤖 [AI 분석 성공]:", aiResponse);
 
