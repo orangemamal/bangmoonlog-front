@@ -18,7 +18,7 @@ export function Layout() {
     if (!document.getElementById(SCRIPT_ID)) {
       const s = document.createElement("script");
       s.id = SCRIPT_ID;
-      s.src = "https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dj5vfj5th7&submodules=geocoder,panorama";
+      s.src = "https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dj5vfj5th7&submodules=geocoder,panorama,marker-clustering";
       s.async = true;
       s.onload = () => {
         window.dispatchEvent(new Event('naver-map-loaded'));

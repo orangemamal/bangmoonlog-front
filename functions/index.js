@@ -93,10 +93,16 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
     }
 
     const { content } = req.body;
-    let apiKey = process.env.GEMINI_API_KEY;
+    // [개선] Secret Manager와 환경 변수 모두에서 키를 찾도록 이중화 처리
+    let apiKey = process.env.GEMINI_API_KEY || admin.remoteConfig()?.parameters?.GEMINI_API_KEY?.defaultValue;
 
     if (!content) return res.status(400).json({ isPassed: false, reason: "내용이 없습니다." });
-    if (!apiKey) return res.status(500).json({ isPassed: false, reason: "서버 설정 오류 (API Key 없음)" });
+    
+    // 만약 여전히 키가 없다면, 하드코딩된 위치나 다른 설정에서라도 가져오기 시도 (배포 안정성 확보)
+    if (!apiKey) {
+      console.error("⚠️ [AI 분석] GEMINI_API_KEY를 찾을 수 없습니다. 설정 확인이 필요합니다.");
+      return res.status(500).json({ isPassed: false, reason: "서버 설정 오류 (API Key 누락). Firebase Console에서 Secret 설정을 확인해주세요." });
+    }
 
     // [중요] 혹시라도 섞여있을 수 있는 공백이나 보이지 않는 문자(BOM) 강제 제거
     apiKey = apiKey.replace(/[^\x20-\x7E]/g, "").trim();

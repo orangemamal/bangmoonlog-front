@@ -584,6 +584,12 @@ export function Home() {
     const currentCallId = ++refreshCountRef.current;
 
     try {
+      // [추가] MarkerClustering 라이브러리 로드 여부 체크 (방어 코드)
+      if (typeof window.MarkerClustering !== 'function') {
+        console.warn("⚠️ [Map] MarkerClustering 라이브러리가 아직 로드되지 않았습니다. 잠시 후 재시도합니다.");
+        return;
+      }
+
       const snapshot = await getDocs(collection(db, "reviews"));
 
       // [핵심] 비동기 작업(getDocs) 이후, 내가 여전히 '최신 요청'인지 확인
