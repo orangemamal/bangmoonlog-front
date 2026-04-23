@@ -611,30 +611,7 @@ export function Feed() {
         ) : (
           <>
             {/* [추가] GPS 오류/방역 방어용 UI 카드 섹션 */}
-            {activeTab === 'local' && (gpsStatus !== 'success' || (gpsStatus === 'success' && filteredData.length === 0)) && (
-              <div className="feed__defense-card-wrapper">
-            <div className="feed__defense-card">
-              <div className="feed__defense-card-info">
-                <h3 className="feed__defense-card-title">
-                  {gpsStatus === 'loading' ? '위치를 확인하고 있어요' : 
-                   gpsStatus === 'denied' ? '위치 권한이 필요해요' :
-                   (gpsStatus === 'success' && filteredData.length === 0) ? '주변 200m에 글이 없어요' : '위치를 불러올 수 없어요'}
-                </h3>
-                <p className="feed__defense-card-desc">
-                  <span className="icon">📍</span>
-                  {gpsStatus === 'denied' ? '장소와 멀리 떨어져 있으면 인증 마크를 달 수 없어요.' : 
-                   (gpsStatus === 'success' && filteredData.length === 0) ? '반경을 조금 더 넓혀보거나 다른 곳으로 이동해 보세요.' : '정확한 정보를 위해 위치 서비스가 필요해요.'}
-                </p>
-              </div>
-              <button 
-                onClick={fetchUserLocation}
-                className="feed__defense-card-btn"
-              >
-                <RefreshCw size={20} color="#4E5968" className={gpsStatus === 'loading' ? 'animate-spin' : ''} />
-              </button>
-            </div>
-          </div>
-        )}
+        {/* [개편] 내 주변 탭 전용 통합 엠프티 스테이트는 리스트 영역에서 한 번에 처리 */}
 
         {isLoading ? (
           <div className="loading-state">
@@ -753,10 +730,67 @@ export function Feed() {
             </div>
           ))
         ) : (
-          <div className="empty-state">
-            <p>아직 작성된 방문록이 없습니다.</p>
-            <p>첫 번째 방문록을 작성해보세요!</p>
-          </div>
+          <motion.div 
+            className="feed__empty-state"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <div className="empty-visual">
+              <motion.div 
+                className="empty-icon-wrap"
+                animate={{ y: [0, -8, 0] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              >
+                {activeTab === 'local' && gpsStatus === 'loading' ? (
+                  <RefreshCw size={48} color="#3182F6" className="animate-spin" />
+                ) : activeTab === 'local' && gpsStatus === 'denied' ? (
+                  <div className="custom-icon denied">🔒</div>
+                ) : (
+                  <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="40" cy="40" r="40" fill="#F2F4F6"/>
+                    <path d="M52 32H28C26.8954 32 26 32.8954 26 34V54C26 55.1046 26.8954 56 28 56H52C53.1046 56 54 55.1046 54 54V34C54 32.8954 53.1046 32 52 32Z" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M40 40V48" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M36 44H44" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="58" cy="28" r="8" fill="#3182F6" fill-opacity="0.1"/>
+                    <circle cx="58" cy="28" r="3" fill="#3182F6"/>
+                  </svg>
+                )}
+              </motion.div>
+            </div>
+
+            <h3 className="empty-title">
+              {activeTab === 'local' ? (
+                gpsStatus === 'loading' ? '위치를 확인하고 있어요' :
+                gpsStatus === 'denied' ? '위치 권한이 꺼져있어요' :
+                '주변 200m에 글이 없어요'
+              ) : (
+                '작성된 방문록이 없어요'
+              )}
+            </h3>
+            
+            <p className="empty-desc">
+              {activeTab === 'local' ? (
+                gpsStatus === 'denied' ? '정확한 주변 정보를 확인하려면\n위치 권한 허용이 필요해요.' :
+                '가장 먼저 이 동네의\n첫 번째 발자국을 남겨보세요!'
+              ) : (
+                '이곳의 생생한 이야기를\n가장 먼저 들려주시겠어요?'
+              )}
+            </p>
+
+            <button 
+              className="empty-cta-btn"
+              onClick={() => {
+                if (activeTab === 'local' && (gpsStatus === 'denied' || gpsStatus === 'error')) {
+                  fetchUserLocation();
+                } else {
+                  navigate('/');
+                }
+              }}
+            >
+              {activeTab === 'local' && (gpsStatus === 'denied' || gpsStatus === 'error') ? '위치 다시 시도' : '방문록 작성하러 가기'}
+            </button>
+          </motion.div>
         )}
       </>
     )}
