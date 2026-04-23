@@ -1,4 +1,4 @@
-﻿const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const axios = require("axios");
@@ -89,9 +89,9 @@ exports.naverAuth = onRequest(async (req, res) => {
 });
 
 /**
- * Gemini AI를 이용한 콘텐츠 모더레이션 함수 (서버 측 처리)
+ * Gemini AI를 이용한 콘텐츠 모더레이션 함수 (Vertex AI 방식)
  */
-exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req, res) => {
+exports.moderateContent = onRequest(async (req, res) => {
   return cors(req, res, async () => {
     if (req.method === "OPTIONS") {
       res.set("Access-Control-Allow-Origin", "*");
@@ -105,18 +105,20 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
     }
 
     const { content } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!content) {
       return res.status(400).json({ isPassed: false, reason: "내용이 없습니다." });
     }
 
-    if (!apiKey) {
-      console.error("GEMINI_API_KEY is not set in secrets");
-      return res.status(500).json({ isPassed: false, reason: "서버 설정 오류" });
-    }
-
     try {
+      const { VertexAI } = require('@google-cloud/vertexai');
+      
+      // Firebase 프로젝트 정보로 Vertex AI 초기화 (API 키 불필요)
+      const vertex_ai = new VertexAI({ project: 'bangmoonlog-bdf9a', location: 'asia-northeast3' });
+      const model = vertex_ai.getGenerativeModel({
+        model: 'gemini-1.5-flash-001', // Vertex AI의 공식 모델명
+      });
+
       const prompt = `
         너는 부동산 리뷰 플랫폼의 '절대 타협하지 않는 아주 엄격한 보안관 AI'야.
         다음 [리뷰 내용]에 아주 미세한 욕설, 비하, 불쾌감을 주는 표현이 하나라도 있으면 무조건 REJECT 해야 해.
@@ -136,17 +138,8 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
         "${content}"
       `;
 
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          contents: [{ parts: [{ text: prompt }] }]
-        },
-        {
-          headers: { "Content-Type": "application/json" }
-        }
-      );
-
-      const aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      const result = await model.generateContent(prompt);
+      const aiResponse = result.response.candidates[0].content.parts[0].text.trim() || "";
       
       if (aiResponse.toUpperCase().startsWith("PASS")) {
         return res.status(200).json({ isPassed: true });
@@ -157,7 +150,7 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
         return res.status(200).json({ isPassed: false, reason });
       }
     } catch (error) {
-      console.error("Gemini API Error:", error.response?.data || error.message);
+      console.error("Vertex AI Error:", error.message);
       return res.status(500).json({ isPassed: false, reason: "AI 분석 중 오류가 발생했습니다." });
     }
   });
