@@ -278,7 +278,7 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
         <button className="back-btn" onClick={onClose}><ArrowLeft size={24} /></button>
         <span className="title" style={{ flex: 1, textAlign: 'center' }}>방문록 상세보기</span>
 
-        {isLoggedIn && (
+        {(isLoggedIn && (user?.id === review?.authorId || user?.isAdmin)) ? (
           <div style={{ position: 'relative' }}>
             <button 
               className="back-btn" 
@@ -292,38 +292,35 @@ export function ReviewDetail({ reviewId, onClose, onLoginRequired, onEdit, onDel
             </button>
             {showMenuPopup && (
               <div style={{ position: 'absolute', right: 0, top: '40px', background: '#fff', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '4px', minWidth: '140px' }}>
-                {(user?.id === review?.authorId || user?.isAdmin) && (
-                  <>
-                    <button
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#333D4B', width: '100%' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        console.log("ReviewDetail: Edit Button Clicked");
-                        setShowMenuPopup(false);
-                        if (onEdit) onEdit();
-                      }}
-                    >
-                      <Pencil size={18} /> 수정하기
-                    </button>
-                    <div style={{ height: '1px', background: '#F2F4F6', margin: '0 4px' }} />
-                    <button
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#E84040', width: '100%' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        console.log("ReviewDetail: Delete Button Clicked");
-                        setShowMenuPopup(false);
-                        if (onDelete) onDelete();
-                      }}
-                    >
-                      <Trash2 size={18} /> 삭제하기
-                    </button>
-                  </>
-                )}
+                <button
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#333D4B', width: '100%' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("ReviewDetail: Edit Button Clicked");
+                    setShowMenuPopup(false);
+                    if (onEdit) onEdit();
+                  }}
+                >
+                  <Pencil size={18} /> 수정하기
+                </button>
+                <div style={{ height: '1px', background: '#F2F4F6', margin: '0 4px' }} />
+                <button
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#E84040', width: '100%' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("ReviewDetail: Delete Button Clicked");
+                    setShowMenuPopup(false);
+                    if (onDelete) onDelete();
+                  }}
+                >
+                  <Trash2 size={18} /> 삭제하기
+                </button>
               </div>
             )}
           </div>
+        ) : (
+          <div style={{ width: 44 }} />
         )}
-        {!isLoggedIn && <div style={{ width: 44 }} />}
       </div>
 
       <div className="review-detail-body">
