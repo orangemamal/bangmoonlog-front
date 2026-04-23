@@ -1766,15 +1766,22 @@ export function Home() {
           });
           console.log("🔓 [Auth] 사용자가 방문록을 작성하여 1년 전체 보기 권한이 부여되었습니다.");
         }
+        // [개선] 칭호 획득 알림 중복 방지 로직 (earnedTitles 필드 활용)
         if (user?.id) {
+          const userRef = doc(db, "users", user.id);
+          const userSnap = await getDoc(userRef);
+          const userData = userSnap.data() || {};
+          const earnedTitles = userData.earnedTitles || [];
+
           const q = query(collection(db, "reviews"), where("authorId", "==", user.id));
           const snap = await getDocs(q);
-          const totalAfter = snap.size; // 방금 쓴 것 포함
+          const totalAfter = snap.size; 
           const totalBefore = totalAfter - 1;
 
           const newBadge = checkEligibleForNewTitle(totalBefore, totalAfter);
 
-          if (newBadge) {
+          // 칭호 조건이 맞고, 아직 획득한 적 없는 칭호일 때만 알림 발송
+          if (newBadge && !earnedTitles.includes(newBadge.title)) {
             await addDoc(collection(db, "notifications"), {
               toUserId: user.id,
               type: "system",
@@ -1783,6 +1790,12 @@ export function Home() {
               createdAt: Timestamp.now(),
               isRead: false
             });
+
+            // 획득한 칭호 목록 업데이트 (중복 방지 핵심)
+            await updateDoc(userRef, {
+              earnedTitles: [...earnedTitles, newBadge.title]
+            });
+
             showAlert("👑 새로운 칭호 획득!", `방문록 ${totalAfter}회 작성 기념으로 '${newBadge.title}' 칭호를 얻었습니다.`, "🏆");
           }
         }
@@ -1847,7 +1860,12 @@ export function Home() {
       // [핵심] 할당량 초과 시에도 로컬에 저장하고 창을 닫음 (사용자 경험 우선)
       if (e.code === 'resource-exhausted' || e.message?.includes('quota')) {
         const pendingReviews = JSON.parse(localStorage.getItem('pending_reviews') || '[]');
-        pendingReviews.push({ ...reviewData, id: 'temp_' + Date.now(), isPending: true });
+        pendingReviews.push({ 
+          ...reviewData, 
+          id: editingReviewId ? editingReviewId : ('temp_' + Date.now()), 
+          isEditing: !!editingReviewId,
+          isPending: true 
+        });
         localStorage.setItem('pending_reviews', JSON.stringify(pendingReviews));
 
         setSheetOpen(false); // 창 닫기
@@ -2412,8 +2430,59 @@ export function Home() {
                 borderRadius: '20px',
                 border: '1px solid #E5E8EB'
               }}>
-                <div className="ai-pulse-dot" style={{ width: '6px', height: '6px', backgroundColor: '#3182F6', borderRadius: '50%', boxShadow: '0 0 6px rgba(49, 130, 246, 0.5)' }}></div>
-                <span style={{ fontSize: '11px', color: '#4E5968', fontWeight: 600 }}>AI 클린 모니터링 중</span>
+                <motion.div 
+                  className="ai-pulse-dot" 
+                  style={{ 
+                    width: '7px', 
+                    height: '7px', 
+                    backgroundColor: '#3182F6', 
+                    borderRadius: '50%',
+                    position: 'relative'
+                  }}
+                  animate={{ 
+                    opacity: [0.4, 1, 0.4],
+                    scale: [0.8, 1.2, 0.8],
+                  }}
+                  transition={{ 
+                    duration: 2.5, 
+                    repeat: Infinity, 
+                    ease: "easeInOut" 
+                  }}
+                >
+                  {/* 프리미엄 글로우 효과 레이어 */}
+                  <motion.div
+                    style={{
+                      position: 'absolute',
+                      top: '-4px', left: '-4px', right: '-4px', bottom: '-4px',
+                      borderRadius: '50%',
+                      background: 'radial-gradient(circle, rgba(49, 130, 246, 0.6) 0%, rgba(49, 130, 246, 0) 70%)',
+                      zIndex: -1
+                    }}
+                    animate={{
+                      opacity: [0, 0.8, 0],
+                      scale: [0.8, 1.8, 0.8]
+                    }}
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      ease: "easeOut"
+                    }}
+                  />
+                </motion.div>
+                <motion.span 
+                  style={{ fontSize: '11px', color: '#3182F6', fontWeight: 700, letterSpacing: '-0.2px' }}
+                  animate={{ 
+                    opacity: [0.6, 1, 0.6],
+                    textShadow: [
+                      '0 0 0px rgba(49, 130, 246, 0)',
+                      '0 0 4px rgba(49, 130, 246, 0.3)',
+                      '0 0 0px rgba(49, 130, 246, 0)'
+                    ]
+                  }}
+                  transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  AI 클린 모니터링 중
+                </motion.span>
               </div>
             </div>
             <textarea className="comment-textarea" placeholder="방문록을 작성해주세요.(5자 이상)" value={comment} onChange={e => setComment(e.target.value)} readOnly={isSubmitting} />
