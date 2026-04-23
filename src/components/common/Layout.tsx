@@ -13,20 +13,27 @@ export function Layout() {
   const isMapTab = location.pathname === "/";
 
   useEffect(() => {
-    // Naver Map SDK Global Loading
+    // Naver Map SDK Global Loading (서브모듈 포함 여부 정밀 체크)
     const SCRIPT_ID = "naver-map-script";
-    if (!document.getElementById(SCRIPT_ID)) {
+    const EXPECTED_SUBMODULES = "marker-clustering";
+    const existingScript = document.getElementById(SCRIPT_ID) as HTMLScriptElement;
+    
+    const loadNewScript = () => {
+      if (existingScript) existingScript.remove(); // 구버전 제거
       const s = document.createElement("script");
       s.id = SCRIPT_ID;
       s.src = "https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dj5vfj5th7&submodules=geocoder,panorama,marker-clustering";
       s.async = true;
       s.onload = () => {
         window.dispatchEvent(new Event('naver-map-loaded'));
-        console.log("✅ [Layout] Naver Map SDK Loaded");
+        console.log("✅ [Layout] Naver Map SDK (with Clustering) Loaded");
       };
       document.head.appendChild(s);
+    };
+
+    if (!existingScript || !existingScript.src.includes(EXPECTED_SUBMODULES)) {
+      loadNewScript();
     } else {
-      // 이미 로드되어 있는 경우에도 이벤트를 한 번 더 쏴줌
       window.dispatchEvent(new Event('naver-map-loaded'));
     }
   }, []);
