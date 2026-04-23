@@ -1,4 +1,4 @@
-const { onRequest } = require("firebase-functions/v2/https");
+﻿const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const axios = require("axios");
@@ -111,13 +111,11 @@ exports.moderateContent = onRequest(async (req, res) => {
     }
 
     try {
-      const { VertexAI } = require('@google-cloud/vertexai');
+      const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-      // Firebase 프로젝트 정보로 Vertex AI 초기화 (API 키 불필요)
-      const vertex_ai = new VertexAI({ project: 'bangmoonlog-bdf9a', location: 'asia-northeast3' });
-      const model = vertex_ai.getGenerativeModel({
-        model: 'gemini-1.5-flash-001', // Vertex AI의 공식 모델명
-      });
+      // 최신 모델인 gemini-2.5-flash 사용 (1.5 버전은 지원 종료)
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
       const prompt = `
         당신은 부동산 리뷰 플랫폼 '방문Log'의 아주 쿨하고 유도리 있는 전문 검수관입니다. 
@@ -133,6 +131,7 @@ exports.moderateContent = onRequest(async (req, res) => {
         1. 범죄적 발언: 패드립, 심각한 인격 모독, 살해 협박, 특정인 비하.
         2. 성적 금기: 구체적이고 불쾌한 성적 묘사, 성희롱, 음란성 문구.
         3. 불법 광고: 부동산과 전혀 상관없는 도박, 마약, 불법 대출, 스팸 광고.
+        4. 무의미한 도배: "ㅁㅁㅁ", "...", "ㄱㄴㄷ" 처럼 의미 있는 단어나 문장 없이 특수문자/자음만 나열된 경우 '내용 부족'으로 REJECT 하세요.
 
         [응답 형식 - 필수 지시]
         - 결과는 반드시 JSON 형식으로만 응답하세요: { "isPassed": boolean, "reason": "string" }
@@ -143,12 +142,12 @@ exports.moderateContent = onRequest(async (req, res) => {
       `;
 
       const result = await model.generateContent(prompt);
-      const aiResponseText = result.response?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "{}";
-      
+      const aiResponseText = result.response.text().trim() || "{}";
+
       // JSON 형식만 추출
       const jsonMatch = aiResponseText.match(/\{.*\}/s);
       const finalJson = jsonMatch ? jsonMatch[0] : "{}";
-      
+
       try {
         const aiData = JSON.parse(finalJson);
         return res.status(200).json({
@@ -158,13 +157,13 @@ exports.moderateContent = onRequest(async (req, res) => {
       } catch (e) {
         // 파싱 실패 시에도 유도리 있게 텍스트 키워드 기반으로 최종 판단
         const isLikelyPass = aiResponseText.toUpperCase().includes("PASS") || aiResponseText === "{}";
-        return res.status(200).json({ 
-          isPassed: isLikelyPass, 
-          reason: isLikelyPass ? "" : "부적절한 내용이 감지되었습니다." 
+        return res.status(200).json({
+          isPassed: isLikelyPass,
+          reason: isLikelyPass ? "" : "부적절한 내용이 감지되었습니다."
         });
       }
     } catch (error) {
-      console.error("Vertex AI Error:", error.message);
+      console.error("Gemini SDK Error:", error.message);
       return res.status(500).json({ isPassed: false, reason: "AI 분석 중 오류가 발생했습니다." });
     }
   });
