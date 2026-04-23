@@ -144,8 +144,13 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
         return res.status(200).json({ isPassed: false, reason });
       }
     } catch (error) {
-      console.error("Gemini API Error:", error.response?.data || error.message);
-      return res.status(500).json({ isPassed: false, reason: "AI 분석 중 오류가 발생했습니다." });
+      const errorDetail = error.response?.data?.error?.message || error.response?.data || error.message;
+      console.error("❌ [Gemini API Error]:", errorDetail);
+      
+      return res.status(500).json({ 
+        isPassed: false, 
+        reason: `AI 분석 호출 실패: ${errorDetail}. 열쇠(API Key) 설정이나 권한을 확인해주세요.`
+      });
     }
   });
 });
