@@ -146,12 +146,11 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
         reason: aiData.reason || (aiData.isPassed ? "" : "부적절한 표현이 감지되었습니다.")
       });
     } catch (error) {
-      console.error("Gemini SDK Error:", error.message);
-
-      // 만약 여전히 404가 나면, API 키가 정말로 이 프로젝트용인지 재확인 필요
-      return res.status(500).json({
-        isPassed: false,
-        reason: "AI 분석 호출 실패. 프론트엔드에서 썼던 키와 동일한지 확인이 필요합니다."
+      console.error("❌ [Gemini SDK Error]:", error.message);
+      
+      return res.status(500).json({ 
+        isPassed: false, 
+        reason: `AI 분석 호출 실패: ${error.message || "알 수 없는 오류"}. API 키가 유효한지 확인해주세요.`
       });
     }
   });
