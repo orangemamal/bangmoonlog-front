@@ -5,6 +5,92 @@
 // 루트 컨테이너
 .page-home {
   position: relative;
+  .home-map-container {
+    width: 100%;
+    height: 100%;
+    background-color: #f8f9fa;
+  }
+
+  /* --- Premium AI Moderation Modal Styles --- */
+  .ai-modal-overlay {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .ai-modal-content {
+    overflow: hidden;
+  }
+
+  .ai-scanning-animation {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .ai-core-orb {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #3182f6 0%, #2c5ae9 100%);
+      border-radius: 50%;
+      box-shadow: 0 0 20px rgba(49, 130, 246, 0.6);
+      animation: orbPulse 1.5s ease-in-out infinite;
+      z-index: 3;
+    }
+
+    .ai-ring-one, .ai-ring-two {
+      position: absolute;
+      border: 2px solid rgba(49, 130, 246, 0.2);
+      border-top-color: #3182f6;
+      border-radius: 50%;
+    }
+
+    .ai-ring-one {
+      width: 80px;
+      height: 80px;
+      animation: spin 2s linear infinite;
+    }
+
+    .ai-ring-two {
+      width: 110px;
+      height: 110px;
+      animation: spin 3s linear reverse infinite;
+      border-right-color: #3182f6;
+    }
+  }
+
+  @keyframes orbPulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 30px rgba(49, 130, 246, 0.8); }
+    100% { transform: scale(1); opacity: 0.8; }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .ai-status-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 120px;
+    
+    &.success svg {
+      filter: drop-shadow(0 0 10px rgba(49, 130, 246, 0.3));
+    }
+    
+    &.reject svg {
+      filter: drop-shadow(0 0 10px rgba(240, 68, 82, 0.3));
+    }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  /* ------------------------------------------ */
+
   width: 100%;
   height: 100%;
   background-color: #E5E5E5;

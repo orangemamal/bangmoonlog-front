@@ -817,11 +817,67 @@ export function Feed() {
               onClick={e => e.stopPropagation()}
             >
               <div className="cleansing-header">
-                <div className="ai-bot-icon">
-                  <div className="eyes"></div>
-                  <div className="blush"></div>
-                  <div className="signal"></div>
-                </div>
+                <motion.div 
+                  className="ai-bot-character"
+                  animate={{ 
+                    y: [0, -8, 0],
+                    scale: [1, 1.02, 1]
+                  }}
+                  transition={{ 
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                >
+                  <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Character Body (Mochi shape) */}
+                    <rect x="10" y="20" width="80" height="70" rx="35" fill="url(#bot_grad)" stroke="white" strokeWidth="3" />
+                    
+                    {/* Rounded Antennae */}
+                    <motion.rect 
+                      x="25" y="5" width="6" height="15" rx="3" fill="white"
+                      animate={{ rotate: [-10, 10, -10] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    />
+                    <motion.rect 
+                      x="69" y="5" width="6" height="15" rx="3" fill="white"
+                      animate={{ rotate: [10, -10, 10] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    />
+                    
+                    {/* Large Expressive Eyes */}
+                    <g className="eyes-group">
+                      {/* Left Eye */}
+                      <motion.g animate={{ scaleY: [1, 0.1, 1] }} transition={{ duration: 3, repeat: Infinity, times: [0, 0.05, 0.1] }}>
+                        <circle cx="32" cy="55" r="12" fill="white" />
+                        <circle cx="32" cy="55" r="7" fill="#191F28" />
+                        <circle cx="35" cy="51" r="3" fill="white" /> {/* Sparkle */}
+                      </motion.g>
+                      
+                      {/* Right Eye */}
+                      <motion.g animate={{ scaleY: [1, 0.1, 1] }} transition={{ duration: 3, repeat: Infinity, times: [0, 0.05, 0.1] }}>
+                        <circle cx="68" cy="55" r="12" fill="white" />
+                        <circle cx="68" cy="55" r="7" fill="#191F28" />
+                        <circle cx="71" cy="51" r="3" fill="white" /> {/* Sparkle */}
+                      </motion.g>
+                    </g>
+                    
+                    {/* Softer, Larger Blush */}
+                    <circle cx="20" cy="65" r="8" fill="#FF6B81" fillOpacity="0.3" />
+                    <circle cx="80" cy="65" r="8" fill="#FF6B81" fillOpacity="0.3" />
+                    
+                    {/* Cute Small Smile */}
+                    <path d="M44 72C44 72 47 75 50 75C53 75 56 72 56 72" stroke="white" strokeWidth="3" strokeLinecap="round" />
+
+                    <defs>
+                      <linearGradient id="bot_grad" x1="10" y1="20" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#4A92FF" />
+                        <stop offset="1" stopColor="#3182F6" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div className="ai-bot-signal"></div>
+                </motion.div>
                 <h2>리뷰 클렌징 시스템 <strong>작동중입니다</strong></h2>
               </div>
               <div className="cleansing-body">
