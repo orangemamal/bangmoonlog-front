@@ -1614,6 +1614,8 @@ export function Home() {
       return;
     }
 
+    if (isSubmitting) return; // [강력 방지] 이미 제출 중이면 즉시 중단
+
     setIsSubmitting(true);
     setAiStep('analyzing');
     setAiReason(null);
@@ -1641,7 +1643,8 @@ export function Home() {
       // 분석 통과 시 시각적 피드백을 위해 잠시 유지
       setAiStep('passed');
       await new Promise(resolve => setTimeout(resolve, 1500));
-      setAiStep('idle'); // 모달 닫기
+      // 로딩 모달 닫기
+      setAiStep('idle'); 
 
       // 0. 매물 단위 중복 체크 (사용자 의견에 따라 엄격한 제한 대신 안내 후 허용으로 변경 가능)
       /* 

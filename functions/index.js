@@ -1,4 +1,4 @@
-﻿const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const axios = require("axios");
@@ -134,25 +134,34 @@ exports.moderateContent = onRequest(async (req, res) => {
         2. 성적 금기: 구체적이고 불쾌한 성적 묘사, 성희롱, 음란성 문구.
         3. 불법 광고: 부동산과 전혀 상관없는 도박, 마약, 불법 대출, 스팸 광고.
 
-        [응답 형식 - 엄격 준수]
-        - 적절하면: PASS
-        - 선을 넘었다면: REJECT: [간결한 사유]
-        - 결과 외에 다른 부연 설명이나 인사는 절대 하지 마세요.
+        [응답 형식 - 필수 지시]
+        - 결과는 반드시 JSON 형식으로만 응답하세요: { "isPassed": boolean, "reason": "string" }
+        - 이 JSON 외에 다른 설명은 절대 하지 마세요.
 
         [분석할 리뷰 내용]
         "${content}"
       `;
 
       const result = await model.generateContent(prompt);
-      const aiResponse = result.response.candidates[0].content.parts[0].text.trim() || "";
-
-      if (aiResponse.toUpperCase().startsWith("PASS")) {
-        return res.status(200).json({ isPassed: true });
-      } else {
-        const reason = aiResponse.includes("REJECT")
-          ? aiResponse.split(":")[1]?.trim() || "부적절한 내용 감지"
-          : "부적절한 표현이 포함되어 있습니다.";
-        return res.status(200).json({ isPassed: false, reason });
+      const aiResponseText = result.response?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "{}";
+      
+      // JSON 형식만 추출
+      const jsonMatch = aiResponseText.match(/\{.*\}/s);
+      const finalJson = jsonMatch ? jsonMatch[0] : "{}";
+      
+      try {
+        const aiData = JSON.parse(finalJson);
+        return res.status(200).json({
+          isPassed: aiData.isPassed ?? true,
+          reason: aiData.reason || ""
+        });
+      } catch (e) {
+        // 파싱 실패 시에도 유도리 있게 텍스트 키워드 기반으로 최종 판단
+        const isLikelyPass = aiResponseText.toUpperCase().includes("PASS") || aiResponseText === "{}";
+        return res.status(200).json({ 
+          isPassed: isLikelyPass, 
+          reason: isLikelyPass ? "" : "부적절한 내용이 감지되었습니다." 
+        });
       }
     } catch (error) {
       console.error("Vertex AI Error:", error.message);
