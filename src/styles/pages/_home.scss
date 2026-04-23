@@ -498,10 +498,10 @@
   height: 40px;
 
   &.active {
-    background: #FFD43B; // 쾌활한 옐로우
-    border-color: #FFD43B;
+    background: #8B5CF6; // 프리미엄 보라색
+    border-color: #8B5CF6;
     color: white;
-    box-shadow: 0 4px 16px rgba(255, 212, 59, 0.4);
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
     transform: scale(1.05);
   }
 }
@@ -576,9 +576,9 @@
   .marker-bubble {
     width: 28px;
     height: 28px;
-    background: linear-gradient(135deg, #FFBB00 0%, #FF9500 100%);
+    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
     border: 2px solid #FFFFFF;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(255, 149, 0, 0.3);
+    box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
 
     .count {
       display: none; // 28x28에서는 카운트 숨김
@@ -663,6 +663,15 @@
     background-color: #0047AB; // 가장 진한 색상 (많은 데이터 강조)
     box-shadow: 0 6px 18px rgba(0, 71, 171, 0.5);
     border-width: 4px; // 가장 큰 마커는 테두리도 약간 강조
+  }
+
+  &.cluster-bookmark {
+    width: 52px;
+    height: 52px;
+    font-size: 17px;
+    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+    border-color: #FFFFFF;
   }
 }
 
@@ -863,7 +872,7 @@
 
   &.active {
     svg {
-      filter: drop-shadow(0 0 4px rgba(255, 212, 59, 0.4));
+      filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.4));
     }
   }
 }

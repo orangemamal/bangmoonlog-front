@@ -41,10 +41,13 @@ export const calculateUserStats = (reviews: any[]): UserStats => {
     if (scores.every(s => s === 5)) stats.perfectScoreCount++;
     if (scores.every(s => s === 1)) stats.strictScoreCount++;
 
-    // 5. 지역 정보 추출 (주소에서 '구' 단위 추출)
-    // 예: "서울 중구 소공로..." -> "중구"
+    // 5. 지역 정보 추출 (주소에서 '구' > '군' > '시' 순으로 우선순위 추출)
+    // 예: "서울특별시 광진구 자양동" -> "광진구" (서울특별시가 아닌 광진구 우선)
     const addrParts = (r.location || r.address || "").split(" ");
-    const district = addrParts.find((p: string) => p.endsWith("구") || p.endsWith("군") || p.endsWith("시"));
+    const district = 
+      addrParts.find((p: string) => p.endsWith("구") || p.endsWith("군")) || 
+      addrParts.find((p: string) => p.endsWith("시"));
+
     if (district) {
       stats.regionCounts[district] = (stats.regionCounts[district] || 0) + 1;
     }

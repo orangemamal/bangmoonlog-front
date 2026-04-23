@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { ANNOUNCEMENTS, Announcement } from "../constants/announcements";
 import { MY_PAGE_MENU } from "../constants/myPage";
-import { formatAddressDetail } from "../utils/addressUtils";
+import { formatAddressDetail, normalizeBaseAddress } from "../utils/addressUtils";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { ProfileAvatarUpload } from "../components/mypage/ProfileAvatarUpload";
 import { calculateUserStats, getMyBadges } from "../utils/BadgeLogic";
@@ -137,7 +137,19 @@ export function MyPage() {
     }
   }, []);
 
+  const [isMapLoaded, setIsMapLoaded] = useState(!!(window as any).naver?.maps);
+
   useEffect(() => {
+    const handleMapLoad = () => {
+      console.log("🔔 [MyPage] Map SDK Load Event Received");
+      setIsMapLoaded(true);
+    };
+    window.addEventListener('naver-map-loaded', handleMapLoad);
+    return () => window.removeEventListener('naver-map-loaded', handleMapLoad);
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
     if (!user?.id) return;
 
     const qStats = query(collection(db, "reviews"), where("authorId", "==", user.id));
@@ -1168,7 +1180,7 @@ export function MyPage() {
                   {/* 2. 지역 점령 */}
                   <div className="mypage__badge-section">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '12px' }}>
-                      <h3 className="mypage__badge-section-title" style={{ marginBottom: 0 }}>📍 지역 점령</h3>
+                      <h3 className="mypage__badge-section-title" style={{ marginBottom: 0 }}>🤠 지역 점령</h3>
                       <span style={{ fontSize: '11px', color: '#8B95A1', fontWeight: 500 }}>지역별 방문록 10회 작성 시 획득</span>
                     </div>
                     <div className="mypage__badge-grid">
@@ -1268,7 +1280,52 @@ export function MyPage() {
                   >
                     <div className="mypage__bookmark-item-left">
                       <div className="mypage__bookmark-item-icon">
-                        <MapPin size={24} color="#3182F6" />
+                        {(() => {
+                          const stdBmAddr = normalizeBaseAddress(bm.address);
+                          const matchingReview = myReviews.find(r => 
+                            normalizeBaseAddress(r.address || r.location || "") === stdBmAddr && 
+                            r.images && r.images.length > 0
+                          );
+                          const thumbUrl = matchingReview ? matchingReview.images[0] : null;
+
+                          if (thumbUrl) {
+                            return (
+                              <img 
+                                src={thumbUrl} 
+                                alt="" 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  const parent = e.currentTarget.parentElement;
+                                  if (parent) parent.classList.add('use-gradient');
+                                }}
+                              />
+                            );
+                          }
+
+                          return (
+                            <div 
+                              className="mypage__bookmark-item-gradient"
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                background: (() => {
+                                  let hash = 0;
+                                  for (let i = 0; i < bm.address.length; i++) hash = bm.address.charCodeAt(i) + ((hash << 5) - hash);
+                                  const h1 = Math.abs(hash) % 360;
+                                  const h2 = (h1 + 50) % 360;
+                                  return `linear-gradient(135deg, hsl(${h1}, 85%, 75%), hsl(${h2}, 85%, 65%))`;
+                                })(),
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.05)'
+                              }}
+                            >
+                              <MapPin size={24} color="#ffffff" strokeWidth={2.5} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' }} />
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="mypage__bookmark-item-info">
                         <div className="mypage__bookmark-item-name">

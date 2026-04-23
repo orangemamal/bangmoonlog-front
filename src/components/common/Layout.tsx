@@ -13,6 +13,25 @@ export function Layout() {
   const isMapTab = location.pathname === "/";
 
   useEffect(() => {
+    // Naver Map SDK Global Loading
+    const SCRIPT_ID = "naver-map-script";
+    if (!document.getElementById(SCRIPT_ID)) {
+      const s = document.createElement("script");
+      s.id = SCRIPT_ID;
+      s.src = "https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dj5vfj5th7&submodules=geocoder,panorama";
+      s.async = true;
+      s.onload = () => {
+        window.dispatchEvent(new Event('naver-map-loaded'));
+        console.log("✅ [Layout] Naver Map SDK Loaded");
+      };
+      document.head.appendChild(s);
+    } else {
+      // 이미 로드되어 있는 경우에도 이벤트를 한 번 더 쏴줌
+      window.dispatchEvent(new Event('naver-map-loaded'));
+    }
+  }, []);
+
+  useEffect(() => {
     if (!user?.id) return;
     
     // 실시간 리스너 (onSnapshot)를 통해 새 알림이 오는 즉시 배지 업데이트

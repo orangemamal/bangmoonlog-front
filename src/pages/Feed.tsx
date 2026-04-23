@@ -77,9 +77,9 @@ export function Feed() {
         for (const d of querySnapshot.docs) {
           const data = d.data();
           const images = data.images || [];
-          
+
           // 더 강력한 체크: blob 주소거나, localhost 주소인 경우 (타 디바이스에서 보이지 않음)
-          const isBroken = images.some((url: string) => 
+          const isBroken = images.some((url: string) =>
             typeof url === 'string' && (url.startsWith("blob:") || url.includes("localhost:3000"))
           );
 
@@ -104,7 +104,7 @@ export function Feed() {
   const [tagSearchQuery, setTagSearchQuery] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const CATEGORY_CHIPS = ["전체", "층간소음", "수압체크", "햇살맛집", "역세권", "관리비저렴", "치안좋음", "채광맛집", "외부소음", "외풍심함", "관리비폭탄", "뷰맛집"];
-  
+
   // 실제 DB 내 데이터를 분석하여 작성 횟수 기준 상위 10개 태그 및 신입 태그 판독
   const { trendingTags, newTags } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -115,7 +115,7 @@ export function Feed() {
       p.tags?.forEach(t => {
         const tag = t.startsWith("#") ? t : `#${t}`;
         counts[tag] = (counts[tag] || 0) + 1;
-        
+
         // 게시물 날짜(date)를 타임스탬프로 변환하여 태그별 최신 사용 시각 기록
         const postTime = new Date(p.date).getTime();
         if (!tagLatestTime[tag] || postTime > tagLatestTime[tag]) {
@@ -127,9 +127,9 @@ export function Feed() {
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(e => e[0]);
     const newlyEmerging = new Set(Object.keys(tagLatestTime).filter(tag => tagLatestTime[tag] > threeHoursAgo));
 
-    return { 
+    return {
       trendingTags: sorted.length > 0 ? sorted : ["#방문록", "#꿀팁", "#자취방구하기", "#직방", "#다방", "#부동산", "#이사준비", "#인테리어", "#집꾸미기", "#원룸"],
-      newTags: newlyEmerging 
+      newTags: newlyEmerging
     };
   }, [posts]);
 
@@ -253,9 +253,9 @@ export function Feed() {
       return list.sort((a, b) => (b.likes * 1000 + b.views) - (a.likes * 1000 + a.views));
     } else if (activeTab === "tag") {
       let filtered = list.filter(p => p.image);
-      
+
       if (tagSearchQuery.trim()) {
-        filtered = filtered.filter(p => 
+        filtered = filtered.filter(p =>
           p.tags.some(t => t.toLowerCase().includes(tagSearchQuery.toLowerCase())) ||
           p.location.toLowerCase().includes(tagSearchQuery.toLowerCase())
         );
@@ -434,9 +434,9 @@ export function Feed() {
                 <div className="feed__tag-search-container">
                   <div className={`feed__tag-search-bar ${isSearchActive ? 'active' : ''}`}>
                     <Search size={18} color={isSearchActive ? "#3182F6" : "#8B95A1"} />
-                    <input 
-                      type="text" 
-                      placeholder="태그나 지역을 검색해보세요" 
+                    <input
+                      type="text"
+                      placeholder="태그나 지역을 검색해보세요"
                       value={tagSearchQuery}
                       onChange={(e) => setTagSearchQuery(e.target.value)}
                       onFocus={() => setIsSearchActive(true)}
@@ -456,9 +456,9 @@ export function Feed() {
                       <span className="label">실시간 핫태그</span>
                       {!isRankingExpanded ? (
                         <div className="rolling-box">
-                          <ul 
-                            className="rolling-list" 
-                            style={{ 
+                          <ul
+                            className="rolling-list"
+                            style={{
                               transform: `translateY(-${rollingIndex * 20}px)`,
                               transition: 'transform 0.5s cubic-bezier(0, 0, 0.2, 1)'
                             }}
@@ -477,15 +477,15 @@ export function Feed() {
                         <button className="close-btn"><ChevronUp size={18} color="#191F28" /></button>
                       )}
                     </div>
-                    
+
                     {isRankingExpanded && (
                       <div className="ranking-list">
                         <div className="ranking-date">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</div>
                         <div className="divider"></div>
                         <div className="list-items">
                           {trendingTags.map((tag, idx) => (
-                            <div 
-                              key={tag} 
+                            <div
+                              key={tag}
                               className="rank-item"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -505,7 +505,7 @@ export function Feed() {
                 )}
               </div>
             )}
-            
+
             {activeTab === 'local' && (
               <div className="feed__sort-bar">
                 {[
@@ -538,7 +538,7 @@ export function Feed() {
       <div className="feed__list">
         {/* [이동] 리뷰 클렌징 시스템 배너 - 리스트 최상단 배치 */}
         {!addressParam && (
-          <div className="feed__cleansing-banner" onClick={() => setIsCleansingModalOpen(true)} style={{ marginBottom: '16px', marginTop: '0' }}>
+          <div className="feed__cleansing-banner" onClick={() => setIsCleansingModalOpen(true)}>
             <div className="banner-left">
               <div className="ai-icon">
                 <div className="dot"></div>
@@ -554,9 +554,9 @@ export function Feed() {
               <div className="loading-state">태그 피드를 불러오는 중...</div>
             ) : filteredData.length > 0 ? (
               filteredData.map((post, index) => (
-                <div 
-                  key={post.id} 
-                  className={`tag-grid-item ${index > 0 && !user?.canViewAll && !hasWatchedAd ? 'blurred' : ''}`} 
+                <div
+                  key={post.id}
+                  className={`tag-grid-item ${index > 0 && !user?.canViewAll && !hasWatchedAd ? 'blurred' : ''}`}
                   onClick={() => handlePostClick(post.id, index)}
                 >
                   <div className="image-container">
@@ -614,190 +614,190 @@ export function Feed() {
         ) : (
           <>
             {/* [추가] GPS 오류/방역 방어용 UI 카드 섹션 */}
-        {/* [개편] 내 주변 탭 전용 통합 엠프티 스테이트는 리스트 영역에서 한 번에 처리 */}
+            {/* [개편] 내 주변 탭 전용 통합 엠프티 스테이트는 리스트 영역에서 한 번에 처리 */}
 
-        {isLoading ? (
-          <div className="loading-state">
-            <div className="spinner"></div>
-            <p>방문록을 불러오는 중...</p>
-          </div>
-        ) : filteredData.length > 0 ? (
-          filteredData.map((post, index) => (
-            <div 
-              key={post.id} 
-              className={`feed__card ${index > 0 && !user?.canViewAll && !hasWatchedAd ? 'blurred' : ''}`} 
-              onClick={() => handlePostClick(post.id, index)}
-            >
-              <div className="feed__card-header">
-                <div className="feed__card-meta">
-                  {post.experienceType && (
-                    <div className={`experience-badge ${post.experienceType === '거주 경험' ? 'resident' : post.experienceType === '매물 투어' ? 'visit' : ''}`}>
-                      <span className="icon">
-                        {post.experienceType === '거주 경험' ? <HomeIcon size={12} /> : post.experienceType === '매물 투어' ? <Search size={12} /> : <MapPin size={12} />}
-                      </span>
-                      <span>{post.experienceType}</span>
-                    </div>
-                  )}
-                  {post.isVerified && (
-                    <div className="card-verify-badge">
-                      <CheckCircle2 size={12} strokeWidth={3} />
-                      <span>방문자 인증</span>
-                    </div>
-                  )}
-                </div>
-                {activeTab !== 'hot' && user && user.id === post.authorId && (
-                  <div className="feed__card-more-container">
-                    <button
-                      className="feed__card-more-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuId(activeMenuId === post.id ? null : post.id);
-                      }}
-                    >
-                      <MoreHorizontal size={20} color="#B0B8C1" />
-                    </button>
-                    {activeMenuId === post.id && (
-                      <div className="card-dropdown-menu" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => { handleEditPost(post.id); setActiveMenuId(null); }}>
-                          <Pencil size={14} />
-                          <span>수정하기</span>
-                        </button>
-                        <button className="delete" onClick={() => { handleDeletePost(post.id); setActiveMenuId(null); }}>
-                          <Trash2 size={14} />
-                          <span>삭제하기</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+            {isLoading ? (
+              <div className="loading-state">
+                <div className="spinner"></div>
+                <p>방문록을 불러오는 중...</p>
               </div>
-
-              <div className="feed__card-location">
-                <MapIcon size={14} color="#3182F6" />
-                <span>{post.location}</span>
-                {post.addressDetail && (
-                  <span className="address-detail">
-                    {formatAddressDetail(post.addressDetail)}
-                  </span>
-                )}
-              </div>
-
-              <div className="feed__card-body">
-                <p className="feed__card-content">{post.content}</p>
-                <div className="feed__card-thumbnail">
-                  {post.image ? (
-                    <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
-                      {(post.image.includes('.mp4?') || post.image.includes('.webm?') || post.image.includes('.mov?') || post.image.includes('media_')) ? (
-                        <>
-                          <video src={post.image} muted autoPlay loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', opacity: 0.8 }}>
-                            <PlayCircle size={32} color="#fff" fill="rgba(0,0,0,0.2)" />
-                          </div>
-                        </>
-                      ) : (
-                        <img src={post.image} alt="thumb" />
+            ) : filteredData.length > 0 ? (
+              filteredData.map((post, index) => (
+                <div
+                  key={post.id}
+                  className={`feed__card ${index > 0 && !user?.canViewAll && !hasWatchedAd ? 'blurred' : ''}`}
+                  onClick={() => handlePostClick(post.id, index)}
+                >
+                  <div className="feed__card-header">
+                    <div className="feed__card-meta">
+                      {post.experienceType && (
+                        <div className={`experience-badge ${post.experienceType === '거주 경험' ? 'resident' : post.experienceType === '매물 투어' ? 'visit' : ''}`}>
+                          <span className="icon">
+                            {post.experienceType === '거주 경험' ? <HomeIcon size={12} /> : post.experienceType === '매물 투어' ? <Search size={12} /> : <MapPin size={12} />}
+                          </span>
+                          <span>{post.experienceType}</span>
+                        </div>
                       )}
-                      {post.images && post.images.length > 1 && (
-                        <div className="image-count-badge">
-                          +{post.images.length - 1}
+                      {post.isVerified && (
+                        <div className="card-verify-badge">
+                          <CheckCircle2 size={12} strokeWidth={3} />
+                          <span>방문자 인증</span>
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="no-image-thumb">이미지 없음</div>
-                  )}
-                </div>
-              </div>
-              {post.tags && post.tags.length > 0 && (
-                <div className="card-bottom-tags">
-                  {post.tags.slice(0, 3).map((t, i) => (
-                    <span key={i} className="tag-text">#{t.replace(/^#/, '')}</span>
-                  ))}
-                  {post.tags.length > 3 && (
-                    <span className="tag-more">+{post.tags.length - 3}</span>
-                  )}
-                </div>
-              )}
+                    {activeTab !== 'hot' && user && user.id === post.authorId && (
+                      <div className="feed__card-more-container">
+                        <button
+                          className="feed__card-more-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuId(activeMenuId === post.id ? null : post.id);
+                          }}
+                        >
+                          <MoreHorizontal size={20} color="#B0B8C1" />
+                        </button>
+                        {activeMenuId === post.id && (
+                          <div className="card-dropdown-menu" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => { handleEditPost(post.id); setActiveMenuId(null); }}>
+                              <Pencil size={14} />
+                              <span>수정하기</span>
+                            </button>
+                            <button className="delete" onClick={() => { handleDeletePost(post.id); setActiveMenuId(null); }}>
+                              <Trash2 size={14} />
+                              <span>삭제하기</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-              <div className="feed__card-footer">
-                <div className="feed__card-stat">
-                  <Heart size={16} fill="none" color="#B0B8C1" />
-                  <span>{post.likes}</span>
+                  <div className="feed__card-location">
+                    <MapIcon size={14} color="#3182F6" />
+                    <span>{post.location}</span>
+                    {post.addressDetail && (
+                      <span className="address-detail">
+                        {formatAddressDetail(post.addressDetail)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="feed__card-body">
+                    <p className="feed__card-content">{post.content}</p>
+                    <div className="feed__card-thumbnail">
+                      {post.image ? (
+                        <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
+                          {(post.image.includes('.mp4?') || post.image.includes('.webm?') || post.image.includes('.mov?') || post.image.includes('media_')) ? (
+                            <>
+                              <video src={post.image} muted autoPlay loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', opacity: 0.8 }}>
+                                <PlayCircle size={32} color="#fff" fill="rgba(0,0,0,0.2)" />
+                              </div>
+                            </>
+                          ) : (
+                            <img src={post.image} alt="thumb" />
+                          )}
+                          {post.images && post.images.length > 1 && (
+                            <div className="image-count-badge">
+                              +{post.images.length - 1}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="no-image-thumb">이미지 없음</div>
+                      )}
+                    </div>
+                  </div>
+                  {post.tags && post.tags.length > 0 && (
+                    <div className="card-bottom-tags">
+                      {post.tags.slice(0, 3).map((t, i) => (
+                        <span key={i} className="tag-text">#{t.replace(/^#/, '')}</span>
+                      ))}
+                      {post.tags.length > 3 && (
+                        <span className="tag-more">+{post.tags.length - 3}</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="feed__card-footer">
+                    <div className="feed__card-stat">
+                      <Heart size={16} fill="none" color="#B0B8C1" />
+                      <span>{post.likes}</span>
+                    </div>
+                    <div className="feed__card-stat">
+                      <Eye size={16} color="#B0B8C1" />
+                      <span>{post.views}</span>
+                    </div>
+                    <span className="feed__card-date">{post.date}</span>
+                  </div>
                 </div>
-                <div className="feed__card-stat">
-                  <Eye size={16} color="#B0B8C1" />
-                  <span>{post.views}</span>
-                </div>
-                <span className="feed__card-date">{post.date}</span>
-              </div>
-            </div>
-          ))
-        ) : (
-          <motion.div 
-            className="feed__empty-state"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <div className="empty-visual">
-              <motion.div 
-                className="empty-icon-wrap"
-                animate={{ y: [0, -8, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              ))
+            ) : (
+              <motion.div
+                className="feed__empty-state"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
               >
-                {activeTab === 'local' && gpsStatus === 'loading' ? (
-                  <RefreshCw size={48} color="#3182F6" className="animate-spin" />
-                ) : activeTab === 'local' && gpsStatus === 'denied' ? (
-                  <div className="custom-icon denied">🔒</div>
-                ) : (
-                  <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="40" cy="40" r="40" fill="#F2F4F6"/>
-                    <path d="M52 32H28C26.8954 32 26 32.8954 26 34V54C26 55.1046 26.8954 56 28 56H52C53.1046 56 54 55.1046 54 54V34C54 32.8954 53.1046 32 52 32Z" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M40 40V48" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M36 44H44" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <circle cx="58" cy="28" r="8" fill="#3182F6" fill-opacity="0.1"/>
-                    <circle cx="58" cy="28" r="3" fill="#3182F6"/>
-                  </svg>
-                )}
+                <div className="empty-visual">
+                  <motion.div
+                    className="empty-icon-wrap"
+                    animate={{ y: [0, -8, 0] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    {activeTab === 'local' && gpsStatus === 'loading' ? (
+                      <RefreshCw size={48} color="#3182F6" className="animate-spin" />
+                    ) : activeTab === 'local' && gpsStatus === 'denied' ? (
+                      <div className="custom-icon denied">🔒</div>
+                    ) : (
+                      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="40" cy="40" r="40" fill="#F2F4F6" />
+                        <path d="M52 32H28C26.8954 32 26 32.8954 26 34V54C26 55.1046 26.8954 56 28 56H52C53.1046 56 54 55.1046 54 54V34C54 32.8954 53.1046 32 52 32Z" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M40 40V48" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M36 44H44" stroke="#B0B8C1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                        <circle cx="58" cy="28" r="8" fill="#3182F6" fill-opacity="0.1" />
+                        <circle cx="58" cy="28" r="3" fill="#3182F6" />
+                      </svg>
+                    )}
+                  </motion.div>
+                </div>
+
+                <h3 className="empty-title">
+                  {activeTab === 'local' ? (
+                    gpsStatus === 'loading' ? '위치를 확인하고 있어요' :
+                      gpsStatus === 'denied' ? '위치 권한이 꺼져있어요' :
+                        '주변 200m에 글이 없어요'
+                  ) : (
+                    '작성된 방문록이 없어요'
+                  )}
+                </h3>
+
+                <p className="empty-desc">
+                  {activeTab === 'local' ? (
+                    gpsStatus === 'denied' ? '정확한 주변 정보를 확인하려면\n위치 권한 허용이 필요해요.' :
+                      '가장 먼저 이 동네의\n첫 번째 발자국을 남겨보세요!'
+                  ) : (
+                    '이곳의 생생한 이야기를\n가장 먼저 들려주시겠어요?'
+                  )}
+                </p>
+
+                <button
+                  className="empty-cta-btn"
+                  onClick={() => {
+                    if (activeTab === 'local' && (gpsStatus === 'denied' || gpsStatus === 'error')) {
+                      fetchUserLocation();
+                    } else {
+                      navigate('/');
+                    }
+                  }}
+                >
+                  {activeTab === 'local' && (gpsStatus === 'denied' || gpsStatus === 'error') ? '위치 다시 시도' : '방문록 작성하러 가기'}
+                </button>
               </motion.div>
-            </div>
-
-            <h3 className="empty-title">
-              {activeTab === 'local' ? (
-                gpsStatus === 'loading' ? '위치를 확인하고 있어요' :
-                gpsStatus === 'denied' ? '위치 권한이 꺼져있어요' :
-                '주변 200m에 글이 없어요'
-              ) : (
-                '작성된 방문록이 없어요'
-              )}
-            </h3>
-            
-            <p className="empty-desc">
-              {activeTab === 'local' ? (
-                gpsStatus === 'denied' ? '정확한 주변 정보를 확인하려면\n위치 권한 허용이 필요해요.' :
-                '가장 먼저 이 동네의\n첫 번째 발자국을 남겨보세요!'
-              ) : (
-                '이곳의 생생한 이야기를\n가장 먼저 들려주시겠어요?'
-              )}
-            </p>
-
-            <button 
-              className="empty-cta-btn"
-              onClick={() => {
-                if (activeTab === 'local' && (gpsStatus === 'denied' || gpsStatus === 'error')) {
-                  fetchUserLocation();
-                } else {
-                  navigate('/');
-                }
-              }}
-            >
-              {activeTab === 'local' && (gpsStatus === 'denied' || gpsStatus === 'error') ? '위치 다시 시도' : '방문록 작성하러 가기'}
-            </button>
-          </motion.div>
+            )}
+          </>
         )}
-      </>
-    )}
-  </div>
+      </div>
 
       {isAdShowing && (
         <div className="ad-overlay">
@@ -846,7 +846,7 @@ export function Feed() {
       <AnimatePresence>
         {isCleansingModalOpen && (
           <div className="tds-modal-overlay tds-modal-overlay--dark" onClick={() => setIsCleansingModalOpen(false)}>
-            <motion.div 
+            <motion.div
               className="cleansing-modal"
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -854,13 +854,13 @@ export function Feed() {
               onClick={e => e.stopPropagation()}
             >
               <div className="cleansing-header">
-                <motion.div 
+                <motion.div
                   className="ai-bot-character"
-                  animate={{ 
+                  animate={{
                     y: [0, -8, 0],
                     scale: [1, 1.02, 1]
                   }}
-                  transition={{ 
+                  transition={{
                     duration: 3,
                     repeat: Infinity,
                     ease: "easeInOut"
@@ -869,19 +869,19 @@ export function Feed() {
                   <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                     {/* Character Body (Mochi shape) */}
                     <rect x="10" y="20" width="80" height="70" rx="35" fill="url(#bot_grad)" stroke="white" strokeWidth="3" />
-                    
+
                     {/* Rounded Antennae */}
-                    <motion.rect 
+                    <motion.rect
                       x="25" y="5" width="6" height="15" rx="3" fill="white"
                       animate={{ rotate: [-10, 10, -10] }}
                       transition={{ duration: 2, repeat: Infinity }}
                     />
-                    <motion.rect 
+                    <motion.rect
                       x="69" y="5" width="6" height="15" rx="3" fill="white"
                       animate={{ rotate: [10, -10, 10] }}
                       transition={{ duration: 2, repeat: Infinity }}
                     />
-                    
+
                     {/* Large Expressive Eyes */}
                     <g className="eyes-group">
                       {/* Left Eye */}
@@ -890,7 +890,7 @@ export function Feed() {
                         <circle cx="32" cy="55" r="7" fill="#191F28" />
                         <circle cx="35" cy="51" r="3" fill="white" /> {/* Sparkle */}
                       </motion.g>
-                      
+
                       {/* Right Eye */}
                       <motion.g animate={{ scaleY: [1, 0.1, 1] }} transition={{ duration: 3, repeat: Infinity, times: [0, 0.05, 0.1] }}>
                         <circle cx="68" cy="55" r="12" fill="white" />
@@ -898,11 +898,11 @@ export function Feed() {
                         <circle cx="71" cy="51" r="3" fill="white" /> {/* Sparkle */}
                       </motion.g>
                     </g>
-                    
+
                     {/* Softer, Larger Blush */}
                     <circle cx="20" cy="65" r="8" fill="#FF6B81" fillOpacity="0.3" />
                     <circle cx="80" cy="65" r="8" fill="#FF6B81" fillOpacity="0.3" />
-                    
+
                     {/* Cute Small Smile */}
                     <path d="M44 72C44 72 47 75 50 75C53 75 56 72 56 72" stroke="white" strokeWidth="3" strokeLinecap="round" />
 

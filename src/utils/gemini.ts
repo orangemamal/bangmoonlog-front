@@ -15,23 +15,12 @@ export interface CleansingResult {
 
 /**
  * 리뷰 텍스트를 AI로 분석하여 부적절한 내용이 있는지 판별합니다.
+ * 이제 멍청한 키워드 필터링이 아닌, 백엔드 AI의 지능형 문맥 분석에 전적으로 의지합니다.
  */
 export const analyzeReviewWithAI = async (content: string): Promise<CleansingResult> => {
-  console.log("[AI 검열] 분석 시작:", content);
-
-  // 1. 기본적인 Regex 기반 사전 필터링 (AI 호출 전 1차 차단)
-  const swearRegex = /(씨발|시발|ㅅㅂ|ㅆㅂ|병신|좆|존나|ㅈㄴ|개새끼|지랄|fuck|shit|asshole|fucker)/i;
-  if (swearRegex.test(content)) {
-    console.warn("🚫 [AI 검열] 1차 필터(Regex)에서 부적절한 언어가 감지되었습니다.");
-    return { 
-      isPassed: false, 
-      type: "REJECT",
-      reason: "비속어가 포함되어 있습니다." 
-    };
-  }
+  console.log("[AI 검열] 지능형 문맥 분석 시작:", content);
 
   try {
-    // 2. Firebase Cloud Function 호출
     const response = await fetch(MODERATE_FUNCTION_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

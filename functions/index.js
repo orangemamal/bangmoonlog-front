@@ -58,7 +58,7 @@ exports.naverAuth = onRequest(async (req, res) => {
           throw error;
         }
       }
-      
+
       const customToken = await admin.auth().createCustomToken(uid);
       return res.status(200).json({
         firebaseToken: customToken,
@@ -104,47 +104,48 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
       // 사용자 프로젝트에서 지원하는 최신 모델명으로 교체
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
       const prompt = `
-        너는 부동산 리뷰 플랫폼의 '절대 타협하지 않는 아주 엄격한 보안관 AI'야.
-        다음 [리뷰 내용]에 아주 미세한 욕설, 비하, 불쾌감을 주는 표현이 하나라도 있으면 무조건 REJECT 해야 해.
+        당신은 '방문LOG'라는 부동산 리뷰 플랫폼의 전문 검수관입니다. 
+        단순한 단어 필터링이 아니라, 문장의 '의도'와 '맥락'을 심층적으로 파악하세요.
 
-        [검열 기준]
-        1. 욕설 및 비속어: 직접/변형/영어 욕설 모두 포함.
-        2. 혐오 및 비하: 지역/성별/나이/직업 비하.
-        3. 불쾌한 표현: 성적 암시, 폭력적 묘사, 공격적 말투.
-        4. 광고 및 도배: 홍보성 문구, 무의미한 반복.
+        [검열 및 허용 가이드라인]
+        1. 비속어가 포함되어 있더라도, 맛이나 시설을 극찬하는 감탄사(예: '개좋음', '미친', '존맛')로 쓰였다면 허용(PASS)하세요.
+        2. 반대로 긍정적인 단어나 웃음소리(ㅋㅋㅋ)가 섞여 있더라도, 타인을 조롱하거나 성적인 수치심을 유발하고 혐오를 조장하는 문맥이라면 즉시 거절(REJECT)하세요.
+        3. 'ㅋㅋㅋ', 'ㅎㅎㅎ', '!!!', 'ㅠㅠ' 등 한국어 특유의 감정 표현을 위한 반복적인 자음이나 문장 부호는 '무의미한 도배'가 아닌 '강조된 감정 표현'으로 간주하여 너그럽게 허용하세요.
+        4. 방문 후기와 전혀 상관없는 광고, 의미 없는 단어의 단순 나열(예: '가나다 가나다')은 제외하세요.
+        5. 거주 환경과 관계없는 성적 묘사나 불쾌감을 주는 은유적 표현은 단어가 평범하더라도 문맥을 파악해 차단하세요.
 
         [응답 형식]
-        - 적절한 내용: 'PASS'
-        - 부적절한 내용: 'REJECT: [짧은 이유]'
-        - 결과 외에 다른 설명은 절대 하지 마.
+        - 결과는 반드시 JSON 형식으로만 응답하세요: { "isPassed": boolean, "reason": "string" }
+        - 이 형식 외에 다른 설명은 절대 하지 마세요.
 
-        [분석할 내용]
+        [분석할 리뷰 내용]
         "${content}"
       `;
 
       const result = await model.generateContent(prompt);
-      const aiResponse = result.response.text().trim() || "";
-      
-      console.log("🤖 [AI 분석 성공]:", aiResponse);
+      const aiResponseText = result.response.text().trim() || "{}";
 
-      if (aiResponse.toUpperCase().includes("PASS")) {
-        return res.status(200).json({ isPassed: true });
-      } else {
-        const reason = aiResponse.includes("REJECT") 
-          ? aiResponse.split(":")[1]?.trim() || "부적절한 내용 감지"
-          : "부적절한 표현이 포함되어 있습니다.";
-        return res.status(200).json({ isPassed: false, reason });
-      }
+      // JSON 형식만 추출 (혹시 모를 마크다운 태그 등 제거)
+      const jsonMatch = aiResponseText.match(/\{.*\}/s);
+      const finalJson = jsonMatch ? jsonMatch[0] : "{}";
+      const aiData = JSON.parse(finalJson);
+
+      console.log("🤖 [AI 분석 성공]:", aiData);
+
+      return res.status(200).json({
+        isPassed: aiData.isPassed ?? false,
+        reason: aiData.reason || (aiData.isPassed ? "" : "부적절한 표현이 감지되었습니다.")
+      });
     } catch (error) {
       console.error("Gemini SDK Error:", error.message);
-      
+
       // 만약 여전히 404가 나면, API 키가 정말로 이 프로젝트용인지 재확인 필요
-      return res.status(500).json({ 
-        isPassed: false, 
-        reason: "AI 분석 호출 실패. 프론트엔드에서 썼던 키와 동일한지 확인이 필요합니다." 
+      return res.status(500).json({
+        isPassed: false,
+        reason: "AI 분석 호출 실패. 프론트엔드에서 썼던 키와 동일한지 확인이 필요합니다."
       });
     }
   });

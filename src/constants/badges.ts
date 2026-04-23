@@ -71,6 +71,6 @@ export const BADGES: Badge[] = [
 export const REGION_BADGE_TEMPLATE = {
   title: "보안관",
   description: "해당 지역 내 방문록 10회 작성",
-  icon: "📍",
+  icon: "🤠",
   category: "region" as const
 };
