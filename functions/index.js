@@ -1,7 +1,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
-const axios = require("axios");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cors = require("cors")({ origin: true });
 
 // 글로벌 설정 (리전 설정)
@@ -29,6 +29,7 @@ exports.naverAuth = onRequest(async (req, res) => {
     }
 
     try {
+      const axios = require("axios");
       const naverResponse = await axios.get("https://openapi.naver.com/v1/nid/me", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -76,7 +77,7 @@ exports.naverAuth = onRequest(async (req, res) => {
 });
 
 /**
- * Gemini AI를 이용한 콘텐츠 모더레이션 함수 (Axios REST API 방식 - 검증된 로직으로 복구)
+ * Gemini AI를 이용한 콘텐츠 모더레이션 함수 (공식 SDK 방식 - 모델명 정밀 타격)
  */
 exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req, res) => {
   return cors(req, res, async () => {
@@ -92,18 +93,19 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
     }
 
     const { content } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
+    let apiKey = process.env.GEMINI_API_KEY;
 
-    if (!content) {
-      return res.status(400).json({ isPassed: false, reason: "내용이 없습니다." });
-    }
+    if (!content) return res.status(400).json({ isPassed: false, reason: "내용이 없습니다." });
+    if (!apiKey) return res.status(500).json({ isPassed: false, reason: "서버 설정 오류 (API Key 없음)" });
 
-    if (!apiKey) {
-      console.error("GEMINI_API_KEY is not set in secrets");
-      return res.status(500).json({ isPassed: false, reason: "서버 설정 오류" });
-    }
+    // API 키 세척
+    apiKey = apiKey.replace(/[^\x20-\x7E]/g, "").trim();
 
     try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      // [핵심] 검증된 최신 모델명 사용
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
       const prompt = `
         너는 부동산 리뷰 플랫폼의 '절대 타협하지 않는 아주 엄격한 보안관 AI'야.
         다음 [리뷰 내용]에 아주 미세한 욕설, 비하, 불쾌감을 주는 표현이 하나라도 있으면 무조건 REJECT 해야 해.
@@ -123,19 +125,12 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
         "${content}"
       `;
 
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-        {
-          contents: [{ parts: [{ text: prompt }] }]
-        },
-        {
-          headers: { "Content-Type": "application/json" }
-        }
-      );
-
-      const aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      const result = await model.generateContent(prompt);
+      const aiResponse = result.response.text().trim() || "";
       
-      if (aiResponse.toUpperCase().startsWith("PASS")) {
+      console.log("🤖 [AI 분석 성공]:", aiResponse);
+
+      if (aiResponse.toUpperCase().includes("PASS")) {
         return res.status(200).json({ isPassed: true });
       } else {
         const reason = aiResponse.includes("REJECT") 
@@ -144,12 +139,10 @@ exports.moderateContent = onRequest({ secrets: ["GEMINI_API_KEY"] }, async (req,
         return res.status(200).json({ isPassed: false, reason });
       }
     } catch (error) {
-      const errorDetail = error.response?.data?.error?.message || error.response?.data || error.message;
-      console.error("❌ [Gemini API Error]:", errorDetail);
-      
+      console.error("❌ [Gemini SDK Error]:", error.message);
       return res.status(500).json({ 
         isPassed: false, 
-        reason: `AI 분석 호출 실패(v1beta-check): ${errorDetail}. 열쇠(API Key) 설정이나 권한을 확인해주세요.`
+        reason: `AI 분석 최종 호출 실패: ${error.message}. API 키의 모델 권한을 확인해주세요.`
       });
     }
   });
