@@ -427,16 +427,7 @@ export function Feed() {
               ))}
             </div>
 
-            {/* 리뷰 클렌징 시스템 배너 */}
-            <div className="feed__cleansing-banner" onClick={() => setIsCleansingModalOpen(true)}>
-              <div className="banner-left">
-                <div className="ai-icon">
-                  <div className="dot"></div>
-                </div>
-                <span>리뷰 클렌징 시스템 <strong>작동 중</strong>입니다</span>
-              </div>
-              <ChevronRight size={16} color="#8B95A1" />
-            </div>
+            {/* 배너를 리스트 영역으로 이동함 */}
 
             {activeTab === 'tag' && (
               <div className="feed__tag-header">
@@ -545,6 +536,18 @@ export function Feed() {
       </div>
 
       <div className="feed__list">
+        {/* [이동] 리뷰 클렌징 시스템 배너 - 리스트 최상단 배치 */}
+        {!addressParam && (
+          <div className="feed__cleansing-banner" onClick={() => setIsCleansingModalOpen(true)} style={{ marginBottom: '16px', marginTop: '0' }}>
+            <div className="banner-left">
+              <div className="ai-icon">
+                <div className="dot"></div>
+              </div>
+              <span>리뷰 클렌징 시스템 <strong>작동 중</strong>입니다</span>
+            </div>
+            <ChevronRight size={16} color="#8B95A1" />
+          </div>
+        )}
         {activeTab === 'tag' ? (
           <div className="feed__tag-grid">
             {isLoading ? (
