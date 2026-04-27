@@ -14,28 +14,70 @@ export function Layout() {
   const [hasUnread, setHasUnread] = useState(false);
   const isMapTab = location.pathname === "/";
   const [showExitToast, setShowExitToast] = useState(false);
+  const [showUpdateToast, setShowUpdateToast] = useState(false);
   const lastBackPressRef = useRef<number>(0);
+  const lastVersionCheckRef = useRef<number>(0);
+
+  // [Update Check] 서버의 최신 배포 버전 확인 로직
+  const checkForUpdate = async () => {
+    // 1분 이내 중복 체크 방지
+    const now = Date.now();
+    if (now - lastVersionCheckRef.current < 60000) return;
+    lastVersionCheckRef.current = now;
+
+    try {
+      // index.html을 캐시 없이 새로 불러와서 현재 스크립트 해시와 비교
+      const response = await fetch(`${window.location.origin}/index.html?t=${now}`, { cache: 'no-store' });
+      const html = await response.text();
+      
+      // 현재 페이지에 로드된 메인 스크립트 파일명을 찾습니다 (Rsbuild/Vite의 해시 포함 파일명)
+      const currentScript = Array.from(document.scripts).find(s => s.src.includes('/index.'))?.src || "";
+      const currentHash = currentScript.split('.').reverse()[1]; // index.[hash].js 에서 hash 추출
+
+      // 새로 받아온 HTML에서 스크립트 태그 추출
+      const scriptMatch = html.match(/src="\/static\/js\/index\.([a-z0-9]+)\.js"/i) || 
+                          html.match(/src="\/index\.([a-z0-9]+)\.js"/i);
+      
+      if (scriptMatch && scriptMatch[1]) {
+        const newHash = scriptMatch[1];
+        if (currentHash && newHash !== currentHash) {
+          console.log("🚀 [Update] New version detected!", { currentHash, newHash });
+          setShowUpdateToast(true);
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ [Update Check] Failed to check for updates:", e);
+    }
+  };
+
+  // 페이지 이동 및 앱 복귀 시 업데이트 체크 트리거
+  useEffect(() => {
+    checkForUpdate();
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    };
+    
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => window.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [location.pathname]);
 
   // [WebView/Mobile] 하드웨어 뒤로가기 버튼 핸들링 (메인 화면 종료 방어)
   useEffect(() => {
-    // 종료 방어 대상인 메인 탭 정의
+    // ... 기존 코드 유지 (생략 방지를 위해 아래 TargetContent와 일치하도록 작성)
     const mainTabs = ["/", "/feed", "/notifications", "/mypage"];
     const isMainTab = mainTabs.includes(location.pathname);
 
     if (isMainTab) {
-      // 1. 현재 히스토리에 트랩(가상 상태)이 없는 경우에만 추가하여 뒤로가기를 1회 가로챕니다.
       if (!window.history.state?.isAppRoot) {
         window.history.pushState({ isAppRoot: true }, "", window.location.href);
       }
 
       const handlePopState = (e: PopStateEvent) => {
-        // 뒤로가기 클릭 시 (트랩에서 튕겨나옴) 현재 경로가 여전히 메인 탭이라면 종료 가드 작동
         const now = Date.now();
         if (now - lastBackPressRef.current < 2000) {
-          // 2초 내 재클릭 시 -> 히스토리를 2단계 뒤로 밀어 사실상 앱 종료 유도
           window.history.go(-2);
         } else {
-          // 첫 클릭 -> 토스트 노출 및 트랩 재설치
           lastBackPressRef.current = now;
           setShowExitToast(true);
           window.history.pushState({ isAppRoot: true }, "", window.location.href);
@@ -61,7 +103,6 @@ export function Layout() {
       };
       document.head.appendChild(s);
     } else {
-      // 이미 로드되어 있는 경우에도 이벤트를 한 번 더 쏴줌
       window.dispatchEvent(new Event('naver-map-loaded'));
     }
   }, []);
@@ -69,7 +110,6 @@ export function Layout() {
   useEffect(() => {
     if (!user?.id) return;
     
-    // 실시간 리스너 (onSnapshot)를 통해 새 알림이 오는 즉시 배지 업데이트
     const q = query(
       collection(db, "notifications"), 
       where("toUserId", "==", user.id),
@@ -79,7 +119,6 @@ export function Layout() {
     const unsubscribe = onSnapshot(q, (snap: any) => {
       const unreadCount = snap.size;
       setHasUnread(unreadCount > 0);
-      console.log(`[Notification Badge] Unread count updated: ${unreadCount}`);
     }, (error: any) => {
       console.error("[Notification Badge] onSnapshot error:", error);
     });
@@ -100,12 +139,34 @@ export function Layout() {
         <NavItem to="/mypage" icon={<SquareUserRound size={24} />} label="내 정보" />
       </nav>
 
+      {/* 뒤로가기 종료 알림 */}
       <Toast
         message="버튼을 한 번 더 누르면 종료됩니다."
         isVisible={showExitToast}
         onClose={() => setShowExitToast(false)}
         icon={LogoImg}
       />
+
+      {/* 새 버전 업데이트 알림 */}
+      {showUpdateToast && (
+        <div className="update-toast-overlay">
+          <div className="update-toast">
+            <div className="update-toast__content">
+              <div className="update-toast__icon">🚀</div>
+              <div className="update-toast__text">
+                <strong>새로운 기능이 추가되었습니다!</strong>
+                <span>더 나은 경험을 위해 업데이트할까요?</span>
+              </div>
+            </div>
+            <button 
+              className="update-toast__btn"
+              onClick={() => window.location.reload()}
+            >
+              업데이트
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

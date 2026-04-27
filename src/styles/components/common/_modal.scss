@@ -108,3 +108,87 @@
     transform: scale(1);
   }
 }
+
+// 새 버전 업데이트 토스트 스타일
+.update-toast-overlay {
+  position: fixed;
+  bottom: 100px;
+  left: 20px;
+  right: 20px;
+  z-index: 10001;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.update-toast {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 400px;
+  background: rgba(33, 37, 41, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 18px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  animation: updateToastSlideUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  &__content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__icon {
+    font-size: 24px;
+  }
+
+  &__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    strong {
+      font-size: 14px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+
+    span {
+      font-size: 12px;
+      color: #ADB5BD;
+    }
+  }
+
+  &__btn {
+    background: #3182F6;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+
+    &:active {
+      transform: scale(0.95);
+      background: #1B64DA;
+    }
+  }
+}
+
+@keyframes updateToastSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
