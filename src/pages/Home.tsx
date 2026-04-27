@@ -429,8 +429,7 @@ export function Home() {
   });
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
-  const [showExitToast, setShowExitToast] = useState(false);
-  const lastBackPressRef = useRef<number>(0);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // 전역 상태 및 UI 제어 상태 (useEffect 이전에 선언 필요)
   const [showVerifiedOnly, setShowVerifiedOnly] = useState(false);
@@ -880,44 +879,17 @@ export function Home() {
     }
   }, []);
 
-  // [WebView/Mobile] 하드웨어 뒤로가기 버튼 핸들링
+  // [WebView/Mobile] 하드웨어 뒤로가기 버튼 핸들링 (등록 중 이탈 방지)
   useEffect(() => {
-    // 앱 진입 시 가상의 히스토리를 하나 밀어넣어 뒤로가기 이벤트를 가로챌 준비를 합니다.
-    window.history.pushState({ isHome: true }, '', window.location.href);
-
     const handlePopState = (e: PopStateEvent) => {
-      // 0. 등록 중에는 모든 이탈 행위를 강력히 차단
       if (isSubmitting) {
         window.history.pushState({ isHome: true }, '', window.location.href);
         return;
       }
-
-      // 1. 열려있는 레이어(모달, 시트 등)가 있다면 뒤로가기 시 레이어를 먼저 닫습니다.
-      if (isPostcodeOpen) { setPostcodeOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
-      if (isSheetOpen) { setSheetOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
-      if (isReadListOpen) { setReadListOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
-      if (selectedReview) { setSelectedReview(null); window.history.pushState({ isHome: true }, '', window.location.href); return; }
-      if (viewerImage) { setViewerImage(null); window.history.pushState({ isHome: true }, '', window.location.href); return; }
-      if (isHistoryOpen) { setIsHistoryOpen(false); window.history.pushState({ isHome: true }, '', window.location.href); return; }
-      if (modalConfig.isOpen) { setModalConfig(prev => ({ ...prev, isOpen: false })); window.history.pushState({ isHome: true }, '', window.location.href); return; }
-
-      // 2. 레이어가 없는 클린한 상태에서 뒤로가기 시 "한번 더 누르면 종료" 로직 실행
-      const now = Date.now();
-      if (now - lastBackPressRef.current < 2000) {
-        // 2초 내에 두 번 누름 -> 실제 종료 (이전 페이지 혹은 브라우저 종료)
-        window.history.go(-2); // 우리가 추가한 pushState와 원래 이동하려던 back을 합쳐서 -2
-      } else {
-        // 첫 번째 누름 -> 토스트 알림
-        lastBackPressRef.current = now;
-        setShowExitToast(true);
-        // 다시 가상 히스토리를 밀어넣어 다음 뒤로가기를 대기합니다.
-        window.history.pushState({ isHome: true }, '', window.location.href);
-      }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isPostcodeOpen, isSheetOpen, isReadListOpen, selectedReview, viewerImage, isHistoryOpen, modalConfig.isOpen, isSubmitting]);
+  }, [isSubmitting]);
 
   // [추가] 브라우저 종료/새로고침 방지 (등록 중)
   useEffect(() => {
@@ -2829,12 +2801,6 @@ export function Home() {
         </div>
       )}
       {showWelcomeModal && <WelcomeModal onClose={() => setShowWelcomeModal(false)} />}
-      <Toast
-        message="버튼을 한 번 더 누르면 종료됩니다."
-        isVisible={showExitToast}
-        onClose={() => setShowExitToast(false)}
-        icon={LogoImg}
-      />
       <AnimatePresence>
         {isPanoramaOpen && selectedCoord && (
           <motion.div
