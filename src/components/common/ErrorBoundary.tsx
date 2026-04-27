@@ -60,7 +60,7 @@ export class ErrorBoundary extends Component<Props, State> {
           >
             페이지 새로고침
           </button>
-          {process.env.NODE_ENV === 'development' && (
+          {import.meta.env.MODE === 'development' && (
             <details style={{ marginTop: '24px', textAlign: 'left', width: '100%', overflowX: 'auto' }}>
               <summary style={{ cursor: 'pointer', color: '#8B95A1' }}>Error Details (Dev Only)</summary>
               <pre style={{ fontSize: '12px', color: '#F04452', marginTop: '12px' }}>

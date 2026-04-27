@@ -11,7 +11,6 @@ const MODERATE_FUNCTION_URL = "https://moderatecontent-pgxt2tqsrq-du.a.run.app";
 const GEMINI_API_KEY =
   (import.meta as any).env?.PUBLIC_GEMINI_API_KEY ||
   (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-  (process.env as any).PUBLIC_GEMINI_API_KEY ||
   "";
 
 console.log("🔑 [Gemini] API Key Check:", GEMINI_API_KEY ? "SUCCESS (Loaded)" : "FAILED (Empty)");
