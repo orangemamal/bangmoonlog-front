@@ -610,7 +610,7 @@
     &::after {
       content: '★';
       position: absolute;
-      top: 48%; // 텍스트 폰트 특성상 50%보다 살짝 위로 올려야 시각적 정중앙
+      top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       font-size: 13px;
@@ -628,10 +628,12 @@
     opacity: 1;
     filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.4));
   }
+
   50% {
     opacity: 0.6;
     filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.9));
   }
+
   100% {
     opacity: 1;
     filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.4));
