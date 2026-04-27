@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
 interface User {
@@ -22,53 +22,73 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeSnapshot: (() => void) | null = null;
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      // [중요] 상태 변경 시 이전 스냅샷 리스너가 있다면 먼저 해제
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
+
       if (firebaseUser) {
-        let name = firebaseUser.displayName || "방문객";
-        let photoURL = firebaseUser.photoURL || undefined;
-        let email = firebaseUser.email || null;
-        let canViewAll = false;
-        let canViewAllUntil = null;
-
-        try {
-          const userSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+        // [개선] 실시간 리스너 도입하여 권한(canViewAllUntil) 변경 시 즉시 반영
+        unsubscribeSnapshot = onSnapshot(doc(db, 'users', firebaseUser.uid), (userSnap) => {
           if (userSnap.exists()) {
-             const data = userSnap.data();
-             if (data.displayName) name = data.displayName;
-             if (data.photoURL) photoURL = data.photoURL;
-             if (data.email) email = data.email;
-             
-             // 권한 체크: canViewAllUntil 필드가 현재 시간보다 미래인지 확인
-             if (data.canViewAllUntil) {
-               const expiry = data.canViewAllUntil.toDate();
-               if (expiry > new Date()) {
-                 canViewAll = true;
-                 canViewAllUntil = data.canViewAllUntil;
-               }
-             }
-          }
-        } catch (e) {
-          console.warn("Failed to fetch user profile", e);
-        }
+            const data = userSnap.data();
+            const name = data.displayName || firebaseUser.displayName || "방문객";
+            const photoURL = data.photoURL || firebaseUser.photoURL || undefined;
+            const email = data.email || firebaseUser.email || null;
+            let canViewAll = false;
+            let canViewAllUntil = null;
 
-        setUser({
-          id: firebaseUser.uid,
-          name,
-          displayName: name,
-          email,
-          photoURL,
-          isAnonymous: firebaseUser.isAnonymous,
-          canViewAll,
-          canViewAllUntil,
-          isAdmin: ADMIN_EMAILS.includes(email || "")
+            if (data.canViewAllUntil) {
+              const expiry = data.canViewAllUntil.toDate();
+              if (expiry > new Date()) {
+                canViewAll = true;
+                canViewAllUntil = data.canViewAllUntil;
+              }
+            }
+
+            setUser({
+              id: firebaseUser.uid,
+              name,
+              displayName: name,
+              email,
+              photoURL,
+              isAnonymous: firebaseUser.isAnonymous,
+              canViewAll,
+              canViewAllUntil,
+              isAdmin: ADMIN_EMAILS.includes(email || "")
+            });
+          } else {
+            // 문서가 없는 경우 기본 정보 세팅
+            setUser({
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || "방문객",
+              displayName: firebaseUser.displayName || "방문객",
+              email: firebaseUser.email || null,
+              photoURL: firebaseUser.photoURL || undefined,
+              isAnonymous: firebaseUser.isAnonymous,
+              canViewAll: false,
+              isAdmin: ADMIN_EMAILS.includes(firebaseUser.email || "")
+            });
+          }
+          setLoading(false);
+        }, (err) => {
+          console.warn("User snapshot error:", err);
+          setLoading(false);
         });
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
   }, []);
 
   const logout = useCallback(async () => {

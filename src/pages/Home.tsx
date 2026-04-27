@@ -507,6 +507,27 @@ export function Home() {
     return () => unsubscribe();
   }, [isLoggedIn, user?.id]);
 
+  // [추가] 전체 방문록 실시간 동기화 (마커 실시간 반영용)
+  useEffect(() => {
+    setIsLoadingReviews(true);
+    const q = query(collection(db, "reviews"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: Review[] = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        list.push({ id: doc.id, ...data } as Review);
+      });
+      setReviews(list);
+      setIsLoadingReviews(false);
+      console.log("📝 [Sync] 전체 방문록 실시간 동기화:", list.length, "건");
+    }, (error) => {
+      console.error("Reviews sync error:", error);
+      setIsLoadingReviews(false);
+    });
+
+    return () => unsubscribe();
+  }, []); // 컴포넌트 마운트 시 1회 등록
+
   const calculateAverageRating = useCallback((reviewList: Review[]) => {
     if (!reviewList || reviewList.length === 0) return "0.0";
     const totalAvg = reviewList.reduce((acc, rev) => {
@@ -529,12 +550,12 @@ export function Home() {
     if (buildingCacheRef.current[address] !== undefined) {
       const isRes = buildingCacheRef.current[address];
       const isBookmarked = favoritedAddressesRef.current.has(address);
-      let hasWritten = false;
-      if (isLoggedIn && user?.id) {
-        const q = query(collection(db, "reviews"), where("authorId", "==", user.id), where("address", "==", address));
-        const snap = await getDocs(q);
-        hasWritten = !snap.empty;
-      }
+      
+      // [개선] 매번 getDocs로 서버에 묻지 않고, 이미 실시간 동기화된 reviews 상태에서 찾습니다.
+      const hasWritten = isLoggedIn && !!user?.id && reviews.some(r => 
+        (r.authorId === user.id) && normalizeBaseAddress(r.address || (r as any).location) === address
+      );
+
       infoWindowInstance.current.setContent(getInfoWindowMarkup({
         address, lat: loc.lat, lng: loc.lng, isBookmarked, isResidential: isRes,
         reviewCount: loc.count || 0, avgRating: loc.avgRating || 0, hasWritten
@@ -561,12 +582,12 @@ export function Home() {
       }
       buildingCacheRef.current[address] = isRes;
       const isBookmarked = favoritedAddressesRef.current.has(address);
-      let hasWritten = false;
-      if (isLoggedIn && user?.id) {
-        const q = query(collection(db, "reviews"), where("authorId", "==", user.id), where("address", "==", address));
-        const snap = await getDocs(q);
-        hasWritten = !snap.empty;
-      }
+      
+      // [개선] 실시간 동기화 상태 활용
+      const hasWritten = isLoggedIn && !!user?.id && reviews.some(r => 
+        (r.authorId === user.id) && normalizeBaseAddress(r.address || (r as any).location) === address
+      );
+
       infoWindowInstance.current.setContent(getInfoWindowMarkup({
         address, lat: loc.lat, lng: loc.lng, isBookmarked, isResidential: isRes,
         reviewCount: loc.count || 0, avgRating: loc.avgRating || 0, hasWritten
@@ -584,18 +605,12 @@ export function Home() {
     const currentCallId = ++refreshCountRef.current;
 
     try {
-      const snapshot = await getDocs(collection(db, "reviews"));
-
-      // [핵심] 비동기 작업(getDocs) 이후, 내가 여전히 '최신 요청'인지 확인
-      // 만약 그 사이에 새로운 refreshMarkers가 호출되었다면, 이 함수는 여기서 즉시 중단합니다.
-      if (currentCallId !== refreshCountRef.current) return;
-
-      const allReviews: any[] = [];
-      snapshot.forEach((d: QueryDocumentSnapshot<DocumentData>) => allReviews.push({ id: d.id, ...d.data() }));
+      // [개선] 이미 onSnapshot으로 관리되는 reviews 상태를 사용합니다.
+      const allReviews = reviews;
 
       const groups: { [key: string]: any[] } = {};
       allReviews.forEach(r => {
-        const key = normalizeBaseAddress(r.address || r.location);
+        const key = normalizeBaseAddress(r.address || (r as any).location);
         if (!groups[key]) groups[key] = [];
         groups[key].push(r);
       });
@@ -758,12 +773,12 @@ export function Home() {
     } catch (e) {
       console.error("Marker refresh error:", e);
     }
-  }, [calculateAverageRating, isLoggedIn, user, showFavoritesOnly, favoritedAddresses]);
+  }, [calculateAverageRating, isLoggedIn, user, showFavoritesOnly, favoritedAddresses, reviews]);
 
-  // [추가] 찜 필터 토글 시 마커 즉시 갱신
+  // [추가] 찜 필터 토글 또는 리뷰 데이터 변경 시 마커 즉시 갱신
   useEffect(() => {
     refreshMarkers();
-  }, [showFavoritesOnly, refreshMarkers]);
+  }, [showFavoritesOnly, reviews, refreshMarkers]);
 
   const showAlert = useCallback((title: string, desc?: string, icon: string = "✅", onConfirm?: () => void) => {
     setModalConfig({ isOpen: true, title, desc, icon, onConfirm, confirmText: "확인" });
@@ -1718,7 +1733,7 @@ export function Home() {
       } else {
         // [신규 등록 모드]
         reviewData.createdAt = Timestamp.now();
-        reviewData.author = user?.name || "jm_tester";
+        reviewData.author = user?.name || "익명 방문자";
         reviewData.authorId = user?.id;
         reviewData.likes = 0;
         reviewData.views = 0;

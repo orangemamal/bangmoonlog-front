@@ -198,6 +198,7 @@ export function Feed() {
   }, [fetchUserLocation]);
 
   useEffect(() => {
+    setPosts([]); // [핵심] 유저나 지역 변경 시 이전 데이터 즉시 초기화 (Cache Poisoning 방지)
     setIsLoading(true);
     let q = query(collection(db, "reviews"), orderBy("createdAt", "desc"));
 
@@ -240,7 +241,7 @@ export function Feed() {
     });
 
     return () => unsubscribe();
-  }, [addressParam, activeTab]);
+  }, [addressParam, activeTab, user?.id, user?.canViewAll]); // [개선] 유저 정보 변경 시 즉시 리스너 재설정
 
   const filteredData = useMemo(() => {
     let list = [...posts];
