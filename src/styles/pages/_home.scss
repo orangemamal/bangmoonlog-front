@@ -601,24 +601,25 @@
     background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
     border: 2px solid #FFFFFF;
     box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+    position: relative; // 별 아이콘 배치를 위해 기준점 설정
 
     .count {
       display: none; // 28x28에서는 카운트 숨김
     }
-  }
 
-  &::after {
-    content: '★';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 13px;
-    color: #FFF;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    z-index: 3;
-    pointer-events: none;
-    animation: bookmarkPulse 2s ease-in-out infinite;
+    &::after {
+      content: '★';
+      position: absolute;
+      top: 48%; // 텍스트 폰트 특성상 50%보다 살짝 위로 올려야 시각적 정중앙
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 13px;
+      color: #FFF;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      z-index: 3;
+      pointer-events: none;
+      animation: bookmarkPulse 2s ease-in-out infinite;
+    }
   }
 }
 
