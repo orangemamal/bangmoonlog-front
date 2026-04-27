@@ -16,29 +16,34 @@ export function Layout() {
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef<number>(0);
 
-  // [WebView/Mobile] 하드웨어 뒤로가기 버튼 핸들링 (홈 화면 종료 방어)
+  // [WebView/Mobile] 하드웨어 뒤로가기 버튼 핸들링 (메인 화면 종료 방어)
   useEffect(() => {
-    // 홈 경로(/)일 때만 뒤로가기를 가로채서 종료 토스트를 띄웁니다.
-    if (location.pathname === '/') {
-      // 가상 히스토리 추가
-      window.history.pushState({ isHome: true }, '', window.location.href);
+    // 종료 방어 대상인 메인 탭 정의
+    const mainTabs = ["/", "/feed", "/notifications", "/mypage"];
+    const isMainTab = mainTabs.includes(location.pathname);
+
+    if (isMainTab) {
+      // 1. 현재 히스토리에 트랩(가상 상태)이 없는 경우에만 추가하여 뒤로가기를 1회 가로챕니다.
+      if (!window.history.state?.isAppRoot) {
+        window.history.pushState({ isAppRoot: true }, "", window.location.href);
+      }
 
       const handlePopState = (e: PopStateEvent) => {
+        // 뒤로가기 클릭 시 (트랩에서 튕겨나옴) 현재 경로가 여전히 메인 탭이라면 종료 가드 작동
         const now = Date.now();
         if (now - lastBackPressRef.current < 2000) {
-          // 2초 내에 두 번 누름 -> 종료 처리
+          // 2초 내 재클릭 시 -> 히스토리를 2단계 뒤로 밀어 사실상 앱 종료 유도
           window.history.go(-2);
         } else {
-          // 첫 번째 누름 -> 토스트 노출
+          // 첫 클릭 -> 토스트 노출 및 트랩 재설치
           lastBackPressRef.current = now;
           setShowExitToast(true);
-          // 다시 가상 히스토리 추가하여 다음 뒤로가기를 대기
-          window.history.pushState({ isHome: true }, '', window.location.href);
+          window.history.pushState({ isAppRoot: true }, "", window.location.href);
         }
       };
 
-      window.addEventListener('popstate', handlePopState);
-      return () => window.removeEventListener('popstate', handlePopState);
+      window.addEventListener("popstate", handlePopState);
+      return () => window.removeEventListener("popstate", handlePopState);
     }
   }, [location.pathname]);
 
