@@ -1,17 +1,17 @@
 # 🏠 방문Log (Bangmoon Log)
 
-![Hybrid App](https://img.shields.io/badge/App-Hybrid--WebView-blue)
+![Mobile App](https://img.shields.io/badge/App-Mobile--WebView-blue)
 ![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB)
 ![Vercel](https://img.shields.io/badge/Deployment-Vercel-black)
 
 **방문Log**는 주소지에 기반한 생생한 거주/방문 후기를 공유하는 서비스입니다. 
-토스 인증을 통한 신뢰할 수 있는 익명 커뮤니티를 지향하며, 지도 기반으로 집을 구하기 전 필수 정보를 확인하고 서로의 경험을 나눌 수 있습니다.
+인증된 사용자를 통한 신뢰할 수 있는 익명 커뮤니티를 지향하며, 지도 기반으로 집을 구하기 전 필수 정보를 확인하고 서로의 경험을 나눌 수 있습니다.
 
 ## ✨ 주요 기능
 
 - **📍 지도 기반 실시간 리뷰 조회**: 네이버 지도를 통해 특정 지역/주소의 리뷰 개수와 평점을 실시간으로 확인 가능합니다. (onSnapshot 동기화)
-- **📝 인증된 방문록 작성**: 토스 로그인을 기반으로 인증된 사용자만 방문록을 작성할 수 있어 데이터의 신뢰도를 높였습니다.
+- **📝 인증된 방문록 작성**: 간편 로그인을 기반으로 인증된 사용자만 방문록을 작성할 수 있어 데이터의 신뢰도를 높였습니다.
 - **🔒 권한 기반 열람 시스템 (Give & Take)**: 
   - 방문록을 1회 작성하면 1년간 전체 리뷰 열람 권한 부여
   - 비로그인/미작성 시에도 간단한 광고 시청(Mock) 후 열람 가능

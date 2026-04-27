@@ -50,7 +50,7 @@
     }
 
     &::-webkit-scrollbar-thumb {
-      background-color: #B0B8C1; // 더 선명한 회색 (TDS 기준)
+      background-color: #B0B8C1; // 가시성 좋은 선명한 회색 설정
       background-clip: padding-box;
       border-right: 8px solid transparent; // 우측 벽에서 8px 떨어지게 처리
       border-left: 4px solid transparent;

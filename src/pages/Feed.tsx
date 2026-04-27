@@ -814,14 +814,14 @@ export function Feed() {
       )}
 
       {modalConfig.isOpen && (
-        <div className="tds-modal-overlay">
-          <div className="tds-modal-content">
-            <div className="toss-face-icon">{modalConfig.icon}</div>
-            <h2 className="tds-modal-title">{modalConfig.title}</h2>
-            {modalConfig.desc && <p className="tds-modal-desc">{modalConfig.desc}</p>}
-            <div className="tds-modal-footer">
+        <div className="app-modal-overlay">
+          <div className="app-modal-content">
+            <div className="app-status-icon">{modalConfig.icon}</div>
+            <h2 className="app-modal-title">{modalConfig.title}</h2>
+            {modalConfig.desc && <p className="app-modal-desc">{modalConfig.desc}</p>}
+            <div className="app-modal-footer">
               <button
-                className="tds-btn-secondary"
+                className="app-btn-secondary"
                 onClick={() => {
                   setModalConfig(prev => ({ ...prev, isOpen: false }));
                   if (modalConfig.onCancel) modalConfig.onCancel();
@@ -830,7 +830,7 @@ export function Feed() {
                 {modalConfig.cancelText || "닫기"}
               </button>
               <button
-                className="tds-btn-primary"
+                className="app-btn-primary"
                 onClick={() => {
                   setModalConfig(prev => ({ ...prev, isOpen: false }));
                   if (modalConfig.onConfirm) modalConfig.onConfirm();
@@ -846,7 +846,7 @@ export function Feed() {
       {/* 리뷰 클렌징 시스템 안내 모달 */}
       <AnimatePresence>
         {isCleansingModalOpen && (
-          <div className="tds-modal-overlay tds-modal-overlay--dark" onClick={() => setIsCleansingModalOpen(false)}>
+          <div className="app-modal-overlay app-modal-overlay--dark" onClick={() => setIsCleansingModalOpen(false)}>
             <motion.div
               className="cleansing-modal"
               initial={{ scale: 0.9, opacity: 0 }}

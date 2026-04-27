@@ -1,6 +1,6 @@
 @use '../abstracts/variables' as *;
 @use '../abstracts/mixins' as *;
-@import url('https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css');
+
 
 // 루트 컨테이너
 .page-home {
@@ -1322,19 +1322,19 @@
           display: flex;
           flex-direction: column;
           gap: 8px;
-        }
 
-        .rating-row-small {
-          @include flex-between;
+          .rating-row-small {
+            @include flex-between;
 
-          .label {
-            font-size: 14px;
-            color: $color-text-sub;
-          }
+            .label {
+              font-size: 14px;
+              color: $color-text-sub;
+            }
 
-          .stars {
-            display: flex;
-            gap: 2px;
+            .stars {
+              display: flex;
+              gap: 2px;
+            }
           }
         }
       }

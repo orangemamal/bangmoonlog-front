@@ -1,10 +1,10 @@
 // ============================================================
 // components/common/_modal.scss
-// TDS 스타일 알림 모달 공통 스타일
+// 앱 공통 알림 모달 스타일
 // ============================================================
 @use '../../abstracts/variables' as *;
 
-.tds-modal-overlay {
+.app-modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -17,9 +17,13 @@
   justify-content: center;
   z-index: 10000;
   padding: 24px;
+
+  &--dark {
+    background: rgba(0, 0, 0, 0.7);
+  }
 }
 
-.tds-modal-content {
+.app-modal-content {
   width: 100%;
   max-width: 320px;
   background: #FFFFFF;
@@ -27,38 +31,40 @@
   padding: 32px 24px 24px;
   text-align: center;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-  animation: tdsModalScale 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: appModalScale 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
-  .toss-face-icon {
+  .app-status-icon {
     font-size: 48px;
     margin-bottom: 20px;
     line-height: 1;
   }
 
-  .tds-modal-title {
+  .app-modal-title {
     font-size: 19px;
     font-weight: 700;
     color: #191F28;
     margin-bottom: 8px;
     letter-spacing: -0.4px;
+    white-space: pre-wrap;
   }
 
-  .tds-modal-desc {
+  .app-modal-desc {
     font-size: 15px;
     font-weight: 400;
     color: #4E5968;
     margin-bottom: 28px;
     line-height: 1.5;
+    white-space: pre-wrap;
   }
 
-  .tds-modal-footer {
+  .app-modal-footer {
     display: flex;
     gap: 8px;
     width: 100%;
   }
 
-  .tds-btn-primary,
-  .tds-btn-secondary {
+  .app-btn-primary,
+  .app-btn-secondary {
     flex: 1;
     height: 54px;
     border: none;
@@ -73,7 +79,7 @@
     }
   }
 
-  .tds-btn-primary {
+  .app-btn-primary {
     background: #3182F6;
     color: #FFFFFF;
 
@@ -82,7 +88,7 @@
     }
   }
 
-  .tds-btn-secondary {
+  .app-btn-secondary {
     background: #F2F4F6;
     color: #4E5968;
 
@@ -92,7 +98,7 @@
   }
 }
 
-@keyframes tdsModalScale {
+@keyframes appModalScale {
   from {
     opacity: 0;
     transform: scale(0.9);

@@ -385,7 +385,7 @@ export function MyPage() {
 
             <button className="login-btn login-btn--kakao" onClick={() => handleLogin(signInWithKakao)}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.558 1.712 4.8 4.346 6.09l-.437 2.45c-.035.196.082.38.267.38.083 0 .166-.03.23-.086l2.91-1.928c.636.084 1.296.128 1.984.128 4.97 0 9-3.186 9-7.115S16.97 3 12 3z" /></svg>
-              <span>카카오톡 계정으로 로그인</span>
+              <span>카카오 계정으로 로그인</span>
             </button>
 
             <button className="login-btn login-btn--naver" onClick={() => handleLogin(signInWithNaver)}>

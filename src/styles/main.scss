@@ -2,14 +2,13 @@
 // styles/main.scss  ← src/index.tsx 진입점
 // 7-1 Pattern (경량화)
 // 규칙: @use는 반드시 모든 규칙보다 먼저 위치해야 함
-// tds-colors CSS import는 base/_reset.scss 안에서 처리
 // ============================================================
 
 // 1. 추상 (변수 → 믹스인 순서 필수)
 @use 'abstracts/variables';
 @use 'abstracts/mixins';
 
-// 2. 베이스 (reset 내부에서 @import '@toss/tds-colors/colors.css' 처리)
+// 2. 베이스
 @use 'base/reset';
 @use 'base/typography';
 

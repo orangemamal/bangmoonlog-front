@@ -2746,15 +2746,15 @@ export function Home() {
 
 
       {modalConfig.isOpen && (
-        <div className="tds-modal-overlay">
-          <div className="tds-modal-content">
-            <div className="toss-face-icon">{modalConfig.icon}</div>
-            <h2 className="tds-modal-title">{modalConfig.title}</h2>
-            {modalConfig.desc && <p className="tds-modal-desc">{modalConfig.desc}</p>}
-            <div className="tds-modal-footer" style={{ display: 'flex', gap: '8px', width: '100%' }}>
+        <div className="app-modal-overlay">
+          <div className="app-modal-content">
+            <div className="app-status-icon">{modalConfig.icon}</div>
+            <h2 className="app-modal-title">{modalConfig.title}</h2>
+            {modalConfig.desc && <p className="app-modal-desc">{modalConfig.desc}</p>}
+            <div className="app-modal-footer" style={{ display: 'flex', gap: '8px', width: '100%' }}>
               {modalConfig.cancelText && (
                 <button
-                  className="tds-btn-secondary"
+                  className="app-btn-secondary"
                   style={{
                     flex: 1,
                     height: '54px',
@@ -2775,7 +2775,7 @@ export function Home() {
                 </button>
               )}
               <button
-                className="tds-btn-primary"
+                className="app-btn-primary"
                 style={{
                   flex: 1,
                   height: '54px',
