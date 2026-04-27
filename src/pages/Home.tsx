@@ -429,8 +429,6 @@ export function Home() {
   });
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-
   // 전역 상태 및 UI 제어 상태 (useEffect 이전에 선언 필요)
   const [showVerifiedOnly, setShowVerifiedOnly] = useState(false);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
