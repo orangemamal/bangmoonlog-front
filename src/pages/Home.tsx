@@ -613,6 +613,18 @@ export function Home() {
         groups[key].push(r);
       });
 
+      // [핵심 수정] 타 페이지 내비게이션 및 검색 연동을 위한 전역 위치 정보 캐시 업데이트
+      allLocationsRef.current = Object.keys(groups).map(addr => {
+        const list = groups[addr];
+        return {
+          address: addr,
+          lat: list[0].lat,
+          lng: list[0].lng,
+          count: list.length,
+          rating: Number(calculateAverageRating(list))
+        };
+      });
+
       // 1. 데이터 분류 (필터 상태에 따라 마커의 '운명' 결정)
       const bookmarkData: any[] = [];
       const visitLogData: any[] = [];
@@ -951,15 +963,12 @@ export function Home() {
       // 즉시 이동 및 줌 설정
       mapInstance.current.setZoom(19);
       mapInstance.current.setCenter(targetPos);
-      setIsLocationActive(false); // [추가] 외부 좌표 이동 시 GPS 비활성화
+      setIsLocationActive(false);
 
       const triggerFocus = async () => {
-        // [1] 데이터 로드 (찜 상태 및 거주용 여부)
-        // favoritedAddresses를 사용하여 즉시 동기화
         const isBookmarked = favoritedAddresses.has(addr);
         const isRes = checkIsResidential(addr);
 
-        // [2] 본인 작성 여부 체크
         let hasWritten = false;
         if (isLoggedIn && user?.id) {
           const q = query(collection(db, "reviews"), where("authorId", "==", user.id), where("address", "==", addr));
@@ -967,20 +976,17 @@ export function Home() {
           hasWritten = !snap.empty;
         }
 
-        const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
-        const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
-
-        // [3] 인포윈도우 템플릿 적용 및 오픈
+        // [핵심 수정] 캐시된 Ref 대신 실시간 reviews 상태를 직접 사용하여 정확한 카운트 계산
         const normalizedFull = normalizeBaseAddress(addr);
-        const existingLoc = allLocationsRef.current.find(loc => normalizeBaseAddress(loc.address || loc.location) === normalizedFull);
-        const reviewCount = existingLoc ? (existingLoc.count || 0) : 0;
-        const avgRating = existingLoc ? (existingLoc.rating || 0) : 0;
+        const targetReviews = reviews.filter(r => normalizeBaseAddress(r.address || r.location || "") === normalizedFull);
+        const reviewCount = targetReviews.length;
+        const avgRating = Number(calculateAverageRating(targetReviews));
 
         infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
         infoWindowInstance.current.setContent(getInfoWindowMarkup({
           address: addr,
-          lat,
-          lng,
+          lat: Number(lat),
+          lng: Number(lng),
           isBookmarked,
           isResidential: isRes,
           reviewCount,
@@ -989,14 +995,14 @@ export function Home() {
         }));
         infoWindowInstance.current.open(mapInstance.current, targetPos);
 
-        // [4] 파라미터 정리
-        const nextParams = new URLSearchParams(); // 모두 정리
+        // 파라미터 정리
+        const nextParams = new URLSearchParams();
         setSearchParams(nextParams, { replace: true });
       };
 
       triggerFocus();
     }
-  }, [searchParams, mapInstance.current, infoWindowInstance.current, isLoggedIn, user, setSearchParams]);
+  }, [searchParams, mapInstance.current, infoWindowInstance.current, isLoggedIn, user, setSearchParams, reviews, calculateAverageRating]);
 
   // [추가] 기존 중복 찜 데이터 클린업 로직 (1회성)
   // [개선] 찜 데이터 전면 마이그레이션 및 클린업 (1회성/지속성 통합)
