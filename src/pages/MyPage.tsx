@@ -22,6 +22,7 @@ import { ProfileAvatarUpload } from "../components/mypage/ProfileAvatarUpload";
 import { calculateUserStats, getMyBadges } from "../utils/BadgeLogic";
 import { BADGES } from "../constants/badges";
 import logoSvg from "../assets/images/bangmoonlog_logo.svg";
+import { InquiryModal } from "../components/common/InquiryModal";
 
 /** Set true when Firebase Storage is ready — shows profile photo + upload UI. */
 const ENABLE_PROFILE_PHOTO_UPLOAD = true;
@@ -95,9 +96,8 @@ export function MyPage() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   // 문의하기 관련 상태
-  const [inquiryEmail, setInquiryEmail] = useState("");
-  const [inquiryType, setInquiryType] = useState("");
-  const [inquiryContent, setInquiryContent] = useState("");
+  const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
+  const [inquiryData, setInquiryData] = useState({ type: 'inquiry', address: '' });
 
   // 칭호 통계 계산
   const userStats = useMemo(() => calculateUserStats(myReviews), [myReviews]);
@@ -520,10 +520,8 @@ export function MyPage() {
                       setIsWithdrawalModalOpen(true);
                     }
                     else if (item.label === "1:1 문의하기") {
-                      setInquiryEmail(user?.email || "");
-                      setInquiryType("");
-                      setInquiryContent("");
-                      setActiveModal("inquiry");
+                      setInquiryData({ type: 'inquiry', address: '' });
+                      setIsInquiryModalOpen(true);
                     }
                     else if (item.label === "제휴 문의") {
                       setActiveModal("partnership");
@@ -789,84 +787,15 @@ export function MyPage() {
                   <button
                     className="mypage__partnership-submit glow-btn"
                     onClick={() => {
-                      setInquiryEmail(user?.email || "");
-                      setInquiryType("제휴 문의");
-                      setInquiryContent(`안녕하세요, 방문Log 팀!\n함께 세입자의 세상을 바꿀 제안을 드리고 싶습니다.\n\n- 업체/성함: \n- 연락처: \n- 제안 내용(자유롭게): \n\n위 내용을 적어 보내주시면 검토 후 2-3일 내로 회신드리겠습니다.`);
-                      setActiveModal("inquiry");
+                      setInquiryData({ type: 'inquiry', address: '제휴 문의' });
+                      setIsInquiryModalOpen(true);
                     }}
                   >
                     비즈니스 제휴 문의하기
                   </button>
                 </div>
               )}
-              {activeModal === "inquiry" && (
-                <div className="mypage__inquiry-container">
-                  <div className="mypage__inquiry-content">
-                    <div className="mypage__inquiry-field">
-                      <label className="mypage__inquiry-label">답변받으실 이메일</label>
-                      <input
-                        type="email"
-                        placeholder="email@example.com"
-                        className="mypage__inquiry-input"
-                        value={inquiryEmail}
-                        onChange={(e) => setInquiryEmail(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="mypage__inquiry-field">
-                      <label className="mypage__inquiry-label">문의 유형</label>
-                      <div className="mypage__inquiry-input-wrap">
-                        <select
-                          className="mypage__inquiry-input mypage__inquiry-select"
-                          value={inquiryType}
-                          onChange={(e) => setInquiryType(e.target.value)}
-                        >
-                          <option value="" disabled>카테고리 선택</option>
-                          <option value="서비스 이용">서비스 이용 문의</option>
-                          <option value="오류 제보">오류/버그 제보</option>
-                          <option value="계정/인증">계정 및 인증 관련</option>
-                          <option value="불건전 게시물">게시물 관련 제보</option>
-                          <option value="기타">기타 문의</option>
-                        </select>
-                        <Icons.ChevronDown size={20} color="#8B95A1" className="mypage__inquiry-select-icon" />
-                      </div>
-                    </div>
-
-                    <div className="mypage__inquiry-field">
-                      <label className="mypage__inquiry-label">문의 내용</label>
-                      <div className="mypage__inquiry-input-wrap">
-                        <textarea
-                          className="mypage__inquiry-textarea"
-                          placeholder="내용을 입력하세요."
-                          maxLength={1000}
-                          value={inquiryContent}
-                          onChange={(e) => setInquiryContent(e.target.value)}
-                        />
-                        <div className="mypage__inquiry-counter">{inquiryContent.length}/1000</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mypage__inquiry-footer">
-                    <button
-                      className="mypage__inquiry-submit"
-                      disabled={!inquiryEmail || !inquiryType || !inquiryContent}
-                      onClick={() => {
-                        const subject = encodeURIComponent(`[방문Log 1:1문의] ${inquiryType}`);
-                        const body = encodeURIComponent(
-                          `답변받으실 이메일: ${inquiryEmail}\n` +
-                          `문의 유형: ${inquiryType}\n\n` +
-                          `-- 문의 내용 --\n${inquiryContent}`
-                        );
-                        window.location.href = `mailto:bangmoonlog.cs@gmail.com?subject=${subject}&body=${body}`;
-                        alert("작성하신 내용으로 메일 앱을 실행합니다. 메일 앱에서 전송 버튼을 눌러주세요!");
-                      }}
-                    >
-                      문의하기
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* InquiryModal은 별도로 관리 */}
               {activeModal === "faq" && (
                 <div className="mypage__faq">
                   <div className="mypage__faq-header">
@@ -960,7 +889,10 @@ export function MyPage() {
                       <h4>찾으시는 내용이 없나요?</h4>
                       <p>1:1 문의를 남겨주시면 24시간 내에 답변해 드릴게요.</p>
                     </div>
-                    <button onClick={() => setActiveModal("inquiry")}>문의하기</button>
+                    <button onClick={() => {
+                      setInquiryData({ type: 'inquiry', address: '' });
+                      setIsInquiryModalOpen(true);
+                    }}>문의하기</button>
                   </div>
                 </div>
               )}
@@ -1803,6 +1735,12 @@ export function MyPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      <InquiryModal
+        isOpen={isInquiryModalOpen}
+        onClose={() => setIsInquiryModalOpen(false)}
+        type={inquiryData.type as 'report' | 'inquiry'}
+        initialAddress={inquiryData.address}
+      />
     </div>
   );
 }

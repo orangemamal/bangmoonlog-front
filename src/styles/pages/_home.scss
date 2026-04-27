@@ -5,6 +5,9 @@
 // 루트 컨테이너
 .page-home {
   position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
 
   .home-map-container {
     width: 100%;
@@ -131,7 +134,7 @@
   background-color: #fff;
   border-radius: 9999px;
   box-shadow: 0 0px 8px rgba(27, 100, 218, 0.2);
-  padding: 4px 4px 4px 20px;
+  padding: 4px 8px 4px 20px;
   display: flex;
   align-items: center;
   z-index: 400;
@@ -140,6 +143,10 @@
 
   &--selected {
     cursor: pointer; // 주소 선택 완료 시 전체 바 클릭 가능
+  }
+
+  &.has-query {
+    padding-right: 4px; // 텍스트 입력 시 검색/삭제 버튼 조화를 위해 축소
   }
 
   &:hover {
@@ -211,6 +218,8 @@
   color: $color-text-main;
   background: transparent;
   font-family: $font-family;
+  width: 0; // flex-grow가 작동하도록 초기 너비 차단
+  min-width: 0;
 
   &::placeholder {
     color: $color-text-disabled;
@@ -220,6 +229,35 @@
     cursor: pointer;
     user-select: none;
     caret-color: transparent;
+  }
+}
+
+.icon-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background-color: #D1D6DB;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  margin-right: 4px;
+
+  &:hover {
+    background-color: #B0B8C1;
+  }
+
+  &:active {
+    transform: scale(0.85);
+    background-color: #8B95A1;
+  }
+
+  svg {
+    display: block;
   }
 }
 
@@ -243,9 +281,12 @@
   background-color: #fff;
   border-radius: 9999px; // 조금 더 각진 토스 스타일로 9999px에서 수정
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  padding: 4px 4px 4px 20px;
+  padding: 4px; // 4px 패딩 내부 수납 원칙 적용
+  padding-left: 16px; // 왼쪽 아이콘 공간 확보
+  padding-right: 8px; // 오른쪽 공간 확보
   display: flex;
   align-items: center;
+  overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid #E5E8EB;
 
@@ -262,6 +303,43 @@
     justify-content: center;
     align-items: center;
     margin-right: 4px;
+  }
+
+  .ai-search-entry {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 34px; // 사이즈 축소
+    padding: 0 12px; // 내부 여백 축소
+    background: linear-gradient(135deg, #F5F9FF 0%, #E8F3FF 100%);
+    border: 1px solid #D1E4FF;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(49, 130, 246, 0.05);
+
+    span {
+      font-size: 12px; // 폰트 사이즈 축소
+      font-weight: 700;
+      background: linear-gradient(135deg, #3182F6 0%, #8B5CF6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(49, 130, 246, 0.15);
+      border-color: #3182F6;
+    }
+
+    &:active {
+      transform: scale(0.95);
+    }
   }
 }
 
@@ -496,7 +574,7 @@
 .home-location-btn {
   @extend %fab-base;
   position: fixed;
-  bottom: calc(72px + 32px); // 하단 네비게이션(72px) + 여백
+  bottom: calc(66px + 76px + 16px); // 하단 네비게이션(66px) + 바텀시트 PEEK(76px) + 여백
   right: 16px;
   width: 40px;
   height: 40px;
@@ -514,7 +592,7 @@
 .home-favorites-btn {
   @extend %fab-base;
   position: fixed;
-  bottom: calc(72px + 32px + 48px); // 내 위치 버튼(40px) + 여백(8px)
+  bottom: calc(66px + 76px + 16px + 48px); // 내 위치 버튼(40px) + 여백(8px)
   right: 16px;
   width: 40px;
   height: 40px;
@@ -532,7 +610,7 @@
 .home-panorama-btn {
   @extend %fab-base;
   position: fixed;
-  bottom: calc(72px + 32px + 48px + 48px); // 찜하기 버튼 위
+  bottom: calc(66px + 76px + 16px + 48px + 48px); // 찜하기 버튼 위
   right: 16px;
   width: 40px;
   height: 40px;
@@ -708,15 +786,19 @@
   padding: 0;
   width: 280px;
   max-width: 280px;
+  height: 0 !important;
+  overflow: visible !important;
   box-sizing: border-box;
   display: block;
-  pointer-events: none; // 지도 드래그/스크롤 방해 금지
+  pointer-events: none !important; // 지도 드래그/스크롤 방해 금지
 
   &.marker {
-    // Naver Maps의 InfoWindow 기본 위치를 따르도록 transform 제거
+    transform: translate(0, -100%);
   }
 
-  &.none-marker {}
+  &.none-marker {
+    transform: translate(0, -100%);
+  }
 }
 
 .iw-card {
@@ -729,6 +811,7 @@
   min-width: 240px;
   font-family: 'Toss Product Sans', sans-serif;
   position: relative;
+  transform: translate(0, -100%);
 }
 
 .iw-title {
@@ -2981,15 +3064,13 @@
 }
 
 // ── Info Window Loading CSS ────────────────────────────────
-.iw-container.loading {
-  .iw-loader {
-    width: 24px;
-    height: 24px;
-    border: 3px solid #F2F4F6;
-    border-top: 3px solid #3182F6;
-    border-radius: 50%;
-    animation: iwSpin 1s linear infinite;
-  }
+.iw-loader {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #F2F4F6;
+  border-top: 3px solid #3182F6;
+  border-radius: 50%;
+  animation: iwSpin 1s linear infinite;
 }
 
 @keyframes iwSpin {

@@ -21,6 +21,7 @@
 @use 'components/review-detail';
 
 // 4. 페이지
+@use 'components/home/discovery-bottom-sheet';
 @use 'components/home/welcome-modal';
 @use 'pages/home';
 @use 'pages/feed';

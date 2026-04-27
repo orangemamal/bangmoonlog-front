@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createRoot } from "react-dom/client";
 import { Camera, Video, PlayCircle, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag, Crosshair } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
@@ -33,11 +34,16 @@ import { useAccessControl } from "../hooks/useAccessControl";
 import { ReviewDetail } from "../components/ReviewDetail";
 import { deleteReview } from "../services/reviewService";
 import { WelcomeModal } from "../components/home/WelcomeModal";
+import { AISearchModal } from "../components/home/AISearchModal";
+import { InquiryModal } from "../components/common/InquiryModal";
+import { DiscoveryBottomSheet } from "../components/home/DiscoveryBottomSheet";
+import { MarkerInfoWindow } from "../components/home/MarkerInfoWindow";
+import { MarkerLoadingWindow } from "../components/home/MarkerLoadingWindow";
 import { normalizeAddressDetail, formatAddressDetail, normalizeBaseAddress } from "../utils/addressUtils";
 import { calculateDistance } from "../utils/geoUtils";
 import { Toast } from "../components/common/Toast";
 import LogoImg from "../assets/images/favicon.svg";
-import { analyzeReviewWithAI } from "../utils/gemini";
+import { analyzeReviewWithAI, askGemini } from "../utils/gemini";
 import { calculateUserStats, getMyBadges } from "../utils/BadgeLogic";
 
 interface Review {
@@ -119,15 +125,17 @@ const checkBuildingRegistry = async (sigunguCd: string, bjdongCd: string, bun: s
     const res = await fetch(`/api/getBuildingInfo?sigunguCd=${sigunguCd}&bjdongCd=${bjdongCd}&bun=${bun}&ji=${ji}`);
     if (!res.ok) return null;
 
-    // JSON 응답인지 확인 (HTML 에러 페이지가 올 경우 대비)
     const contentType = res.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
-      console.warn("Building registry API returned non-JSON response (maybe 404 or not deployed yet)");
       return null;
     }
 
     const data = await res.json();
-    return data.isResidential; // true: 주거용, false: 비주거용, null: 데이터 없음/오류
+    // [개선] 주거 여부와 함께 주용도 명칭을 함께 반환
+    return {
+      isResidential: data.isResidential,
+      purpose: data.buildings?.[0]?.purpose || null
+    };
   } catch (e) {
     console.error("Building registry check failed:", e);
     return null;
@@ -270,89 +278,15 @@ const uploadMediaToStorage = (
     );
   });
 };
-interface InfoWindowParams {
-  address: string;
-  lat: number;
-  lng: number;
-  isBookmarked: boolean;
-  isResidential: boolean;
-  reviewCount: number;
-  avgRating: number;
-  hasWritten: boolean;
-}
 
-const getLoadingMarkup = () => `
-  <div class="iw-container marker loading">
-    <div class="iw-card" style="padding:24px 20px; display:flex; flex-direction:column; align-items:center; gap:12px; min-width:180px;">
-      <div class="iw-loader"></div>
-      <span style="font-size:13px; color:#8B95A1; font-weight:600; text-align:center; line-height:1.4;">건축물대장 공공데이터로<br/>실거주용 건물이 맞는지 확인 중...</span>
-    </div>
-  </div>
-`;
-
-const getInfoWindowMarkup = ({ address, lat, lng, isBookmarked, isResidential, reviewCount, avgRating, hasWritten }: InfoWindowParams) => {
-  const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
-  const disabledAttr = hasWritten ? "disabled style='background:#E5E8EB; color:#A8AFB5; cursor:not-allowed; border:none;'" : "";
-
-  return `
-    <div class="iw-container marker">
-      <div class="iw-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <div class="iw-title" style="margin-bottom:0;">이 공간의 방문록</div>
-          ${isResidential ? `
-          <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${address}', ${lat}, ${lng})">
-            <svg width="24" height="24" viewBox="0 0 24 24" 
-              fill="${isBookmarked ? '#8B5CF6' : 'none'}" 
-              stroke="${isBookmarked ? '#8B5CF6' : '#A8AFB5'}" 
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-            </svg>
-          </button>` : ''}
-        </div>
-        <div class="iw-address"><span>📍</span><span>${address}</span></div>
-        
-        ${reviewCount > 0 ? `
-          <div class="iw-stats">
-            <div class="iw-stat-item"><div class="label">리뷰 평점</div><div class="value-wrap"><span class="star">★</span><span class="value">${Number(avgRating).toFixed(2)}</span></div></div>
-            <div class="iw-divider"></div>
-            <div class="iw-stat-item"><div class="label">총 방문록</div><div class="value-wrap"><span class="value value--blue">${reviewCount}건</span></div></div>
-          </div>
-        ` : `
-          <div style="text-align:center; padding:16px; background:#F9FAFB; border-radius:12px; margin-bottom:16px; font-size:13px; color:#8B95A1;">
-            아직 작성된 방문록이 없어요. 👟
-          </div>
-        `}
-        
-        ${isResidential && reviewCount > 0 ? `<div style="margin-bottom:12px; font-size:11px; color:#3182F6; font-weight:600; display:flex; align-items:center; gap:4px;">
-          <span>🏢</span> 상세 층/호수별 리뷰 정보 포함
-        </div>` : ''}
-
-        <div class="iw-button-group">
-          ${reviewCount > 0 ? `<button class="iw-button iw-button--read" onclick="window.__openReadList('${address}')">방문록 보기</button>` : ''}
-          ${isResidential ? `<button class="iw-button iw-button--write" ${disabledAttr} style="${reviewCount === 0 ? 'width:100%;' : ''}" onclick="window.__openWriteSheet('${address}', ${lat}, ${lng})">${buttonText}</button>` : ''}
-        </div>
-        
-        ${!isResidential ? `<div style="margin-top:12px; padding:10px; background:#FFF0F0; border-radius:8px; display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
-             <div style="display:flex; gap:6px; align-items:flex-start;">
-               <span style="font-size:14px;">🏠</span>
-               <p style="margin:0; font-size:11px; color:#F04452; font-weight:600; line-height:1.4;">거주용 건물이 아니므로<br/>방문록 작성이 제한됩니다.</p>
-             </div>
-             <button onclick="window.open('/support?type=report&addr=${encodeURIComponent(address)}', '_blank')" 
-               style="margin-top:6px; background:none; border:none; color:#8B95A1; font-size:10px; text-decoration:underline; cursor:pointer; padding:0;">
-               거주용 건물이 맞는데 오류가 나나요?
-             </button>
-           </div>` : ''}
-        <div class="iw-arrow"></div>
-      </div>
-    </div>
-  `;
-};
 
 export function Home() {
   console.log("🏠 [Home] Component Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isLoggedIn, user } = useAuth();
+  const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
+  const [inquiryData, setInquiryData] = useState<{ type: string; address?: string }>({ type: 'report' });
 
   // 콜백 내 최신 상태 참조용 Ref
   const isLoggedInRef = useRef(isLoggedIn);
@@ -367,33 +301,73 @@ export function Home() {
   // [신규] 오판단 제보 전역 함수 등록
   useEffect(() => {
     window.__reportInaccuracy = async (addr: string) => {
-      try {
-        await addDoc(collection(db, "reports"), {
-          address: addr,
-          reporterEmail: userRef.current?.email || "비회원",
-          reporterId: userRef.current?.id || "anonymous",
-          status: "pending",
-          createdAt: serverTimestamp()
-        });
-        alert("제보가 성공적으로 접수되었습니다. 관리자 검토 후 24시간 내에 반영하겠습니다.");
-      } catch (e) {
-        console.error("Report failed:", e);
-        alert("제보 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-      }
+      setInquiryData({ type: 'report', address: addr });
+      setIsInquiryModalOpen(true);
     };
   }, []);
+
+  // InfoWindow 전용 React Root 및 컨테이너
+  const infoWindowRootRef = useRef<any>(null);
+  const infoWindowContainerRef = useRef<HTMLDivElement>(document.createElement('div'));
+
+  const adjustInfoWindowWrapper = useCallback(() => {
+    if (!infoWindowInstance.current) return;
+    const update = () => {
+      const container = infoWindowInstance.current.getContentElement();
+      if (container && container.parentElement) {
+        const parent = container.parentElement;
+        parent.style.setProperty('transform', 'translate(0, -100%)', 'important');
+        parent.style.setProperty('height', '0', 'important');
+        parent.style.setProperty('overflow', 'visible', 'important');
+        parent.style.setProperty('pointer-events', 'none', 'important');
+
+        if (parent.parentElement) {
+          const grandParent = parent.parentElement;
+          grandParent.style.setProperty('transform', 'translate(0, -100%)', 'important');
+          grandParent.style.setProperty('height', '0', 'important');
+          grandParent.style.setProperty('overflow', 'visible', 'important');
+          grandParent.style.setProperty('pointer-events', 'none', 'important');
+        }
+      }
+    };
+    update();
+    setTimeout(update, 10);
+    setTimeout(update, 100);
+  }, []);
+
+  const renderInfoWindow = useCallback((component: React.ReactNode, isNoneMarker: boolean = false) => {
+    const container = document.createElement('div');
+    // [중요] React가 렌더링되기 전에 네이버 지도가 위치를 계산하므로, 
+    // 클래스를 즉시 부여하여 너비(280px)와 transform(-50%, -100%)이 적용되게 함.
+    container.className = `iw-container ${isNoneMarker ? 'none-marker' : 'marker'}`;
+    container.style.width = '280px';
+    container.style.display = 'block';
+    container.style.setProperty('height', '0', 'important');
+    container.style.setProperty('overflow', 'visible', 'important');
+    container.style.setProperty('pointer-events', 'none', 'important');
+
+    const root = createRoot(container);
+    root.render(component);
+    return container;
+  }, []);
+
   const [reviews, setReviews] = useState<Review[]>([]);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
   const { addRecentLog } = useRecentLogs();
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [selectedCoord, setSelectedCoord] = useState<{ lat: number, lng: number } | null>(null);
+  const [currentUserLocation, setCurrentUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [isAISearchOpen, setIsAISearchOpen] = useState(false);
+  const [aiQuery, setAiQuery] = useState("");
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [lastAiResponse, setLastAiResponse] = useState<{ address: string; reason: string; lat: number; lng: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddressSelected, setIsAddressSelected] = useState(false);
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [isPostcodeOpen, setPostcodeOpen] = useState(false);
   const [isReadListOpen, setReadListOpen] = useState(false);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
   const [ratings, setRatings] = useState({ light: 3, noise: 3, water: 3 });
   const [addressDetail, setAddressDetail] = useState("");
@@ -419,7 +393,7 @@ export function Home() {
   const allMarkersRef = useRef<any[]>([]);
 
   // [신규] 건축물 확인 결과 캐시 (성능 최적화용)
-  const buildingCacheRef = useRef<Record<string, boolean>>({});
+  const buildingCacheRef = useRef<Record<string, { isResidential: boolean; purpose: string | null }>>({});
 
   // 검색 기록 상태
   const [isLocating, setIsLocating] = useState(false);
@@ -444,6 +418,7 @@ export function Home() {
   const [experienceType, setExperienceType] = useState("단순 방문");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favoritedAddresses, setFavoritedAddresses] = useState<Set<string>>(new Set());
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const favoritedAddressesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     favoritedAddressesRef.current = favoritedAddresses;
@@ -540,15 +515,17 @@ export function Home() {
     mapInstance.current.panTo(latLng, { duration: 300, easing: "linear" });
 
     infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-    infoWindowInstance.current.setContent(getLoadingMarkup());
-    infoWindowInstance.current.open(mapInstance.current, latLng);
+    infoWindowInstance.current.setContent(renderInfoWindow(<MarkerLoadingWindow />));
+    infoWindowInstance.current.open(mapInstance.current, latLng); adjustInfoWindowWrapper();
 
     const address = normalizeBaseAddress(loc.address);
 
     if (buildingCacheRef.current[address] !== undefined) {
-      const isRes = buildingCacheRef.current[address];
+      const cache = buildingCacheRef.current[address];
+      const isRes = cache.isResidential;
+      const purpose = cache.purpose;
       const isBookmarked = favoritedAddressesRef.current.has(address);
-      
+
       // [핵심 수정] loc.count 대신 실시간 reviews 상태에서 직접 집계 (찜 마커는 count:1 하드코딩 문제 해소)
       const hasWritten = isLoggedIn && !!user?.id && reviews.some(r =>
         (r.authorId === user.id) && normalizeBaseAddress(r.address || (r as any).location) === address
@@ -557,16 +534,30 @@ export function Home() {
       const reviewCountCache = targetReviewsCache.length;
       const avgRatingCache = Number(calculateAverageRating(targetReviewsCache));
 
-      infoWindowInstance.current.setContent(getInfoWindowMarkup({
-        address, lat: loc.lat, lng: loc.lng, isBookmarked, isResidential: isRes,
-        reviewCount: reviewCountCache, avgRating: avgRatingCache, hasWritten
-      }));
-      infoWindowInstance.current.open(mapInstance.current, latLng);
+      infoWindowInstance.current.setContent(renderInfoWindow(
+        <MarkerInfoWindow
+          address={address}
+          lat={loc.lat}
+          lng={loc.lng}
+          isBookmarked={isBookmarked}
+          isResidential={isRes}
+          reviewCount={reviewCountCache}
+          avgRating={avgRatingCache}
+          hasWritten={hasWritten}
+          buildingPurpose={purpose}
+          onToggleBookmark={window.__toggleBookmark}
+          onOpenReadList={window.__openReadList}
+          onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+          onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+        />
+      ));
+      infoWindowInstance.current.open(mapInstance.current, latLng); adjustInfoWindowWrapper();
       return;
     }
 
     window.naver.maps.Service.reverseGeocode({ coords: latLng, orders: "roadaddr,addr" }, async (status: any, res: any) => {
       let isRes = checkIsResidential(address);
+      let purpose: string | null = null;
       if (status === window.naver.maps.Service.Status.OK) {
         const addrRes = res.v2.results.find((r: any) => r.name === 'addr' || r.name === 'roadaddr');
         const bName = (addrRes && addrRes.land && addrRes.land.name) ? addrRes.land.name : "";
@@ -577,13 +568,16 @@ export function Home() {
           const land = addrResult.land;
           if (code && land?.number1) {
             const apiRes = await checkBuildingRegistry(code.substring(0, 5), code.substring(5, 10), land.number1, land.number2);
-            if (apiRes !== null) isRes = apiRes;
+            if (apiRes !== null) {
+              isRes = apiRes.isResidential;
+              purpose = apiRes.purpose;
+            }
           }
         }
       }
-      buildingCacheRef.current[address] = isRes;
+      buildingCacheRef.current[address] = { isResidential: isRes, purpose };
       const isBookmarked = favoritedAddressesRef.current.has(address);
-      
+
       // [핵심 수정] loc.count 대신 실시간 reviews 상태에서 직접 집계 (모든 경로 통일)
       const hasWritten = isLoggedIn && !!user?.id && reviews.some(r =>
         (r.authorId === user.id) && normalizeBaseAddress(r.address || (r as any).location) === address
@@ -592,10 +586,24 @@ export function Home() {
       const reviewCountGeo = targetReviewsGeo.length;
       const avgRatingGeo = Number(calculateAverageRating(targetReviewsGeo));
 
-      infoWindowInstance.current.setContent(getInfoWindowMarkup({
-        address, lat: loc.lat, lng: loc.lng, isBookmarked, isResidential: isRes,
-        reviewCount: reviewCountGeo, avgRating: avgRatingGeo, hasWritten
-      }));
+      infoWindowInstance.current.setContent(renderInfoWindow(
+        <MarkerInfoWindow
+          address={address}
+          lat={loc.lat}
+          lng={loc.lng}
+          isBookmarked={isBookmarked}
+          isResidential={isRes}
+          reviewCount={reviewCountGeo}
+          avgRating={avgRatingGeo}
+          hasWritten={hasWritten}
+          buildingPurpose={purpose}
+          onToggleBookmark={window.__toggleBookmark}
+          onOpenReadList={window.__openReadList}
+          onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+          onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+        />
+      ));
+      infoWindowInstance.current.open(mapInstance.current, latLng); adjustInfoWindowWrapper();
     });
   };
 
@@ -695,10 +703,15 @@ export function Home() {
         });
       }
 
+      if (currentCallId !== refreshCountRef.current) return;
+
       allMarkersRef.current.forEach(m => m.setMap(null));
       allMarkersRef.current = [];
       if (clusterRef.current) { clusterRef.current.setMap(null); clusterRef.current = null; }
       if ((window as any).visitCluster) { (window as any).visitCluster.setMap(null); (window as any).visitCluster = null; }
+
+      // 다시 한번 확인 (성능 및 안정성)
+      if (currentCallId !== refreshCountRef.current) return;
 
       const createMarkers = (data: any[]) => {
         return data.map(loc => {
@@ -781,6 +794,9 @@ export function Home() {
         }
       });
 
+      // 최종 렌더링 직전 ID 확인
+      if (currentCallId !== refreshCountRef.current) return;
+
       clusterRef.current = new window.MarkerClustering({ ...clusterOptions(true), markers: bookmarkMarkers });
 
       if (!showFavoritesOnly) {
@@ -788,6 +804,7 @@ export function Home() {
       }
 
       setTimeout(() => {
+        if (currentCallId !== refreshCountRef.current) return;
         if (clusterRef.current) clusterRef.current._redraw();
         if ((window as any).visitCluster) (window as any).visitCluster._redraw();
       }, 100);
@@ -799,8 +816,12 @@ export function Home() {
 
   // [추가] 찜 필터 토글 또는 리뷰 데이터 변경 시 마커 즉시 갱신
   useEffect(() => {
+    // 지도가 없거나 로딩 중이면 대기
+    if (!mapInstance.current) return;
+
+    console.log("🔄 [Refresh] 마커 업데이트 트리거 (Reason: Data/Auth/Filter changed)");
     refreshMarkers();
-  }, [showFavoritesOnly, reviews, refreshMarkers]);
+  }, [showFavoritesOnly, reviews, isLoggedIn, isLoadingReviews, refreshMarkers]);
 
   const showAlert = useCallback((title: string, desc?: string, icon: string = "✅", onConfirm?: () => void) => {
     setModalConfig({ isOpen: true, title, desc, icon, onConfirm, confirmText: "확인" });
@@ -867,6 +888,104 @@ export function Home() {
     console.log("🗑️ [Detail Delete] 상세 보기에서 삭제를 요청했습니다:", id);
     handleDeleteReview(id);
   }, [handleDeleteReview]);
+
+  const handleAISearch = async (directQuery?: string) => {
+    const finalQuery = directQuery || aiQuery;
+    if (!finalQuery.trim() || isAiProcessing) return;
+
+    setIsAiProcessing(true);
+    setLastAiResponse(null);
+
+    try {
+      // 주소별로 리뷰를 그룹화하여 유니크한 건물 데이터 생성
+      const addressGroups: Record<string, any> = {};
+      reviews.forEach(r => {
+        const addr = r.address || (r as any).location;
+        if (!addr) return;
+        if (!addressGroups[addr]) {
+          addressGroups[addr] = {
+            address: addr,
+            lat: r.lat,
+            lng: r.lng,
+            tags: new Set(),
+            contents: []
+          };
+        }
+        if (r.tags) r.tags.forEach((t: string) => addressGroups[addr].tags.add(t));
+        addressGroups[addr].contents.push(r.content.substring(0, 30));
+      });
+
+      const reviewSummary = Object.values(addressGroups).map((g: any) => ({
+        address: g.address,
+        lat: g.lat,
+        lng: g.lng,
+        tags: Array.from(g.tags),
+        content: g.contents.join(" | ")
+      }));
+
+      const prompt = `
+        당신은 부동산 방문록 서비스 '방문Log'의 AI 에이전트입니다.
+        사용자의 요구사항에 가장 잘 맞는 건물을 기존 방문록 데이터를 기반으로 추천해주세요.
+
+        사용자 질문: "${finalQuery}"
+
+        전체 방문록 데이터 요약:
+        ${JSON.stringify(reviewSummary.slice(0, 50))} 
+
+        작업:
+        1. 사용자가 원하는 핵심 가치(예: 집주인 성격, 조용함, 채광 등)를 정확히 분석하세요.
+        2. 우리 서비스의 방문록 데이터 중 해당 조건을 가장 잘 만족하는 건물을 1순위로 선정하세요.
+        3. 선정 이유를 작성할 때 "방문록에 따르면 ~라는 의견이 있어 추천드려요" 처럼 데이터에 근거해 구체적으로 설명하세요.
+        4. 반드시 아래 JSON 형식으로만 답변하세요:
+        {
+          "address": "정확한 주소",
+          "reason": "풍부한 추천 이유 (최소 2문장 이상, 친절한 대화체)",
+          "lat": 37.xxx,
+          "lng": 127.xxx
+        }
+        데이터가 부족하면 address를 "none"으로 하고 이유를 상세히 적어주세요.
+      `;
+
+      const resultText = await askGemini(prompt);
+
+      const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        if (resultText.length > 0 && resultText.length < 200) {
+          setLastAiResponse({ address: "none", reason: resultText, lat: 0, lng: 0 });
+          return;
+        }
+        throw new Error("AI 응답 형식이 올바르지 않습니다.");
+      }
+
+      let recommendation;
+      try {
+        recommendation = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        console.error("❌ [AI Search] JSON 파싱 실패:", parseError, "Raw 응답:", resultText);
+        throw new Error("AI 추천 결과를 분석하는 중 오류가 발생했습니다.");
+      }
+
+      setLastAiResponse(recommendation);
+
+    } catch (e) {
+      console.error("AI Search Error:", e);
+      showAlert("AI 검색 오류", "분석 중 문제가 발생했습니다. 다시 시도해 주세요.", "⚠️");
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  const handleGoToMap = (lat: number, lng: number, address: string, reason: string) => {
+    setIsAISearchOpen(false);
+    setAiQuery("");
+    setLastAiResponse(null);
+
+    if (mapInstance.current && lat && lng) {
+      const targetPos = new window.naver.maps.LatLng(lat, lng);
+      mapInstance.current.morph(targetPos, 18);
+      showAlert("AI 추천 완료", `${reason}\n\n📍 ${address}`, "✨");
+    }
+  };
 
   const verifyLocation = useCallback((targetLat?: number, targetLng?: number) => {
     if (!navigator.geolocation) return;
@@ -994,18 +1113,31 @@ export function Home() {
         const reviewCount = targetReviews.length;
         const avgRating = Number(calculateAverageRating(targetReviews));
 
+        // [추가] 찜 목록 등에서 이동 시에도 건축물 용도 정보 확인 시도
+        let bPurpose: string | null = null;
+        if (buildingCacheRef.current[normalizedFull]) {
+          bPurpose = buildingCacheRef.current[normalizedFull].purpose;
+        }
+
         infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-        infoWindowInstance.current.setContent(getInfoWindowMarkup({
-          address: addr,
-          lat: Number(lat),
-          lng: Number(lng),
-          isBookmarked,
-          isResidential: isRes,
-          reviewCount,
-          avgRating,
-          hasWritten
-        }));
-        infoWindowInstance.current.open(mapInstance.current, targetPos);
+        infoWindowInstance.current.setContent(renderInfoWindow(
+          <MarkerInfoWindow
+            address={addr}
+            lat={Number(lat)}
+            lng={Number(lng)}
+            isBookmarked={isBookmarked}
+            isResidential={isRes}
+            reviewCount={reviewCount}
+            avgRating={avgRating}
+            hasWritten={hasWritten}
+            buildingPurpose={bPurpose}
+            onToggleBookmark={window.__toggleBookmark}
+            onOpenReadList={window.__openReadList}
+            onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+            onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+          />
+        ));
+        infoWindowInstance.current.open(mapInstance.current, targetPos); adjustInfoWindowWrapper();
 
         // 파라미터 정리
         const nextParams = new URLSearchParams();
@@ -1318,6 +1450,8 @@ export function Home() {
         watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
           const { latitude: userLat, longitude: userLng, accuracy } = pos.coords;
           const userPos = new window.naver.maps.LatLng(userLat, userLng);
+          
+          setCurrentUserLocation({ lat: userLat, lng: userLng });
 
           // 초기 로딩 시 중심 이동 (한 번만)
           if (!isInitialNavRef.current && !userMarkerRef.current) {
@@ -1408,12 +1542,10 @@ export function Home() {
         }
 
         // 줌 레벨 19 이상일 때만 주소 체크 및 모달 노출 로직 실행
-        mapInstance.current.panTo(clickedPos, { duration: 300, easing: "linear" });
-
         // [최적화] 즉시 팝업 노출 (낙관적 UX)
         infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-        infoWindowInstance.current.setContent(getLoadingMarkup());
-        infoWindowInstance.current.open(mapInstance.current, clickedPos);
+        infoWindowInstance.current.setContent(renderInfoWindow(<MarkerLoadingWindow />));
+        infoWindowInstance.current.open(mapInstance.current, clickedPos); adjustInfoWindowWrapper();
 
         if (!window.naver.maps.Service) return;
 
@@ -1442,6 +1574,7 @@ export function Home() {
           let isResidential = !isStrictlyBlocked;
 
           // 2차: 건축물대장 API를 통한 정밀 체크
+          let buildingPurpose: string | null = null;
           const addrResult = res.v2.results.find((r: any) => r.name === 'addr');
           if (addrResult && isKorea) {
             const code = addrResult.code?.id;
@@ -1453,10 +1586,12 @@ export function Home() {
               const sigunguCd = code.substring(0, 5);
               const bjdongCd = code.substring(5, 10);
               const apiResult = await checkBuildingRegistry(sigunguCd, bjdongCd, bun, ji);
-              // ⚠️ [유도리 개편 핵심] API가 주거용(true)이라 하면 무조건 살린다. 
-              // API가 비주거용(false)이라 해도, 앞서 블랙리스트에 안 걸렸으면 그냥 넘긴다 (isResidential 유지).
-              if (apiResult === true) {
-                isResidential = true;
+              if (apiResult !== null) {
+                buildingPurpose = apiResult.purpose;
+                // ⚠️ [유도리 개편 핵심] API가 주거용이라 하면 무조건 살린다. 
+                if (apiResult.isResidential === true) {
+                  isResidential = true;
+                }
               }
             }
           }
@@ -1487,17 +1622,24 @@ export function Home() {
               }
 
               infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-              infoWindowInstance.current.setContent(getInfoWindowMarkup({
-                address,
-                lat: existingLoc.lat,
-                lng: existingLoc.lng,
-                isBookmarked,
-                isResidential,
-                reviewCount: liveCount,
-                avgRating: liveRating,
-                hasWritten
-              }));
-              infoWindowInstance.current.open(mapInstance.current, finalPos);
+              infoWindowInstance.current.setContent(renderInfoWindow(
+                <MarkerInfoWindow
+                  address={address}
+                  lat={existingLoc.lat}
+                  lng={existingLoc.lng}
+                  isBookmarked={isBookmarked}
+                  isResidential={isResidential}
+                  reviewCount={liveCount}
+                  avgRating={liveRating}
+                  hasWritten={hasWritten}
+                  buildingPurpose={buildingPurpose}
+                  onToggleBookmark={window.__toggleBookmark}
+                  onOpenReadList={window.__openReadList}
+                  onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+                  onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+                />
+              ));
+              infoWindowInstance.current.open(mapInstance.current, finalPos); adjustInfoWindowWrapper();
               mapInstance.current.panTo(finalPos, { duration: 300, easing: "linear" });
             };
             checkBookmark();
@@ -1517,35 +1659,27 @@ export function Home() {
               const isBookmarked = favoritedAddressesRef.current.has(stdAddr);
 
               infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-              infoWindowInstance.current.setContent(`
-                <div class="iw-container none-marker">
-                  <div class="iw-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                      <div class="iw-title" style="margin-bottom:0;">방문록 쓰기</div>
-                      ${isResidential ? `
-                      <button class="iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}" onclick="window.__toggleBookmark('${address}', ${finalPos.lat()}, ${finalPos.lng()})">
-                        <svg width="24" height="24" viewBox="0 0 24 24" 
-                          fill="${isBookmarked ? '#8B5CF6' : 'none'}" 
-                          stroke="${isBookmarked ? '#8B5CF6' : '#A8AFB5'}" 
-                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                        </svg>
-                      </button>` : ''}
-                    </div>
-                    <div class="iw-address"><span>📍</span><span>${address}</span></div>
-                    ${isKorea ? (
-                  isResidential
-                    ? `<div class="iw-button-group"><button class="iw-button iw-button--write" onclick="window.__openWriteSheet('${address}', ${finalPos.lat()}, ${finalPos.lng()})">방문록 쓰기</button></div>`
-                    : `<div style="background:#FFF0F0; padding:12px; border-radius:8px; display:flex; gap:6px; align-items:flex-start;">
-                           <span style="font-size:16px;">🏠</span>
-                           <p style="margin:0; font-size:12px; color:#F04452; font-weight:600; line-height:1.5;">거주용 건물이 아니어서<br/>방문록을 작성할 수 없습니다.</p>
-                         </div>`
-                ) : ''}
-                    <div class="iw-arrow"></div>
-                  </div>
-                </div>
-              `);
-              infoWindowInstance.current.open(mapInstance.current, finalPos);
+              infoWindowInstance.current.setContent(renderInfoWindow(
+                <MarkerInfoWindow
+                  title="방문록 쓰기"
+                  address={address}
+                  lat={finalPos.lat()}
+                  lng={finalPos.lng()}
+                  isBookmarked={isBookmarked}
+                  isResidential={isResidential && isKorea}
+                  reviewCount={0}
+                  avgRating={0}
+                  hasWritten={false}
+                  buildingPurpose={buildingPurpose}
+                  onToggleBookmark={window.__toggleBookmark}
+                  onOpenReadList={window.__openReadList}
+
+                  onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+                  onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+                />,
+                true
+              ));
+              infoWindowInstance.current.open(mapInstance.current, finalPos); adjustInfoWindowWrapper();
               mapInstance.current.panTo(finalPos, { duration: 300, easing: "linear" });
             };
             checkBookmarkNone();
@@ -1648,7 +1782,7 @@ export function Home() {
       setAiStep('passed');
       await new Promise(resolve => setTimeout(resolve, 1500));
       // 로딩 모달 닫기
-      setAiStep('idle'); 
+      setAiStep('idle');
 
       // 0. 매물 단위 중복 체크 (사용자 의견에 따라 엄격한 제한 대신 안내 후 허용으로 변경 가능)
       /* 
@@ -1894,10 +2028,47 @@ export function Home() {
 
 
 
+  // [AI 에이전트 전용] 사용자 컨텍스트 데이터 (칭호, 작성 리뷰 등)
+  const userReviews = useMemo(() => {
+    try {
+      return Array.isArray(reviews) ? reviews.filter(r => r && r.authorId === user?.id) : [];
+    } catch (e) {
+      console.error("userReviews calculation error:", e);
+      return [];
+    }
+  }, [reviews, user?.id]);
+
+  const userStats = useMemo(() => {
+    try {
+      return calculateUserStats(userReviews);
+    } catch (e) {
+      console.error("userStats calculation error:", e);
+      return { totalCount: 0, totalPhotos: 0, longReviewCount: 0, firstReviewCount: 0, totalLikes: 0, perfectScoreCount: 0, strictScoreCount: 0, regionCounts: {} };
+    }
+  }, [userReviews]);
+
+  const userBadges = useMemo(() => {
+    try {
+      return getMyBadges(userStats);
+    } catch (e) {
+      console.error("userBadges calculation error:", e);
+      return [];
+    }
+  }, [userStats]);
+
   return (
     <div className="page-home">
+      <InquiryModal
+        isOpen={isInquiryModalOpen}
+        onClose={() => setIsInquiryModalOpen(false)}
+        type={inquiryData.type as 'report' | 'inquiry'}
+        initialAddress={inquiryData.address}
+      />
       <div className="home-search-bar-container">
-        <div className={`home-search-bar ${isHistoryOpen ? 'focused' : ''}`} style={{ position: 'relative', zIndex: isHistoryOpen ? 2202 : 400 }}>
+        <div
+          className={`home-search-bar ${isHistoryOpen ? 'focused' : ''} ${searchQuery.length > 0 ? 'has-query' : ''}`}
+          style={{ position: 'relative', zIndex: isHistoryOpen ? 2202 : 400 }}
+        >
           {!searchQuery && <span className="home-search-icon"><Search size={24} color="#8B95A1" /></span>}
           <input
             type="text"
@@ -1919,8 +2090,21 @@ export function Home() {
             placeholder="어떤 집의 방문Log 궁금하세요?"
             className="home-search-input"
           />
+          {searchQuery.length === 0 && (
+            <div
+              className="ai-search-entry"
+              onClick={() => setIsAISearchOpen(true)}
+            >
+              <motion.span
+                animate={{ opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                ✨ AI 검색
+              </motion.span>
+            </div>
+          )}
           {searchQuery.length > 0 && (
-            <div className="home-search-actions" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div className="home-search-actions" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <button
                 className="icon-clear-btn"
                 onMouseDown={(e) => {
@@ -1935,8 +2119,7 @@ export function Home() {
                   setIsAddressSelected(false);
                 }}
               >
-                {/* 순수 SVG로 그 정해진 원 안을 최대한 꽉 채우는 큼직한 X 구현 */}
-                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg width="8" height="8" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M2 2L10 10M10 2L2 10" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
@@ -1954,7 +2137,20 @@ export function Home() {
           )}
         </div>
 
-        {/* 최근 검색어 모달 */}
+        {/* --- AI 검색 에이전트 모달 (사람인 스타일) --- */}
+        <AISearchModal
+          isOpen={isAISearchOpen}
+          onClose={() => setIsAISearchOpen(false)}
+          aiQuery={aiQuery}
+          setAiQuery={setAiQuery}
+          isAiProcessing={isAiProcessing}
+          lastAiResponse={lastAiResponse}
+          onSearch={handleAISearch}
+          onGoToMap={handleGoToMap}
+          onOpenReadList={(addr) => window.__openReadList(addr)}
+          userReviews={userReviews}
+          userBadges={userBadges}
+        />
         <AnimatePresence>
           {isHistoryOpen && (
             <>
@@ -2199,10 +2395,10 @@ export function Home() {
                   window.naver.maps.Service.reverseGeocode({ coords: p, orders: "roadaddr,addr" }, async (statusRev: any, resRev: any) => {
                     let standardAddress = full;
 
-                    // [최적화] 검색 위치로 이동 즉시 로딩 팝업 노출
+                    // [최적화] 즉시 팝업 노출 (낙관적 UX)
                     infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-                    infoWindowInstance.current.setContent(getLoadingMarkup());
-                    infoWindowInstance.current.open(mapInstance.current, p);
+                    infoWindowInstance.current.setContent(renderInfoWindow(<MarkerLoadingWindow />));
+                    infoWindowInstance.current.open(mapInstance.current, p); adjustInfoWindowWrapper();
 
                     // [유도리 개편] 1차 키워드 검사 (역, 공원 등 절대 금지 구역 여부)
                     const isStrictlyBlocked = !checkIsResidential(full) || (data.buildingName && !checkIsResidential(data.buildingName));
@@ -2254,17 +2450,24 @@ export function Home() {
                       const avgRating = existingLoc ? (existingLoc.rating || 0) : 0;
 
                       infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-                      infoWindowInstance.current.setContent(getInfoWindowMarkup({
-                        address: standardAddress,
-                        lat: p.lat(),
-                        lng: p.lng(),
-                        isBookmarked,
-                        isResidential: isRes,
-                        reviewCount,
-                        avgRating,
-                        hasWritten
-                      }));
-                      infoWindowInstance.current.open(mapInstance.current, p);
+                      infoWindowInstance.current.setContent(renderInfoWindow(
+                        <MarkerInfoWindow
+                          address={standardAddress}
+                          lat={p.lat()}
+                          lng={p.lng()}
+                          isBookmarked={isBookmarked}
+                          isResidential={isRes}
+                          reviewCount={reviewCount}
+                          avgRating={avgRating}
+                          hasWritten={hasWritten}
+                          onToggleBookmark={window.__toggleBookmark}
+                          onOpenReadList={window.__openReadList}
+
+                          onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+                          onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+                        />
+                      ));
+                      infoWindowInstance.current.open(mapInstance.current, p); adjustInfoWindowWrapper();
                     };
 
                     checkBookmarkSearch();
@@ -2967,6 +3170,20 @@ export function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 신규: 디스커버리 바텀시트 */}
+      <DiscoveryBottomSheet 
+        reviews={reviews}
+        userLocation={currentUserLocation}
+        onOpenReview={(review) => {
+          setSelectedReview(review);
+          addRecentLog(review.id);
+        }}
+        onOpenReadList={(address) => {
+          setSelectedAddress(address);
+          setReadListOpen(true);
+        }}
+      />
     </div>
   );
 }

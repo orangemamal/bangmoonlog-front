@@ -7,9 +7,9 @@
 ---
 
 ## 🚀 프로젝트 개요 (Project Overview)
-- **Name**: 방문로그 (bangmoonlog) - Apps In Toss (AIT)
-- **Purpose**: Micro-app service running inside the Toss app.
-- **Tech Stack**: React + AIT Framework + Firebase + TDS
+- **Name**: 방문로그 (bangmoonlog)
+- **Purpose**: 실제 거주자들의 생생한 후기를 공유하는 주거 정보 커뮤니티 플랫폼.
+- **Tech Stack**: React + Rsbuild + Firebase + Custom Design System
 
 ## 🧠 AI 에이전트 핵심 지침 (Core Agent Instructions)
 
@@ -23,9 +23,9 @@
 
 | Scope (범위) | Rule File (지침 파일) | Key Content (핵심 내용) |
 | :--- | :--- | :--- |
-| **AIT & React** | [.rules/react_ait_framework.md](file:///.rules/react_ait_framework.md) | Routing, Bridge API, Strict TS |
+| **React & Logic** | [.rules/react_coding_standards.md](file:///.rules/react_coding_standards.md) | Componentization, Routing, Strict TS |
 | **Firebase** | [.rules/firebase_data_flow.md](file:///.rules/firebase_data_flow.md) | v10+ Modular SDK, Data Flow |
-| **Design System** | [.rules/tds_design_system.md](file:///.rules/tds_design_system.md) | @toss/tds-mobile, Color Tokens |
+| **Design System** | [.rules/design_system.md](file:///.rules/design_system.md) | CSS Modules/SCSS, Color Tokens |
 | **Agent Efficiency** | [.rules/agent_efficiency.md](file:///.rules/agent_efficiency.md) | Token Saving, Observation Rules |
 
 ---
