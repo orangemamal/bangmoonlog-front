@@ -45,6 +45,16 @@
   border-top-right-radius: $radius-lg;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
   box-sizing: border-box;
+
+  // 모달 오픈 시 내비게이션 숨김
+  body.no-nav & {
+    display: none;
+  }
+}
+
+// 모달 오픈 시 레이아웃 조정
+body.no-nav .main-content {
+  padding-bottom: 0 !important;
 }
 
 // 내비게이션 아이템

@@ -81,7 +81,8 @@ export function MyPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminList, setAdminList] = useState<string[]>(["bangmoonlog.cs@gmail.com"]);
   const [reports, setReports] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState("reports");
+  const [inquiries, setInquiries] = useState<any[]>([]); // 문의 내역 상태 추가
+  const [adminTab, setAdminTab] = useState<'inquiries' | 'settings'>('inquiries');
   const [newAdminEmail, setNewAdminEmail] = useState("");
 
   // 사용자 이름 수정 상태
@@ -104,6 +105,28 @@ export function MyPage() {
   const earnedBadges = useMemo(() => getMyBadges(userStats), [userStats]);
 
   const navigate = useNavigate();
+
+  // 모달 오픈 시 하단 탭바 숨김 처리
+  useEffect(() => {
+    const isAnyModalOpen = 
+      isInquiryModalOpen || 
+      isBookmarkModalOpen || 
+      isNotifModalOpen || 
+      !!activeModal || 
+      isEditNameModalOpen || 
+      isWithdrawalModalOpen || 
+      isLogoutModalOpen;
+
+    if (isAnyModalOpen) {
+      document.body.classList.add('no-nav');
+    } else {
+      document.body.classList.remove('no-nav');
+    }
+    return () => document.body.classList.remove('no-nav');
+  }, [
+    isInquiryModalOpen, isBookmarkModalOpen, isNotifModalOpen, 
+    activeModal, isEditNameModalOpen, isWithdrawalModalOpen, isLogoutModalOpen
+  ]);
 
   const handleLogin = useCallback(async (providerFn: () => Promise<any>) => {
     try {
@@ -236,17 +259,27 @@ export function MyPage() {
         const unsubReports = onSnapshot(qReports, (snap) => {
           setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
-        return unsubReports;
+        
+        // 문의 내역 실시간 로드
+        const qInquiries = query(collection(db, "inquiries"), where("status", "==", "pending"));
+        const unsubInquiries = onSnapshot(qInquiries, (snap) => {
+          setInquiries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
+        return () => {
+          unsubReports();
+          unsubInquiries();
+        };
       }
     };
 
-    let unsubReportsCleanup: any = null;
-    checkAdminStatus().then(cleanup => { unsubReportsCleanup = cleanup; });
+    let unsubAdminCleanup: any = null;
+    checkAdminStatus().then(cleanup => { unsubAdminCleanup = cleanup; });
 
     return () => {
       unsubStats();
       unsubBookmarks();
-      if (unsubReportsCleanup) unsubReportsCleanup();
+      if (unsubAdminCleanup) unsubAdminCleanup();
     };
   }, [user?.id, activeModal, loadRecentDetails]);
 
@@ -591,14 +624,14 @@ export function MyPage() {
                 <div className="mypage__admin">
                   <div className="mypage__faq-tabs" style={{ marginBottom: '24px' }}>
                     <button
-                      className={`mypage__faq-tab ${adminTab === 'reports' ? 'active' : ''}`}
-                      onClick={() => setAdminTab('reports')}
+                      className={`mypage__faq-tab ${adminTab === 'inquiries' ? 'active' : ''}`}
+                      onClick={() => setAdminTab('inquiries')}
                       style={{ position: 'relative' }}
                     >
                       <div className="tab-inner">
-                        <Icons.Bell size={18} /> <span>제보 관리 ({reports.length})</span>
+                        <Icons.MessageSquare size={18} /> <span>문의 ({inquiries.length})</span>
                       </div>
-                      {adminTab === 'reports' && (
+                      {adminTab === 'inquiries' && (
                         <motion.div
                           layoutId="adminTabPill"
                           className="active-pill"
@@ -612,7 +645,7 @@ export function MyPage() {
                       style={{ position: 'relative' }}
                     >
                       <div className="tab-inner">
-                        <Icons.Users size={18} /> <span>관리자 설정</span>
+                        <Icons.Users size={18} /> <span>권한</span>
                       </div>
                       {adminTab === 'settings' && (
                         <motion.div
@@ -624,36 +657,51 @@ export function MyPage() {
                     </button>
                   </div>
 
-                  {adminTab === 'reports' ? (
-                    <div className="mypage__admin-reports">
-                      {reports.length === 0 ? (
+                  {adminTab === 'inquiries' ? (
+                    <div className="mypage__admin-inquiries">
+                      {inquiries.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '60px 0', color: '#B0B8C1' }}>
-                          <Icons.CheckCircle size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
-                          <p>새로운 오판단 제보가 없습니다.</p>
+                          <Icons.Inbox size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
+                          <p>새로운 문의 내역이 없습니다.</p>
                         </div>
                       ) : (
                         <div className="mypage__card-list">
-                          {reports.map((rep) => (
-                            <div key={rep.id} className="mypage__card" style={{ cursor: 'default' }}>
-                              <div className="mypage__card-left" style={{ flex: 1 }}>
-                                <div className="mypage__card-info">
-                                  <div className="title" style={{ fontSize: '15px' }}>{rep.address}</div>
-                                  <div className="date" style={{ marginTop: '4px' }}>
-                                    제보자: {rep.reporterEmail} | {rep.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(rep.createdAt.toDate()) : '시간 정보 없음'}
-                                  </div>
+                          {inquiries.map((inq) => (
+                            <div key={inq.id} className="mypage__card" style={{ cursor: 'default', flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>
+                              <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                  <span style={{ fontSize: '12px', color: '#3182F6', fontWeight: 600, backgroundColor: '#E8F3FF', padding: '2px 6px', borderRadius: '4px' }}>{inq.type}</span>
+                                  <div style={{ marginTop: '8px', fontSize: '15px', fontWeight: 600, color: '#191F28' }}>{inq.title}</div>
+                                  <div style={{ marginTop: '4px', fontSize: '13px', color: '#8B95A1' }}>{inq.email}</div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => {
+                                      const subject = encodeURIComponent(`[방문Log] 문의하신 내용에 대한 답변입니다`);
+                                      window.location.href = `mailto:${inq.email}?subject=${subject}`;
+                                    }}
+                                    style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#F2F4F6', color: '#4E5968', fontSize: '12px', fontWeight: 600, border: 'none' }}
+                                  >
+                                    답장하기
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (window.confirm("문의 답변을 완료하셨습니까? (목록에서 숨겨집니다)")) {
+                                        const { doc, updateDoc } = await import("firebase/firestore");
+                                        await updateDoc(doc(db, "inquiries", inq.id), { status: 'completed' });
+                                      }
+                                    }}
+                                    style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#3182F6', color: '#fff', fontSize: '12px', fontWeight: 600, border: 'none' }}
+                                  >
+                                    완료
+                                  </button>
                                 </div>
                               </div>
-                              <div className="mypage__card-right" style={{ gap: '8px' }}>
-                                <button
-                                  onClick={async () => {
-                                    if (window.confirm("제보를 확인 처리하시겠습니까? (목록에서 삭제됩니다)")) {
-                                      await deleteDoc(doc(db, "reports", rep.id));
-                                    }
-                                  }}
-                                  style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#F2F4F6', color: '#4E5968', fontSize: '13px', fontWeight: 600, border: 'none' }}
-                                >
-                                  완료
-                                </button>
+                              <div style={{ fontSize: '14px', color: '#4E5968', lineHeight: '1.6', width: '100%', whiteSpace: 'pre-wrap', backgroundColor: '#F9FAFB', padding: '12px', borderRadius: '8px' }}>
+                                {inq.content}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#B0B8C1' }}>
+                                접수일: {inq.createdAt?.toDate ? new Intl.DateTimeFormat('ko-KR').format(inq.createdAt.toDate()) : '정보 없음'}
                               </div>
                             </div>
                           ))}

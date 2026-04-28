@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createRoot } from "react-dom/client";
-import { Camera, Video, PlayCircle, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag, Crosshair } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Camera, Video, PlayCircle, Star, CheckCircle2, Heart, Eye, ArrowLeft, Search, X, XCircle, Plus, RefreshCw, MoreHorizontal, Pencil, Trash2, MapPin, Map as MapIcon, Home as HomeIcon, ClipboardCheck, Image as ImageIcon, MessageSquare, Tag, Crosshair, Sparkles } from "lucide-react";
 import DaumPostcodeEmbed from "react-daum-postcode";
 import { BottomSheet } from "../components/common/BottomSheet";
 import { db, storage } from '../services/firebase';
@@ -391,6 +392,7 @@ export function Home() {
   const userMarkerRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
   const allMarkersRef = useRef<any[]>([]);
+  const analysisCircleRef = useRef<any>(null);
 
   // [신규] 건축물 확인 결과 캐시 (성능 최적화용)
   const buildingCacheRef = useRef<Record<string, { isResidential: boolean; purpose: string | null }>>({});
@@ -411,6 +413,15 @@ export function Home() {
   const [isPanoramaOpen, setIsPanoramaOpen] = useState(false);
   const [isRoadviewMode, setIsRoadviewMode] = useState(false); // 로드뷰 탐색 모드
   const [mapCenterCoord, setMapCenterCoord] = useState<{ lat: number, lng: number } | null>(null);
+  const [currentRegionName, setCurrentRegionName] = useState<string | null>(null);
+  const [aiCommuteInsight, setAiCommuteInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
+  const [isAnalyzingCommute, setIsAnalyzingCommute] = useState(false);
+  const [aiSafetyInsight, setAiSafetyInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
+  const [isAnalyzingSafety, setIsAnalyzingSafety] = useState(false);
+  const [aiBarrierFreeInsight, setAiBarrierFreeInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
+  const [isAnalyzingBarrierFree, setIsAnalyzingBarrierFree] = useState(false);
+  const [isAiAnalysisMode, setIsAiAnalysisMode] = useState(true);
+  const [analysisRadius, setAnalysisRadius] = useState(100);
   const [isVerified, setIsVerified] = useState(false);
   const [verificationDistance, setVerificationDistance] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -500,6 +511,251 @@ export function Home() {
 
     return () => unsubscribe();
   }, []); // 컴포넌트 마운트 시 1회 등록
+
+  // [신규] AI 출퇴근 인사이트 자동 생성 엔진
+  useEffect(() => {
+    if (!currentRegionName || reviews.length === 0) return;
+
+    const generateInsight = async () => {
+      setIsAnalyzingCommute(true);
+      try {
+        // 1. 현재 지역(동 단위)과 관련된 리뷰 필터링
+        const dongName = currentRegionName.split(' ').pop() || '';
+        const regionReviews = reviews.filter(r => 
+          (r.address || r.location || '').includes(dongName) && 
+          /(출퇴근|지하철|버스|역|정류장|교통|걷기|언덕|평지|소음|번잡)/.test(r.content)
+        ).slice(0, 5);
+
+        // 2. [추가] 실제 공공데이터(지하철 혼잡도) 가져오기 시도
+        // 동 이름을 기반으로 가장 가까운 역 이름을 추측 (실제 구현 시 역 매핑 테이블 필요)
+        let stationName = dongName.replace('동', '');
+        
+        // [데모용] 주요 지역 역명 매핑 보정
+        const stationMapping: {[key: string]: string} = {
+          '다': '을지로입구',
+          '무교': '을지로입구',
+          '서린': '광화문',
+          '태평로': '시청',
+          '남대문로': '을지로입구',
+          '회현': '회현',
+          '명': '명동'
+        };
+        
+        if (stationMapping[stationName]) {
+          stationName = stationMapping[stationName];
+        }
+
+        const publicData = await import('../services/publicDataService').then(s => s.getSubwayCongestion(stationName));
+        
+        let publicStat = "해당 지역의 실시간 교통 수치 데이터를 불러올 수 없습니다.";
+        if (publicData && publicData.RealtimeSubwayCongestion && publicData.RealtimeSubwayCongestion.row) {
+          const stat = publicData.RealtimeSubwayCongestion.row[0];
+          publicStat = `실시간 데이터 분석 결과: 현재 ${stationName}역의 혼잡도는 '${stat.CONGEST_LVL || '보통'}' 수준입니다. (수치: ${stat.CONGEST_LVL || 0}%)`;
+        } else if (stationName) {
+          publicStat = `${stationName} 인근 지하철역의 실시간 혼잡도 데이터를 조회했으나, 현재 제공되지 않는 구간입니다.`;
+        }
+
+        // 방문록이 없고 공공데이터도 실패했을 때만 중단
+        if (regionReviews.length === 0 && !publicData) {
+          setAiCommuteInsight({
+            score: 50,
+            text: `${currentRegionName} 지역의 상세 데이터를 수집 중입니다. 잠시 후 다시 확인해주세요!`
+          });
+          setIsAnalyzingCommute(false);
+          return;
+        }
+
+        const reviewSummary = regionReviews.length > 0 
+          ? regionReviews.map(r => `- ${r.content}`).join('\n')
+          : "해당 지역에 대한 거주자 리뷰가 아직 존재하지 않습니다. 공공 데이터 수치를 중심으로 분석해주세요.";
+        
+        const prompt = `
+          당신은 주거 및 교통 데이터 분석 전문가입니다. 
+          아래는 '${currentRegionName}' 지역에 대한 [공공 데이터 수치]와 [거주자 실제 리뷰]입니다.
+          이 데이터를 기반으로 '출퇴근 쾌적도 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          
+          [공공 데이터 팩트]:
+          ${publicStat}
+          
+          [거주자 실제 리뷰]:
+          ${reviewSummary}
+          
+          분석 지침:
+          1. 거주자 리뷰가 없더라도 제공된 [공공 데이터 팩트]만으로 해당 지역의 교통 편의성을 객관적으로 평가하십시오.
+          2. 리뷰가 있다면 공공 데이터와 비교하여 '체감 만족도'를 함께 분석하십시오.
+          
+          응답 형식(JSON):
+          {
+            "score": 숫자(0~100),
+            "text": "한 문장으로 요약된 전문적인 리포트 (데이터 수집 중이라는 말은 절대 하지 마십시오)",
+            "source": "분석의 근거가 된 데이터원 (예: ${stationName}역 혼잡도 데이터)"
+          }
+        `;
+
+        const response = await askGemini(prompt);
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          setAiCommuteInsight(result);
+        } else {
+          throw new Error("Invalid AI Response Format");
+        }
+      } catch (error) {
+        console.error("❌ [AI 인사이트] 생성 오류:", error);
+        setAiCommuteInsight({
+          score: 0,
+          text: "공공 데이터와 리뷰를 결합하는 중에 작은 문제가 발생했어요. 잠시 후 다시 시도해 주세요!"
+        });
+      } finally {
+        setIsAnalyzingCommute(false);
+      }
+    };
+
+    // 지도가 멈추고 0.8초 후에 분석 시작 (너무 빈번한 호출 방지)
+    const timer = setTimeout(generateInsight, 800);
+    return () => clearTimeout(timer);
+  }, [currentRegionName, reviews]);
+
+  // [신규] AI 안심 귀가 리포트 생성 엔진
+  useEffect(() => {
+    if (!currentRegionName || !mapCenterCoord || reviews.length === 0) return;
+
+    const generateSafetyInsight = async () => {
+      setIsAnalyzingSafety(true);
+      try {
+        // 1. 현재 지역 치안 관련 리뷰 필터링
+        const dongName = currentRegionName.split(' ').pop() || '';
+        const safetyReviews = reviews.filter(r => 
+          (r.address || r.location || '').includes(dongName) && 
+          /(치안|안전|밤길|골목|가로등|CCTV|어둡다|밝다|경찰|무섭다|안심)/.test(r.content)
+        ).slice(0, 5);
+
+        // 2. 공공데이터(CCTV) 가져오기
+        const publicData = await import('../services/publicDataService').then(s => 
+          s.getNearbyCCTV(mapCenterCoord.lat, mapCenterCoord.lng, analysisRadius)
+        );
+        
+        let safetyStat = "해당 지역의 실시간 보안 시설 데이터를 수집 중입니다.";
+        if (publicData && publicData.response && publicData.response.body) {
+          const total = publicData.response.body.totalCount || 0;
+          safetyStat = `보안 시설 분석 결과: 현재 반경 ${analysisRadius}m 내에 약 ${total}대의 공공 CCTV가 설치되어 있습니다.`;
+        } else {
+          safetyStat = `현재 해당 좌표 인근의 공공 CCTV API 응답이 지연되고 있습니다. 반경 ${analysisRadius}m 내의 기본적인 지형 지표를 바탕으로 분석합니다.`;
+        }
+
+        const reviewSummary = safetyReviews.length > 0 
+          ? safetyReviews.map(r => `- ${r.content}`).join('\n')
+          : "해당 지역에 대한 보안 관련 거주자 리뷰가 아직 존재하지 않습니다. 인프라 설치 현황을 중심으로 분석해주세요.";
+        
+        const prompt = `
+          당신은 도시 안전 및 치안 분석 전문가입니다. 
+          '${currentRegionName}' 지역의 [보안 시설 데이터]와 [거주자 실제 리뷰]를 기반으로 '안심 귀가 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          
+          [보안 시설 데이터]:
+          ${safetyStat}
+          
+          [거주자 실제 리뷰]:
+          ${reviewSummary}
+          
+          분석 지침:
+          1. 거주자 리뷰가 없더라도 제공된 [보안 시설 데이터]의 수치(CCTV 대수 등)만으로 해당 지역의 기본적인 안전 등급을 산출하십시오.
+          2. 리뷰가 있는 경우, 실제 거주자들이 느끼는 '체감 안전도'와 인프라의 차이를 분석하십시오.
+          
+          응답 형식(JSON):
+          {
+            "score": 숫자(0~100),
+            "text": "치안 현황을 기반으로 한 전문적인 한 문장 분석 리포트",
+            "source": "분석의 근거 (예: 반경 300m 내 공공 CCTV ${safetyStat.includes('약') ? safetyStat.split('약')[1].split('대')[0] : '미집계'}대)"
+          }
+        `;
+
+        const response = await askGemini(prompt);
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          setAiSafetyInsight(result);
+        }
+      } catch (error) {
+        console.error("❌ [AI 안심 인사이트] 생성 오류:", error);
+      } finally {
+        setIsAnalyzingSafety(false);
+      }
+    };
+
+    const timer = setTimeout(generateSafetyInsight, 1000); // 출퇴근 분석보다 조금 뒤에 실행하여 부하 분산
+    return () => clearTimeout(timer);
+  }, [currentRegionName, mapCenterCoord, reviews]);
+
+  // [신규] AI 배리어 프리(무장애) 리포트 생성 엔진
+  useEffect(() => {
+    if (!currentRegionName || !mapCenterCoord || reviews.length === 0) return;
+
+    const generateBarrierFreeInsight = async () => {
+      setIsAnalyzingBarrierFree(true);
+      try {
+        // 1. 배리어 프리 관련 리뷰 필터링
+        const dongName = currentRegionName.split(' ').pop() || '';
+        const bfReviews = reviews.filter(r => 
+          (r.address || r.location || '').includes(dongName) && 
+          /(턱|경사|엘리베이터|휠체어|유모차|평지|언덕|계단|보행|보도|육교)/.test(r.content)
+        ).slice(0, 5);
+
+        // 2. 공공데이터(장애인 편의시설/역사 시설) 가져오기
+        const bfData = await import('../services/publicDataService').then(s => 
+          s.getBarrierFreeFacilities(dongName)
+        );
+        
+        let bfStat = "현재 지역의 무장애 시설 데이터를 분석 중입니다.";
+        if (bfData && bfData.response && bfData.response.body) {
+          const count = bfData.response.body.totalCount || 0;
+          bfStat = `인프라 분석 결과: 주변에 약 ${count}곳의 장애인 편의시설(엘리베이터/경사로 등)이 등록되어 있습니다.`;
+        } else {
+          bfStat = "해당 지역의 상세 편의시설 데이터를 수집 중입니다. 거주자 리뷰를 중심으로 분석합니다.";
+        }
+
+        const reviewSummary = bfReviews.length > 0 
+          ? bfReviews.map(r => `- ${r.content}`).join('\n')
+          : "해당 지역의 이동 편의성에 대한 거주자 리뷰가 아직 존재하지 않습니다.";
+        
+        const prompt = `
+          당신은 배리어 프리(Barrier-free) 도시 설계 전문가입니다. 
+          '${currentRegionName}' 지역의 [무장애 시설 데이터]와 [거주자 실제 리뷰]를 기반으로 '이동 편의성 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          휠체어, 유모차, 고령층의 시점에서 분석하십시오.
+          
+          [무장애 시설 데이터]:
+          ${bfStat}
+          
+          [거주자 실제 리뷰]:
+          ${reviewSummary}
+          
+          분석 지침:
+          1. 데이터가 부족하더라도 '${currentRegionName}'의 일반적인 지형 특성(예: 비즈니스 지구, 주거 밀집지 등)을 고려하여 전문가로서 추론하십시오.
+          2. '분석 불가'라는 표현 대신, 현재 가용한 정보 내에서 최선의 가이드를 제공하십시오.
+          
+          응답 형식(JSON):
+          {
+            "score": 숫자(0~100),
+            "text": "이동 약자의 관점에서 본 한 문장 전문 분석 리포트 (추론 근거 포함)",
+            "source": "분석의 근거 (예: 지역 편의시설 및 지형 분석)"
+          }
+        `;
+
+        const response = await askGemini(prompt);
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          setAiBarrierFreeInsight(result);
+        }
+      } catch (error) {
+        console.error("❌ [AI 배리어 프리 인사이트] 생성 오류:", error);
+      } finally {
+        setIsAnalyzingBarrierFree(false);
+      }
+    };
+
+    const timer = setTimeout(generateBarrierFreeInsight, 1200);
+    return () => clearTimeout(timer);
+  }, [currentRegionName, mapCenterCoord, reviews]);
 
   const calculateAverageRating = useCallback((reviewList: Review[]) => {
     if (!reviewList || reviewList.length === 0) return "0.0";
@@ -609,6 +865,59 @@ export function Home() {
 
   const isRefreshingRef = useRef(false);
   const refreshCountRef = useRef(0); // [추가] 레이스 컨디션 방지용 카운터
+
+  // [신규] AI 분석 범위 시각화 (60fps 부드러운 애니메이션)
+  useEffect(() => {
+    if (!mapInstance.current || !mapCenterCoord || !isAiAnalysisMode) {
+      if (analysisCircleRef.current) analysisCircleRef.current.setMap(null);
+      return;
+    }
+
+    if (!analysisCircleRef.current) {
+      analysisCircleRef.current = new window.naver.maps.Circle({
+        map: mapInstance.current,
+        center: new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng),
+        radius: analysisRadius,
+        fillColor: '#00D084',
+        fillOpacity: 0.1,
+        strokeColor: '#00D084',
+        strokeWeight: 2,
+        strokeOpacity: 0.3,
+        clickable: false
+      });
+    } else {
+      analysisCircleRef.current.setMap(mapInstance.current);
+      analysisCircleRef.current.setCenter(new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng));
+      analysisCircleRef.current.setRadius(analysisRadius);
+      analysisCircleRef.current.setOptions({
+        fillColor: '#00D084',
+        strokeColor: '#00D084'
+      });
+    }
+
+    let animationId: number;
+    // [수정] 분석 중이 아니더라도 모드가 켜져 있으면 무한 펄스 (Infinity)
+    if (isAiAnalysisMode) {
+      let start = Date.now();
+      const pulse = () => {
+        const now = Date.now();
+        const elapsed = now - start;
+        // 더 은은하게 (0.02 ~ 0.12 사이 진동)
+        const opacity = 0.02 + Math.abs(Math.sin(elapsed / 1200)) * 0.1; 
+        
+        analysisCircleRef.current?.setOptions({ 
+          fillOpacity: opacity,
+          strokeOpacity: opacity + 0.1
+        });
+        animationId = requestAnimationFrame(pulse);
+      };
+      animationId = requestAnimationFrame(pulse);
+    }
+
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [mapCenterCoord, analysisRadius, isAiAnalysisMode, isAnalyzingCommute, isAnalyzingSafety, isAnalyzingBarrierFree]);
 
   const refreshMarkers = useCallback(async () => {
     if (!mapInstance.current) return;
@@ -924,45 +1233,45 @@ export function Home() {
       }));
 
       const prompt = `
-        당신은 부동산 방문록 서비스 '방문Log'의 AI 에이전트입니다.
-        사용자의 요구사항에 가장 잘 맞는 건물을 기존 방문록 데이터를 기반으로 추천해주세요.
+        당신은 부동산 방문록 서비스 '방문Log'의 다정하고 유능한 AI 에이전트입니다.
+        사용자의 질문에 따라 두 가지 모드로 작동하세요:
+
+        1. [추천 모드]: 사용자가 특정 조건의 건물을 찾을 때
+           - 제공된 방문록 데이터를 바탕으로 가장 적합한 건물을 추천하세요.
+           - 반드시 JSON 형식으로 답변: {"address": "주소", "reason": "추천 이유", "lat": 0, "lng": 0}
+
+        2. [대화 모드]: 사용자가 인사를 하거나 서비스에 대해 물어볼 때, 혹은 데이터와 상관없는 질문을 할 때
+           - 친절하고 위트 있는 대화체로 답변하세요.
+           - 이 경우 address를 "none"으로 설정하세요.
+           - 반드시 JSON 형식으로 답변: {"address": "none", "reason": "답변 내용", "lat": 0, "lng": 0}
 
         사용자 질문: "${finalQuery}"
 
-        전체 방문록 데이터 요약:
-        ${JSON.stringify(reviewSummary.slice(0, 50))} 
+        우리 서비스의 방문록 데이터 요약:
+        ${JSON.stringify(reviewSummary.slice(0, 40))} 
 
-        작업:
-        1. 사용자가 원하는 핵심 가치(예: 집주인 성격, 조용함, 채광 등)를 정확히 분석하세요.
-        2. 우리 서비스의 방문록 데이터 중 해당 조건을 가장 잘 만족하는 건물을 1순위로 선정하세요.
-        3. 선정 이유를 작성할 때 "방문록에 따르면 ~라는 의견이 있어 추천드려요" 처럼 데이터에 근거해 구체적으로 설명하세요.
-        4. 반드시 아래 JSON 형식으로만 답변하세요:
-        {
-          "address": "정확한 주소",
-          "reason": "풍부한 추천 이유 (최소 2문장 이상, 친절한 대화체)",
-          "lat": 37.xxx,
-          "lng": 127.xxx
-        }
-        데이터가 부족하면 address를 "none"으로 하고 이유를 상세히 적어주세요.
+        작업 가이드:
+        - 추천 시에는 "방문록에 따르면~" 처럼 데이터에 기반해 신뢰감을 주세요.
+        - 답변은 반드시 유효한 JSON 형식 하나만 출력하세요. (추가 설명 생략)
       `;
 
       const resultText = await askGemini(prompt);
+      if (!resultText) throw new Error("AI로부터 응답을 받지 못했습니다.");
 
-      const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        if (resultText.length > 0 && resultText.length < 200) {
-          setLastAiResponse({ address: "none", reason: resultText, lat: 0, lng: 0 });
-          return;
-        }
-        throw new Error("AI 응답 형식이 올바르지 않습니다.");
-      }
-
+      // JSON 추출 및 파싱 시도
       let recommendation;
-      try {
-        recommendation = JSON.parse(jsonMatch[0]);
-      } catch (parseError) {
-        console.error("❌ [AI Search] JSON 파싱 실패:", parseError, "Raw 응답:", resultText);
-        throw new Error("AI 추천 결과를 분석하는 중 오류가 발생했습니다.");
+      const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        try {
+          recommendation = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          console.warn("JSON 파싱 실패, 텍스트 폴백 사용");
+          recommendation = { address: "none", reason: resultText.replace(/[\{\}]/g, '').trim(), lat: 0, lng: 0 };
+        }
+      } else {
+        // JSON 형식이 아예 없는 경우 전체 텍스트를 답변으로 사용
+        recommendation = { address: "none", reason: resultText.trim(), lat: 0, lng: 0 };
       }
 
       setLastAiResponse(recommendation);
@@ -983,7 +1292,11 @@ export function Home() {
     if (mapInstance.current && lat && lng) {
       const targetPos = new window.naver.maps.LatLng(lat, lng);
       mapInstance.current.morph(targetPos, 18);
-      showAlert("AI 추천 완료", `${reason}\n\n📍 ${address}`, "✨");
+      
+      // 방문록 상세 정보 팝업(InfoWindow) 즉시 오픈
+      if (window.__openInfoWindow) {
+        window.__openInfoWindow(address, lat, lng);
+      }
     }
   };
 
@@ -1417,6 +1730,60 @@ export function Home() {
       } catch (e) { console.error(e); }
     };
 
+    window.__openInfoWindow = async (address: string, lat: any, lng: any) => {
+      if (!window.naver?.maps || !mapInstance.current) return;
+      
+      // [중요] 제미나이 응답값이 문자열일 수 있으므로 강제 숫자 변환
+      const nLat = Number(lat);
+      const nLng = Number(lng);
+      if (isNaN(nLat) || isNaN(nLng)) return;
+
+      const p = new window.naver.maps.LatLng(nLat, nLng);
+      const normalizedAddr = normalizeBaseAddress(address);
+      const isBookmarked = favoritedAddressesRef.current.has(normalizedAddr);
+      
+      const existingLoc = allLocationsRef.current.find(loc => normalizeBaseAddress(loc.address || loc.location) === normalizedAddr);
+      const reviewCount = existingLoc ? (existingLoc.count || 0) : 0;
+      const avgRating = existingLoc ? (existingLoc.rating || 0) : 0;
+      
+      let hasWritten = false;
+      if (isLoggedInRef.current && userRef.current?.id) {
+        const qCheck = query(
+          collection(db, "reviews"),
+          where("authorId", "==", userRef.current.id),
+          where("address", "==", address)
+        );
+        const snapCheck = await getDocs(qCheck);
+        hasWritten = !snapCheck.empty;
+      }
+
+      infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+      infoWindowInstance.current.setContent(renderInfoWindow(
+        <MarkerInfoWindow
+          address={address}
+          lat={nLat}
+          lng={nLng}
+          isBookmarked={isBookmarked}
+          isResidential={true}
+          reviewCount={reviewCount}
+          avgRating={avgRating}
+          hasWritten={hasWritten}
+          onToggleBookmark={window.__toggleBookmark}
+          onOpenReadList={window.__openReadList}
+          onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+          onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+        />
+      ));
+      
+      // 모달이 닫히는 애니메이션(약 300ms)과 지도가 이동하는 시간을 고려하여 충분한 지연 후 팝업 오픈
+      setTimeout(() => {
+        if (mapInstance.current) {
+          infoWindowInstance.current.open(mapInstance.current, p);
+          adjustInfoWindowWrapper();
+        }
+      }, 400);
+    };
+
     const initializeMap = () => {
       if (!window.naver?.maps || !mapElement.current || mapInstance.current) return;
 
@@ -1433,7 +1800,7 @@ export function Home() {
         center: initialCenter,
         zoom: 14,
         zoomControl: false, scaleControl: false, logoControl: false, mapDataControl: false,
-        // [추가] 부자연스러운 대각선 움직임 또는 관성 드래그 이슈 대응
+        padding: { bottom: 176 }, // 하단 바텀시트(176px)를 고려한 중심점 오프셋
         disableKineticPan: true,
         tileTransition: false,
       });
@@ -1450,7 +1817,7 @@ export function Home() {
         watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
           const { latitude: userLat, longitude: userLng, accuracy } = pos.coords;
           const userPos = new window.naver.maps.LatLng(userLat, userLng);
-          
+
           setCurrentUserLocation({ lat: userLat, lng: userLng });
 
           // 초기 로딩 시 중심 이동 (한 번만)
@@ -1503,10 +1870,33 @@ export function Home() {
 
       refreshMarkers();
 
-      // 지도 중심 이동 트래킹 (로드뷰 썸네일 용)
+      // 지도 중심 이동 트래킹 (로드뷰 썸네일 및 디스커버리 바텀시트용)
       window.naver.maps.Event.addListener(mapInstance.current, "idle", () => {
         const center = mapInstance.current.getCenter();
-        setMapCenterCoord({ lat: center.lat(), lng: center.lng() });
+        const lat = center.lat();
+        const lng = center.lng();
+        setMapCenterCoord({ lat, lng });
+
+        // [추가] 현재 보고 있는 지역의 명칭 가져오기 (역지오코딩)
+        if (window.naver?.maps?.Service?.reverseGeocode) {
+          window.naver.maps.Service.reverseGeocode({
+            coords: center,
+            orders: [
+              window.naver.maps.Service.OrderType.ADDR,
+              window.naver.maps.Service.OrderType.ROAD_ADDR
+            ].join(',')
+          }, (status: any, response: any) => {
+            if (status === window.naver.maps.Service.Status.OK) {
+              const item = response.v2.results[0];
+              if (item) {
+                const region = item.region;
+                const dong = region.area3.name; // 읍면동
+                const gu = region.area2.name;   // 구
+                setCurrentRegionName(`${gu} ${dong}`);
+              }
+            }
+          });
+        }
       });
 
       // 지도 조작 시 내 위치 추적 비활성화 (드래그, 핀치타입 줌, 마우스휠)
@@ -2055,19 +2445,59 @@ export function Home() {
       return [];
     }
   }, [userStats]);
+  
+  const [discoverySheetState, setDiscoverySheetState] = useState<'collapsed' | 'full'>('collapsed');
+  
+  // 모달 오픈 시 하단 탭바 숨김 처리
+  useEffect(() => {
+    const isModalOpen = 
+      isSheetOpen || 
+      isReadListOpen || 
+      isAISearchOpen || 
+      isPostcodeOpen || 
+      isInquiryModalOpen || 
+      discoverySheetState === 'full';
+
+    if (isModalOpen) {
+      document.body.classList.add('no-nav');
+    } else {
+      document.body.classList.remove('no-nav');
+    }
+    return () => document.body.classList.remove('no-nav');
+  }, [
+    isSheetOpen, isReadListOpen, isAISearchOpen, isPostcodeOpen, 
+    isInquiryModalOpen, discoverySheetState
+  ]);
+  
+  // 바텀시트 상태에 따른 지도 중심(Padding) 동적 조정
+  useEffect(() => {
+    if (!mapInstance.current || !window.naver?.maps) return;
+    const bottomPadding = discoverySheetState === 'full' ? 0 : 176;
+    mapInstance.current.setOptions({
+      padding: { bottom: bottomPadding }
+    });
+  }, [discoverySheetState]);
+
+  const isModalOpen = 
+    isSheetOpen || 
+    isReadListOpen || 
+    isAISearchOpen || 
+    isPostcodeOpen || 
+    isInquiryModalOpen || 
+    discoverySheetState === 'full';
 
   return (
     <div className="page-home">
       <InquiryModal
         isOpen={isInquiryModalOpen}
         onClose={() => setIsInquiryModalOpen(false)}
-        type={inquiryData.type as 'report' | 'inquiry'}
-        initialAddress={inquiryData.address}
+        initialType={inquiryData.type === 'report' ? '오류 제보' : ''}
+        initialContent={inquiryData.address ? `[오판단 제보 주소: ${inquiryData.address}]\n내용: ` : ''}
       />
       <div className="home-search-bar-container">
         <div
           className={`home-search-bar ${isHistoryOpen ? 'focused' : ''} ${searchQuery.length > 0 ? 'has-query' : ''}`}
-          style={{ position: 'relative', zIndex: isHistoryOpen ? 2202 : 400 }}
+          style={{ position: 'relative', zIndex: isHistoryOpen ? 2202 : 200 }}
         >
           {!searchQuery && <span className="home-search-icon"><Search size={24} color="#8B95A1" /></span>}
           <input
@@ -2136,6 +2566,32 @@ export function Home() {
             </div>
           )}
         </div>
+
+        {/* [New] 상단 AI 분석 범위 컨트롤 바 (복구 완료) */}
+        <AnimatePresence>
+          {isAiAnalysisMode && (
+            <motion.div 
+              className="ai-range-control-bar"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            >
+              <div className="range-label">AI 분석 범위</div>
+              <div className="range-options">
+                {[50, 100, 200].map(r => (
+                  <button 
+                    key={r}
+                    className={`range-chip ${analysisRadius === r ? 'active' : ''}`}
+                    onClick={() => setAnalysisRadius(r)}
+                  >
+                    {r}m
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* --- AI 검색 에이전트 모달 (사람인 스타일) --- */}
         <AISearchModal
@@ -2208,137 +2664,154 @@ export function Home() {
 
       <div ref={mapElement} className="home-map-container" />
 
-      {/* 중앙 로드뷰 조준경 & 썸네일 (정밀 앵커 시스템) */}
-      <div className="map-center-anchor">
-        <AnimatePresence>
-          {isRoadviewMode && (
-            <motion.div
-              className="map-center-guide"
-              initial={{ opacity: 0, scale: 0.8, y: 15, x: "-50%" }}
-              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
-              exit={{ opacity: 0, scale: 0.8, y: 15, x: "-50%" }}
-              transition={{ type: "spring", damping: 20, stiffness: 200 }}
-            >
-              <div
-                className="center-thumbnail-wrapper"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedCoord(mapCenterCoord);
-
-                  window.naver.maps.Service.reverseGeocode({
-                    coords: new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng),
-                    orders: "roadaddr,addr"
-                  }, (status: any, res: any) => {
-                    if (status === window.naver.maps.Service.Status.OK) {
-                      const addr = res.v2.address.roadAddress || res.v2.address.jibunAddress;
-                      setSelectedAddress(addr);
-                    }
-                    setIsPanoramaOpen(true);
-                  });
-                }}
+      {/* 중앙 로드뷰 조준경 & 썸네일 (정밀 앵커 시스템) - 모달 오픈 시 숨김 */}
+      {!isModalOpen && (
+        <div className="map-center-anchor">
+          <AnimatePresence>
+            {isRoadviewMode && (
+              <motion.div
+                className="map-center-guide"
+                initial={{ opacity: 0, scale: 0.8, y: 15, x: "-50%" }}
+                animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+                exit={{ opacity: 0, scale: 0.8, y: 15, x: "-50%" }}
+                transition={{ type: "spring", damping: 20, stiffness: 200 }}
               >
-                <div className="thumbnail-box" key={`${mapCenterCoord?.lat}-${mapCenterCoord?.lng}`}>
-                  <div
-                    className="mini-panorama"
-                    ref={(el) => {
-                      if (el && window.naver?.maps?.Panorama && mapCenterCoord) {
-                        new window.naver.maps.Panorama(el, {
-                          position: new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng),
-                          size: new window.naver.maps.Size(150, 104), // 애니메이션 중 렌더링 축소를 방지하기 위한 명시적 사이즈
-                          aroundControl: false,
-                          zoomControl: false,
-                          logoControl: false,
-                          padding: { top: 0, right: 0, bottom: 0, left: 0 }
-                        });
+                <div
+                  className="center-thumbnail-wrapper"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedCoord(mapCenterCoord);
+
+                    window.naver.maps.Service.reverseGeocode({
+                      coords: new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng),
+                      orders: "roadaddr,addr"
+                    }, (status: any, res: any) => {
+                      if (status === window.naver.maps.Service.Status.OK) {
+                        const addr = res.v2.address.roadAddress || res.v2.address.jibunAddress;
+                        setSelectedAddress(addr);
                       }
-                    }}
-                  />
-                  <div className="thumbnail-click-overlay">크게보기</div>
+                      setIsPanoramaOpen(true);
+                    });
+                  }}
+                >
+                  <div className="thumbnail-box" key={`${mapCenterCoord?.lat}-${mapCenterCoord?.lng}`}>
+                    <div
+                      className="mini-panorama"
+                      ref={(el) => {
+                        if (el && window.naver?.maps?.Panorama && mapCenterCoord) {
+                          new window.naver.maps.Panorama(el, {
+                            position: new window.naver.maps.LatLng(mapCenterCoord.lat, mapCenterCoord.lng),
+                            size: new window.naver.maps.Size(150, 104), // 애니메이션 중 렌더링 축소를 방지하기 위한 명시적 사이즈
+                            aroundControl: false,
+                            zoomControl: false,
+                            logoControl: false,
+                            padding: { top: 0, right: 0, bottom: 0, left: 0 }
+                          });
+                        }
+                      }}
+                    />
+                    <div className="thumbnail-click-overlay">크게보기</div>
+                  </div>
+                  <div className="thumbnail-tail" />
                 </div>
-                <div className="thumbnail-tail" />
-              </div>
 
-              {/* 세련된 블루 컬러의 클래식 맵 핀 마커 */}
-              <div className="map-pin-marker">
-                <div className="pin-main">
-                  <MapPin size={32} fill="#3182F6" color="#fff" strokeWidth={1} />
+                {/* 세련된 블루 컬러의 클래식 맵 핀 마커 */}
+                <div className="map-pin-marker">
+                  <div className="pin-main">
+                    <MapPin size={32} fill="#3182F6" color="#fff" strokeWidth={1} />
+                  </div>
+                  <div className="pin-shadow" />
                 </div>
-                <div className="pin-shadow" />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
-      {/* 로드뷰 (스트릿뷰) 탐색 모드 토글 버튼 */}
-      <button
-        className={`home-panorama-btn ${isRoadviewMode ? 'active' : ''}`}
-        onClick={() => {
-          setIsRoadviewMode(!isRoadviewMode);
-        }}
-        title={isRoadviewMode ? "로드뷰 탐색 종료" : "로드뷰 탐색 시작"}
-      >
-        <MapPin size={24} strokeWidth={2} />
-      </button>
+      {/* 지도 우측 하단 플로팅 버튼 모음 (그룹화하여 위치 관리) - 모달 오픈 시 숨김 */}
+      {!isModalOpen && (
+        <div className="home-fab-group" style={{ 
+          bottom: discoverySheetState === 'full' ? 'auto' : '192px',
+          top: discoverySheetState === 'full' ? '80px' : 'auto'
+        }}>
+          {/* AI 분석 모드 토글 버튼 */}
+          <button
+            className={`home-ai-toggle-btn ${isAiAnalysisMode ? 'active' : ''}`}
+            onClick={() => setIsAiAnalysisMode(!isAiAnalysisMode)}
+            title="AI 분석 리포트 모드"
+          >
+            <Sparkles size={24} strokeWidth={2} fill={isAiAnalysisMode ? "#3182F6" : "none"} />
+          </button>
 
-      {/* 찜한 매물만 골라보기 버튼 (내 위치 버튼 위) */}
-      <button
-        className={`home-favorites-btn ${showFavoritesOnly ? 'active' : ''}`}
-        onClick={() => {
-          if (!isLoggedIn) {
-            showConfirm(
-              "로그인이 필요해요 🏠",
-              () => navigate('/mypage'),
-              "찜한 매물만 모아보려면 로그인이 필요합니다.",
-              "🔒",
-              () => { }
-            );
-            return;
-          }
-          const next = !showFavoritesOnly;
-          setShowFavoritesOnly(next);
-        }}
-        title="찜한 매물만 보기"
-      >
-        <Star size={24} strokeWidth={2} />
-      </button>
-
-      {/* 내 위치로 이동 버튼 */}
-      <button
-        className={`home-location-btn ${isLocationActive ? 'active' : ''}`}
-        onClick={() => {
-          if (!navigator.geolocation || !mapInstance.current) return;
-
-          setIsLocating(true);
-          setIsLocationActive(true);
-
-          // 이미 마커가 있다면 즉시 이동 후 새로고침
-          if (userMarkerRef.current) {
-            mapInstance.current.morph(userMarkerRef.current.getPosition(), 17, { duration: 400, easing: 'linear' });
-          }
-
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              const userPos = new window.naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-              mapInstance.current.morph(userPos, 17, { duration: 400, easing: 'linear' });
-
-              if (userMarkerRef.current) {
-                userMarkerRef.current.setPosition(userPos);
+          {/* 로드뷰 (스트릿뷰) 탐색 모드 토글 버튼 */}
+          <button
+            className={`home-panorama-btn ${isRoadviewMode ? 'active' : ''}`}
+            onClick={() => {
+              setIsRoadviewMode(!isRoadviewMode);
+            }}
+            title={isRoadviewMode ? "로드뷰 탐색 종료" : "로드뷰 탐색 시작"}
+          >
+            <MapPin size={24} strokeWidth={2} />
+          </button>
+    
+          {/* 찜한 매물만 골라보기 버튼 */}
+          <button
+            className={`home-favorites-btn ${showFavoritesOnly ? 'active' : ''}`}
+            onClick={() => {
+              if (!isLoggedIn) {
+                showConfirm(
+                  "로그인이 필요해요 🏠",
+                  () => navigate('/mypage'),
+                  "찜한 매물만 모아보려면 로그인이 필요합니다.",
+                  "🔒",
+                  () => { }
+                );
+                return;
               }
-              setIsLocating(false);
-            },
-            (err) => {
-              console.warn('GPS 오류:', err);
-              setIsLocating(false);
-              if (err.code === 1) alert("위치 권한이 거부되었습니다. 설정에서 권한을 허용해주세요!");
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-          );
-        }}
-        title="내 위치로 이동"
-      >
-        <Crosshair size={24} strokeWidth={2} />
-      </button>
+              const next = !showFavoritesOnly;
+              setShowFavoritesOnly(next);
+            }}
+            title="찜한 매물만 보기"
+          >
+            <Star size={24} strokeWidth={2} />
+          </button>
+    
+          {/* 내 위치로 이동 버튼 */}
+          <button
+            className={`home-location-btn ${isLocationActive ? 'active' : ''}`}
+            onClick={() => {
+              if (!navigator.geolocation || !mapInstance.current) return;
+    
+              setIsLocating(true);
+              setIsLocationActive(true);
+    
+              if (userMarkerRef.current) {
+                mapInstance.current.morph(userMarkerRef.current.getPosition(), 17, { duration: 400, easing: 'linear' });
+              }
+    
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  const userPos = new window.naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+                  mapInstance.current.morph(userPos, 17, { duration: 400, easing: 'linear' });
+                  if (userMarkerRef.current) {
+                    userMarkerRef.current.setPosition(userPos);
+                  }
+                  setIsLocating(false);
+                },
+                (err) => {
+                  console.warn('GPS 오류:', err);
+                  setIsLocating(false);
+                  if (err.code === 1) alert("위치 권한이 거부되었습니다. 설정에서 권한을 허용해주세요!");
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+              );
+            }}
+            title="내 위치로 이동"
+          >
+            <Crosshair size={24} strokeWidth={2} />
+          </button>
+        </div>
+      )}
 
       {isAddressSelected && dynamicNeighborhoodTags.length > 0 && (
         <div className="neighborhood-tag-wrapper">
@@ -3171,19 +3644,29 @@ export function Home() {
         )}
       </AnimatePresence>
 
-      {/* 신규: 디스커버리 바텀시트 */}
-      <DiscoveryBottomSheet 
-        reviews={reviews}
-        userLocation={currentUserLocation}
-        onOpenReview={(review) => {
-          setSelectedReview(review);
-          addRecentLog(review.id);
-        }}
-        onOpenReadList={(address) => {
-          setSelectedAddress(address);
-          setReadListOpen(true);
-        }}
-      />
+      {/* 신규: 디스커버리 바텀시트 (모달 오픈 시 숨김) */}
+      {!isModalOpen && (
+        <DiscoveryBottomSheet
+          reviews={reviews}
+          userLocation={currentUserLocation}
+          mapCenter={mapCenterCoord}
+          regionName={currentRegionName}
+          aiInsight={aiCommuteInsight}
+          isAnalyzing={isAnalyzingCommute}
+          aiSafetyInsight={aiSafetyInsight}
+          isAnalyzingSafety={isAnalyzingSafety}
+          aiBarrierFreeInsight={aiBarrierFreeInsight}
+          isAnalyzingBarrierFree={isAnalyzingBarrierFree}
+          onOpenReview={(review) => {
+            setSelectedReview(review);
+            addRecentLog(review.id);
+          }}
+          onOpenReadList={(address) => {
+            setSelectedAddress(address);
+            setReadListOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 }

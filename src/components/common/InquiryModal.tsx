@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from "../../hooks/useAuth";
 import { ArrowLeft, ChevronDown } from 'lucide-react';
+import emailjs from '@emailjs/browser';
 
 interface InquiryModalProps {
   isOpen: boolean;
@@ -17,28 +19,64 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
   initialType = "",
   initialContent = ""
 }) => {
+  const { user } = useAuth();
   const [email, setEmail] = useState(initialEmail);
   const [type, setType] = useState(initialType);
   const [content, setContent] = useState(initialContent);
+  const [title, setTitle] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 초기값 반영
   useEffect(() => {
     if (isOpen) {
-      setEmail(initialEmail);
-      setType(initialType);
+      setEmail(initialEmail || user?.email || "");
+      setType(initialType || "");
       setContent(initialContent);
+      setTitle("");
     }
-  }, [isOpen, initialEmail, initialType, initialContent]);
+  }, [isOpen, initialEmail, user?.email, initialType, initialContent]);
 
-  const handleSubmit = () => {
-    const subject = encodeURIComponent(`[방문Log 1:1문의] ${type}`);
-    const body = encodeURIComponent(
-      `답변받으실 이메일: ${email}\n` +
-      `문의 유형: ${type}\n\n` +
-      `-- 문의 내용 --\n${content}`
-    );
-    window.location.href = `mailto:bangmoonlog.cs@gmail.com?subject=${subject}&body=${body}`;
-    alert("작성하신 내용으로 메일 앱을 실행합니다. 메일 앱에서 전송 버튼을 눌러주세요!");
+  const handleSubmit = async () => {
+    if (!email || !type || !title || !content) return;
+    
+    setIsSubmitting(true);
+    try {
+      const { db } = await import("../../services/firebase");
+      const { collection, addDoc, serverTimestamp } = await import("firebase/firestore");
+      
+      await addDoc(collection(db, "inquiries"), {
+        email,
+        type,
+        title,
+        content,
+        userId: user?.id || "guest",
+        createdAt: serverTimestamp(),
+        status: "pending"
+      });
+
+      // EmailJS로 관리자에게 메일 발송
+      await emailjs.send(
+        "service_u7yayeo", 
+        "template_3qijmbl",
+        {
+          category: type.replace('/', ' 및 '), // '/' 깨짐 방지를 위해 치환
+          title: title,         // 템플릿의 {{title}}
+          name: user?.displayName || user?.name || "익명 사용자", // 템플릿의 {{name}}
+          email: email,          // 템플릿의 {{email}}
+          message: content,      // 템플릿의 {{message}}
+          time: new Date().toLocaleString(), // 템플릿의 {{time}}
+        },
+        "lSpfHBGqKwakZIK-t"
+      );
+
+      alert("문의가 성공적으로 접수되었습니다. 최대한 빨리 답변드릴게요! ✉️");
+      onClose();
+    } catch (e) {
+      console.error("Inquiry submission error:", e);
+      alert("접수 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -92,6 +130,17 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
               </div>
 
               <div className="mypage__inquiry-field">
+                <label className="mypage__inquiry-label">문의 제목</label>
+                <input
+                  type="text"
+                  placeholder="제목을 입력하세요."
+                  className="mypage__inquiry-input"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+
+              <div className="mypage__inquiry-field">
                 <label className="mypage__inquiry-label">문의 내용</label>
                 <div className="mypage__inquiry-input-wrap">
                   <textarea
@@ -109,10 +158,10 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
             <div className="mypage__inquiry-footer">
               <button
                 className="mypage__inquiry-submit"
-                disabled={!email || !type || !content}
+                disabled={!email || !type || !content || isSubmitting}
                 onClick={handleSubmit}
               >
-                문의하기
+                {isSubmitting ? "접수 중..." : "문의하기"}
               </button>
             </div>
           </div>

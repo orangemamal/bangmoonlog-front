@@ -137,7 +137,7 @@
   padding: 4px 8px 4px 20px;
   display: flex;
   align-items: center;
-  z-index: 400;
+  z-index: 200;
   transition: box-shadow 0.3s;
   border: 1px solid $color-text-caption;
 
@@ -267,7 +267,7 @@
   top: 20px;
   width: calc(100% - 48px);
   max-width: 448px;
-  z-index: 400; // 지도의 다른 요소들보다 위
+  z-index: 2000; // 바텀시트(300)보다 확실히 위에 위치하도록 상향
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -570,57 +570,56 @@
   }
 }
 
+// 플로팅 버튼 그룹 컨테이너
+.home-fab-group {
+  position: fixed;
+  right: 16px;
+  display: flex;
+  flex-direction: column; // 아래에서부터 쌓임
+  gap: 12px;
+  z-index: 100;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 // 내 위치로 이동 버튼
 .home-location-btn {
   @extend %fab-base;
-  position: fixed;
-  bottom: calc(66px + 76px + 16px); // 하단 네비게이션(66px) + 바텀시트 PEEK(76px) + 여백
-  right: 16px;
-  width: 40px;
-  height: 40px;
+  width: 44px; // 크기 약간 확대 (클릭 편의성)
+  height: 44px;
 
   &.active {
-    background: #3182F6; // 브랜드 블루
+    background: #3182F6;
     border-color: #3182F6;
     color: white;
     box-shadow: 0 4px 16px rgba(49, 130, 246, 0.4);
-    transform: scale(1.05);
   }
 }
 
-// 찜한 매물만 보기 버튼 (내 위치 버튼 바로 위)
+// 찜한 매물만 보기 버튼
 .home-favorites-btn {
   @extend %fab-base;
-  position: fixed;
-  bottom: calc(66px + 76px + 16px + 48px); // 내 위치 버튼(40px) + 여백(8px)
-  right: 16px;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
 
   &.active {
-    background: #8B5CF6; // 프리미엄 보라색
+    background: #8B5CF6;
     border-color: #8B5CF6;
     color: white;
     box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
-    transform: scale(1.05);
   }
 }
 
 // 실물 보기 (로드뷰) 버튼
 .home-panorama-btn {
   @extend %fab-base;
-  position: fixed;
-  bottom: calc(66px + 76px + 16px + 48px + 48px); // 찜하기 버튼 위
-  right: 16px;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
 
   &.active {
-    background: #03C75A; // 네이버 로드뷰 시그니처 그린
+    background: #03C75A;
     border-color: #03C75A;
-    color: white; // 팝업 내 라인 아이콘 활성화 시 화이트
+    color: white;
     box-shadow: 0 4px 16px rgba(3, 199, 90, 0.4);
-    transform: scale(1.05);
   }
 }
 
@@ -1134,7 +1133,7 @@
   right: 0;
   bottom: 0;
   background-color: $color-bg;
-  z-index: 1000; // 탭바보다 높게
+  z-index: 5000; // 탭바(4000)보다 높게 설정
   display: flex;
   flex-direction: column;
   animation: slideInUp 0.3s cubic-bezier(0, 0, 0.2, 1);
@@ -1173,7 +1172,7 @@
   .overlay-list {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: 16px 16px 100px; // 하단 탭바를 고려한 넉넉한 패딩 추가
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -1847,13 +1846,11 @@
 
 // ── 제출 버튼 영역 ─────────────────────────────────────────
 .submit-wrapper {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 32px 24px 24px;
-  background: linear-gradient(to top, #ffffff 70%, rgba(255, 255, 255, 0));
+  position: relative;
+  padding: 32px 24px 0; // 하단 탭바 및 여유 공간 확보
+  background-color: #ffffff;
   z-index: 101;
+  margin-top: 12px;
 
   // TDS 버튼 위에 DS 가이드라인에 따른 커스텀 라운드(16px) 강제 적용
   button {
@@ -2786,57 +2783,7 @@
   }
 }
 
-// ── 고품질 Empty View (방문록 없음) ──────────────
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 40px;
-  text-align: center;
-  background: #fff;
-  border-radius: 24px;
-  margin: 20px;
 
-  .empty-state-icon {
-    font-size: 64px;
-    margin-bottom: 24px;
-    filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.1));
-    animation: bounce 2s ease-in-out infinite;
-  }
-
-  h3 {
-    font-size: 20px;
-    font-weight: 800;
-    color: #191F28;
-    margin-bottom: 12px;
-  }
-
-  p {
-    font-size: 15px;
-    color: #8B95A1;
-    line-height: 1.6;
-    margin-bottom: 32px;
-    word-break: keep-all;
-  }
-
-  .empty-state-cta {
-    background: #3182F6;
-    color: #fff;
-    border: none;
-    padding: 16px 28px;
-    border-radius: 16px;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 8px 20px rgba(49, 130, 246, 0.25);
-
-    &:active {
-      transform: scale(0.96);
-    }
-  }
-}
 
 @keyframes bounce {
 

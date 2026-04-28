@@ -7,13 +7,18 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // Firebase Cloud Function URL (리뷰 검열용)
 const MODERATE_FUNCTION_URL = "https://moderatecontent-pgxt2tqsrq-du.a.run.app";
 
-// Gemini API Key 로드 로직 강화 (Rsbuild/Vite 호환)
+// Gemini API Key 로드 로직 강화 (Rsbuild/Vite/Process 호환)
 const GEMINI_API_KEY =
   (import.meta as any).env?.PUBLIC_GEMINI_API_KEY ||
   (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+  (process as any).env?.PUBLIC_GEMINI_API_KEY ||
   "";
 
-console.log("🔑 [Gemini] API Key Check:", GEMINI_API_KEY ? "SUCCESS (Loaded)" : "FAILED (Empty)");
+console.log("🔑 [Gemini] API Key Status:", {
+  hasKey: !!GEMINI_API_KEY,
+  source: (import.meta as any).env?.PUBLIC_GEMINI_API_KEY ? "import.meta.env" : 
+          (process as any).env?.PUBLIC_GEMINI_API_KEY ? "process.env" : "none"
+});
 
 const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
