@@ -87,7 +87,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
   const nearbyReviews = useMemo(() => {
     // 탐색 기준 좌표 결정: 지도 중심을 우선하고, 없으면 사용자 위치 사용
     const baseLocation = mapCenter || userLocation;
-    
+
     if (!baseLocation || !reviews.length) return reviews.slice(0, 10);
 
     // 거리 계산 및 정렬 (최적화된 방식)
@@ -210,12 +210,13 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                 <h2 className="discovery-sheet__title">
                   {regionName || "주변 탐색 중"}
                 </h2>
-                <p className="discovery-sheet__subtitle">
-                  {isAnalyzing ? "실시간 AI 동네 리포트 생성 중..." : "AI가 분석한 이 지역의 핵심 리포트"}
-                </p>
+                <div className="discovery-sheet__ai-trust-badge">
+                  <span className="dot pulse" />
+                  AI가 공공데이터 • 방문록 분석 중
+                </div>
               </div>
             </div>
-            
+
             <div className={`discovery-sheet__ai-badge ${isAnalyzing ? 'is-loading' : ''}`}>
               {isAnalyzing ? (
                 <><span className="pulse-dot" /> AI LIVE</>
@@ -243,9 +244,9 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                       <span>AI 출퇴근 리포트</span>
                     </div>
                     {!isAnalyzing && aiInsight && (
-                      <div 
+                      <div
                         className="ai-score-badge"
-                        style={{ 
+                        style={{
                           color: aiInsight.score >= 80 ? '#3182F6' : '#FF9500',
                           background: aiInsight.score >= 80 ? '#E8F3FF' : '#FFF4E5'
                         }}
@@ -254,7 +255,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="ai-insight-content">
                     <h4 className="ai-insight-title">
                       {isAnalyzing ? "AI 분석 엔진 가동 중..." : "출퇴근 꿀단지 리포트"}
@@ -273,8 +274,10 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
 
                   <div className="ai-insight-footer">
                     <div className="ai-data-source">
-                      <span className="dot"></span>
-                      {isAnalyzing ? "공공데이터 융합 분석 중" : (aiInsight?.source || `지하철 혼잡도 분석 완료`)}
+                      <div className="source-label">데이터 소스</div>
+                      <div className="source-value">
+                        {isAnalyzing ? "교통 API & 방문록 융합 중..." : (aiInsight?.source || `교통 API + 방문록 분석`)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -287,9 +290,9 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                       <span>AI 안심 귀가 리포트</span>
                     </div>
                     {!isAnalyzingSafety && aiSafetyInsight && (
-                      <div 
+                      <div
                         className="ai-score-badge"
-                        style={{ 
+                        style={{
                           color: aiSafetyInsight.score >= 80 ? '#00D084' : '#FF5722',
                           background: aiSafetyInsight.score >= 80 ? '#E6FBF3' : '#FFF0EB'
                         }}
@@ -298,7 +301,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="ai-insight-content">
                     <h4 className="ai-insight-title">
                       {isAnalyzingSafety ? "치안 데이터를 분석 중입니다..." : "이 동네, 밤에 안전할까요?"}
@@ -317,8 +320,10 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
 
                   <div className="ai-insight-footer">
                     <div className="ai-data-source">
-                      <span className="dot green"></span>
-                      {isAnalyzingSafety ? "CCTV 위치 정보 탐색 중" : (aiSafetyInsight?.source || `공공 CCTV 연동 분석 완료`)}
+                      <div className="source-label">데이터 소스</div>
+                      <div className="source-value">
+                        {isAnalyzingSafety ? "CCTV API & 방문록 융합 중..." : (aiSafetyInsight?.source || `CCTV API + 방문록 분석`)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -331,9 +336,9 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                       <span>AI 배리어 프리 리포트</span>
                     </div>
                     {!isAnalyzingBarrierFree && aiBarrierFreeInsight && (
-                      <div 
+                      <div
                         className="ai-score-badge"
-                        style={{ 
+                        style={{
                           color: aiBarrierFreeInsight.score >= 80 ? '#3182F6' : '#FF9500',
                           background: aiBarrierFreeInsight.score >= 80 ? '#E8F3FF' : '#FFF4E5'
                         }}
@@ -342,7 +347,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="ai-insight-content">
                     <h4 className="ai-insight-title">
                       {isAnalyzingBarrierFree ? "보행 환경을 분석 중입니다..." : "휠체어·유모차도 편할까요?"}
@@ -361,8 +366,10 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
 
                   <div className="ai-insight-footer">
                     <div className="ai-data-source">
-                      <span className="dot blue"></span>
-                      {isAnalyzingBarrierFree ? "전국 편의시설 데이터 조회 중" : (aiBarrierFreeInsight?.source || `무장애 인프라 데이터 분석 완료`)}
+                      <div className="source-label">데이터 소스</div>
+                      <div className="source-value">
+                        {isAnalyzingBarrierFree ? "인프라 API & 방문록 융합 중..." : (aiBarrierFreeInsight?.source || `인프라 API + 방문록 분석`)}
+                      </div>
                     </div>
                   </div>
                 </div>

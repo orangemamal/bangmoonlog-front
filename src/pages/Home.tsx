@@ -420,7 +420,7 @@ export function Home() {
   const [isAnalyzingSafety, setIsAnalyzingSafety] = useState(false);
   const [aiBarrierFreeInsight, setAiBarrierFreeInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
   const [isAnalyzingBarrierFree, setIsAnalyzingBarrierFree] = useState(false);
-  const [isAiAnalysisMode, setIsAiAnalysisMode] = useState(true);
+  const [isAiAnalysisMode, setIsAiAnalysisMode] = useState(false);
   const [analysisRadius, setAnalysisRadius] = useState(100);
   const [isVerified, setIsVerified] = useState(false);
   const [verificationDistance, setVerificationDistance] = useState<number | null>(null);
@@ -430,10 +430,21 @@ export function Home() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favoritedAddresses, setFavoritedAddresses] = useState<Set<string>>(new Set());
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showAiTooltip, setShowAiTooltip] = useState(false);
   const favoritedAddressesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     favoritedAddressesRef.current = favoritedAddresses;
   }, [favoritedAddresses]);
+
+  // AI 분석 기능 안내 툴팁 표시 로직
+  useEffect(() => {
+    const timer = setTimeout(() => setShowAiTooltip(true), 1500);
+    const hideTimer = setTimeout(() => setShowAiTooltip(false), 5500); 
+    return () => { 
+      clearTimeout(timer); 
+      clearTimeout(hideTimer); 
+    };
+  }, []);
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -519,12 +530,21 @@ export function Home() {
     const generateInsight = async () => {
       setIsAnalyzingCommute(true);
       try {
-        // 1. 현재 지역(동 단위)과 관련된 리뷰 필터링
+        // 1. 분석 모드에 따른 리뷰 필터링 (레이더 모드 vs 동네 모드)
         const dongName = currentRegionName.split(' ').pop() || '';
-        const regionReviews = reviews.filter(r => 
-          (r.address || r.location || '').includes(dongName) && 
+        const baseReviews = isAiAnalysisMode
+          ? reviews.filter(r => {
+              if (!mapCenterCoord || !r.lat || !r.lng) return false;
+              const dist = calculateDistance(mapCenterCoord.lat, mapCenterCoord.lng, r.lat, r.lng);
+              return dist <= analysisRadius;
+            })
+          : reviews.filter(r => (r.address || r.location || '').includes(dongName));
+
+        const commuteReviews = baseReviews.filter(r => 
           /(출퇴근|지하철|버스|역|정류장|교통|걷기|언덕|평지|소음|번잡)/.test(r.content)
         ).slice(0, 5);
+
+        const analysisScope = isAiAnalysisMode ? `반경 ${analysisRadius}m` : `'${dongName}' 지역`;
 
         // 2. [추가] 실제 공공데이터(지하철 혼잡도) 가져오기 시도
         // 동 이름을 기반으로 가장 가까운 역 이름을 추측 (실제 구현 시 역 매핑 테이블 필요)
@@ -556,22 +576,23 @@ export function Home() {
         }
 
         // 방문록이 없고 공공데이터도 실패했을 때만 중단
-        if (regionReviews.length === 0 && !publicData) {
+        if (baseReviews.length === 0 && !publicData) {
           setAiCommuteInsight({
             score: 50,
-            text: `${currentRegionName} 지역의 상세 데이터를 수집 중입니다. 잠시 후 다시 확인해주세요!`
+            text: `${currentRegionName} 지역의 상세 데이터를 수집 중입니다. 잠시 후 다시 확인해주세요!`,
+            source: "데이터 수집 중"
           });
           setIsAnalyzingCommute(false);
           return;
         }
 
-        const reviewSummary = regionReviews.length > 0 
-          ? regionReviews.map(r => `- ${r.content}`).join('\n')
-          : "해당 지역에 대한 거주자 리뷰가 아직 존재하지 않습니다. 공공 데이터 수치를 중심으로 분석해주세요.";
+        const reviewSummary = commuteReviews.length > 0 
+          ? commuteReviews.map(r => `- ${r.content}`).join('\n')
+          : `${analysisScope} 내에 교통 관련 거주자 리뷰가 아직 존재하지 않습니다. 공공 데이터 수치를 중심으로 분석해주세요.`;
         
         const prompt = `
           당신은 주거 및 교통 데이터 분석 전문가입니다. 
-          아래는 '${currentRegionName}' 지역에 대한 [공공 데이터 수치]와 [거주자 실제 리뷰]입니다.
+          아래는 ${analysisScope}에 대한 [공공 데이터 수치]와 [거주자 실제 리뷰 ${commuteReviews.length}건]입니다.
           이 데이터를 기반으로 '출퇴근 쾌적도 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
           
           [공공 데이터 팩트]:
@@ -583,12 +604,14 @@ export function Home() {
           분석 지침:
           1. 거주자 리뷰가 없더라도 제공된 [공공 데이터 팩트]만으로 해당 지역의 교통 편의성을 객관적으로 평가하십시오.
           2. 리뷰가 있다면 공공 데이터와 비교하여 '체감 만족도'를 함께 분석하십시오.
+          3. 분석 리포트(text)는 반드시 '한 문장'으로, 사용자가 직관적으로 이해할 수 있게 '간결하고 심플하게' 작성하십시오. (불필요한 수식어나 긴 설명 금지)
+          4. 분석 리포트 서두에 "${analysisScope} 방문록 ${commuteReviews.length}건과 실시간 데이터를 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
-            "text": "한 문장으로 요약된 전문적인 리포트 (데이터 수집 중이라는 말은 절대 하지 마십시오)",
-            "source": "분석의 근거가 된 데이터원 (예: ${stationName}역 혼잡도 데이터)"
+            "text": "위 지침을 따른 전문적인 리포트",
+            "source": "${stationName}역 실시간 혼합도 및 ${analysisScope} 리뷰 ${commuteReviews.length}건"
           }
         `;
 
@@ -614,7 +637,7 @@ export function Home() {
     // 지도가 멈추고 0.8초 후에 분석 시작 (너무 빈번한 호출 방지)
     const timer = setTimeout(generateInsight, 800);
     return () => clearTimeout(timer);
-  }, [currentRegionName, reviews]);
+  }, [currentRegionName, mapCenterCoord, analysisRadius, isAiAnalysisMode, reviews]);
 
   // [신규] AI 안심 귀가 리포트 생성 엔진
   useEffect(() => {
@@ -623,49 +646,76 @@ export function Home() {
     const generateSafetyInsight = async () => {
       setIsAnalyzingSafety(true);
       try {
-        // 1. 현재 지역 치안 관련 리뷰 필터링
+        // 1. 분석 모드에 따른 리뷰 필터링
         const dongName = currentRegionName.split(' ').pop() || '';
-        const safetyReviews = reviews.filter(r => 
-          (r.address || r.location || '').includes(dongName) && 
+        const baseReviews = isAiAnalysisMode
+          ? reviews.filter(r => {
+              if (!mapCenterCoord || !r.lat || !r.lng) return false;
+              const dist = calculateDistance(mapCenterCoord.lat, mapCenterCoord.lng, r.lat, r.lng);
+              return dist <= analysisRadius;
+            })
+          : reviews.filter(r => (r.address || r.location || '').includes(dongName));
+
+        const safetyReviews = baseReviews.filter(r => 
           /(치안|안전|밤길|골목|가로등|CCTV|어둡다|밝다|경찰|무섭다|안심)/.test(r.content)
         ).slice(0, 5);
 
-        // 2. 공공데이터(CCTV) 가져오기
-        const publicData = await import('../services/publicDataService').then(s => 
-          s.getNearbyCCTV(mapCenterCoord.lat, mapCenterCoord.lng, analysisRadius)
-        );
+        const analysisScope = isAiAnalysisMode ? `반경 ${analysisRadius}m` : `'${dongName}' 지역`;
+
+        // 2. 공공데이터(CCTV + 사고 다발지역) 가져오기
+        const { getNearbyCCTV, getAccidentHotspots } = await import('../services/publicDataService');
         
-        let safetyStat = "해당 지역의 실시간 보안 시설 데이터를 수집 중입니다.";
-        if (publicData && publicData.response && publicData.response.body) {
-          const total = publicData.response.body.totalCount || 0;
-          safetyStat = `보안 시설 분석 결과: 현재 반경 ${analysisRadius}m 내에 약 ${total}대의 공공 CCTV가 설치되어 있습니다.`;
-        } else {
-          safetyStat = `현재 해당 좌표 인근의 공공 CCTV API 응답이 지연되고 있습니다. 반경 ${analysisRadius}m 내의 기본적인 지형 지표를 바탕으로 분석합니다.`;
+        const [cctvData, accidentData] = await Promise.all([
+          getNearbyCCTV(mapCenterCoord.lat, mapCenterCoord.lng, analysisRadius),
+          getAccidentHotspots(mapCenterCoord.lat, mapCenterCoord.lng)
+        ]);
+        
+        let safetyStat = "";
+        let cctvCount = 0;
+        let accidentCount = 0;
+
+        // CCTV 데이터 정리
+        if (cctvData && cctvData.response && cctvData.response.body) {
+          cctvCount = cctvData.response.body.totalCount || 0;
+          safetyStat += `[CCTV 현황]: 주변 공공 CCTV 약 ${cctvCount}대 확인. `;
+        }
+        
+        // 사고 다발지역 데이터 정리
+        if (accidentData && accidentData.response && accidentData.response.body) {
+          accidentCount = accidentData.response.body.totalCount || 0;
+          safetyStat += `[사고 위험]: 인근 교통사고 다발 지역 ${accidentCount}곳 감지. `;
+        }
+
+        if (!safetyStat) {
+          safetyStat = "현재 해당 지역의 실시간 안전 지표 데이터를 수집 중입니다.";
         }
 
         const reviewSummary = safetyReviews.length > 0 
           ? safetyReviews.map(r => `- ${r.content}`).join('\n')
-          : "해당 지역에 대한 보안 관련 거주자 리뷰가 아직 존재하지 않습니다. 인프라 설치 현황을 중심으로 분석해주세요.";
+          : `${analysisScope} 내에 치안 관련 거주자 리뷰가 아직 존재하지 않습니다. 인프라 설치 현황과 사고 기록을 중심으로 분석해주세요.`;
         
         const prompt = `
           당신은 도시 안전 및 치안 분석 전문가입니다. 
-          '${currentRegionName}' 지역의 [보안 시설 데이터]와 [거주자 실제 리뷰]를 기반으로 '안심 귀가 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          ${analysisScope}의 [보안 및 사고 데이터]와 [거주자 실제 리뷰 ${safetyReviews.length}건]를 기반으로 '안심 귀가 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
           
-          [보안 시설 데이터]:
+          [보안 및 사고 데이터]:
           ${safetyStat}
           
           [거주자 실제 리뷰]:
           ${reviewSummary}
           
           분석 지침:
-          1. 거주자 리뷰가 없더라도 제공된 [보안 시설 데이터]의 수치(CCTV 대수 등)만으로 해당 지역의 기본적인 안전 등급을 산출하십시오.
-          2. 리뷰가 있는 경우, 실제 거주자들이 느끼는 '체감 안전도'와 인프라의 차이를 분석하십시오.
+          1. CCTV 대수(보안 시설)와 교통사고 다발지역(위험 요소) 데이터를 종합하여 안전 점수를 산출하십시오.
+          2. 거주자 리뷰가 없더라도 제공된 수치 데이터만으로 해당 지역의 객관적인 안전 등급을 산출하십시오.
+          3. 리뷰가 있는 경우, 실제 거주자들이 느끼는 '체감 안전도'와 인프라/사고 기록의 차이를 분석하십시오.
+          4. 분석 리포트(text)는 반드시 '한 문장'으로, 아주 간결하고 명확하게 작성하십시오. (사용자가 1초 만에 읽을 수 있도록)
+          5. 분석 리포트 서두에 "${analysisScope} CCTV 현황 및 사고 기록과 방문록 ${safetyReviews.length}건을 종합 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
-            "text": "치안 현황을 기반으로 한 전문적인 한 문장 분석 리포트",
-            "source": "분석의 근거 (예: 반경 300m 내 공공 CCTV ${safetyStat.includes('약') ? safetyStat.split('약')[1].split('대')[0] : '미집계'}대)"
+            "text": "치안 및 사고 현황을 기반으로 한 전문적인 분석 리포트",
+            "source": "${analysisScope} 공공 CCTV(${cctvCount}대), 사고 기록(${accidentCount}건) 및 ${safetyReviews.length}건의 안전 리뷰"
           }
         `;
 
@@ -684,7 +734,7 @@ export function Home() {
 
     const timer = setTimeout(generateSafetyInsight, 1000); // 출퇴근 분석보다 조금 뒤에 실행하여 부하 분산
     return () => clearTimeout(timer);
-  }, [currentRegionName, mapCenterCoord, reviews]);
+  }, [currentRegionName, mapCenterCoord, analysisRadius, isAiAnalysisMode, reviews]);
 
   // [신규] AI 배리어 프리(무장애) 리포트 생성 엔진
   useEffect(() => {
@@ -693,50 +743,82 @@ export function Home() {
     const generateBarrierFreeInsight = async () => {
       setIsAnalyzingBarrierFree(true);
       try {
-        // 1. 배리어 프리 관련 리뷰 필터링
+        // 1. 분석 모드에 따른 리뷰 필터링
         const dongName = currentRegionName.split(' ').pop() || '';
-        const bfReviews = reviews.filter(r => 
-          (r.address || r.location || '').includes(dongName) && 
+        const baseReviews = isAiAnalysisMode
+          ? reviews.filter(r => {
+              if (!mapCenterCoord || !r.lat || !r.lng) return false;
+              const dist = calculateDistance(mapCenterCoord.lat, mapCenterCoord.lng, r.lat, r.lng);
+              return dist <= analysisRadius;
+            })
+          : reviews.filter(r => (r.address || r.location || '').includes(dongName));
+
+        const bfReviews = baseReviews.filter(r => 
           /(턱|경사|엘리베이터|휠체어|유모차|평지|언덕|계단|보행|보도|육교)/.test(r.content)
         ).slice(0, 5);
 
-        // 2. 공공데이터(장애인 편의시설/역사 시설) 가져오기
-        const bfData = await import('../services/publicDataService').then(s => 
-          s.getBarrierFreeFacilities(dongName)
-        );
+        const analysisScope = isAiAnalysisMode ? `반경 ${analysisRadius}m` : `'${dongName}' 지역`;
+
+        // 2. 공공데이터(장애인 편의시설 + 철도역사 편의시설) 가져오기
+        const { getBarrierFreeFacilities, getRailwayConvenience } = await import('../services/publicDataService');
         
-        let bfStat = "현재 지역의 무장애 시설 데이터를 분석 중입니다.";
-        if (bfData && bfData.response && bfData.response.body) {
-          const count = bfData.response.body.totalCount || 0;
-          bfStat = `인프라 분석 결과: 주변에 약 ${count}곳의 장애인 편의시설(엘리베이터/경사로 등)이 등록되어 있습니다.`;
-        } else {
-          bfStat = "해당 지역의 상세 편의시설 데이터를 수집 중입니다. 거주자 리뷰를 중심으로 분석합니다.";
+        // 동네 이름에서 역 이름 추측 (교통 데이터와 연동)
+        let stationName = dongName.replace('동', '');
+        const stationMapping: {[key: string]: string} = {
+          '다': '을지로입구', '무교': '을지로입구', '서린': '광화문', '태평로': '시청', '남대문로': '을지로입구', '회현': '회현', '명': '명동'
+        };
+        if (stationMapping[stationName]) stationName = stationMapping[stationName];
+
+        const [facilityData, railwayData] = await Promise.all([
+          getBarrierFreeFacilities(dongName),
+          getRailwayConvenience(stationName)
+        ]);
+        
+        let bfStat = "";
+        let facilityCount = 0;
+        let railwayFeatures = [];
+
+        // 건물 편의시설 데이터 정리
+        if (facilityData && facilityData.response && facilityData.response.body) {
+          facilityCount = facilityData.response.body.totalCount || 0;
+          bfStat += `[건물 시설]: 주변에 약 ${facilityCount}곳의 장애인 인증 편의시설 확인. `;
+        }
+        
+        // 철도 역사 편의시설 데이터 정리
+        if (railwayData && railwayData.response && railwayData.response.body && railwayData.response.body.items) {
+          bfStat += `[역사 시설]: ${stationName}역 내 엘리베이터/수유실 등 무장애 설비 확인됨. `;
+        }
+
+        if (!bfStat) {
+          bfStat = "해당 지역의 상세 무장애 인프라 데이터를 수집 중입니다. 일반적인 보행 환경을 바탕으로 분석합니다.";
         }
 
         const reviewSummary = bfReviews.length > 0 
           ? bfReviews.map(r => `- ${r.content}`).join('\n')
-          : "해당 지역의 이동 편의성에 대한 거주자 리뷰가 아직 존재하지 않습니다.";
+          : `${analysisScope} 내에 이동 편의성 관련 거주자 리뷰가 아직 존재하지 않습니다.`;
         
         const prompt = `
           당신은 배리어 프리(Barrier-free) 도시 설계 전문가입니다. 
-          '${currentRegionName}' 지역의 [무장애 시설 데이터]와 [거주자 실제 리뷰]를 기반으로 '이동 편의성 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          ${analysisScope}의 [무장애 인프라 데이터]와 [거주자 실제 리뷰 ${bfReviews.length}건]를 기반으로 '이동 편의성 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
           휠체어, 유모차, 고령층의 시점에서 분석하십시오.
           
-          [무장애 시설 데이터]:
+          [무장애 인프라 데이터]:
           ${bfStat}
           
           [거주자 실제 리뷰]:
           ${reviewSummary}
           
           분석 지침:
-          1. 데이터가 부족하더라도 '${currentRegionName}'의 일반적인 지형 특성(예: 비즈니스 지구, 주거 밀집지 등)을 고려하여 전문가로서 추론하십시오.
-          2. '분석 불가'라는 표현 대신, 현재 가용한 정보 내에서 최선의 가이드를 제공하십시오.
+          1. 건물 내 편의시설과 지하철역 역사 내 설비(엘리베이터 등) 데이터를 종합하여 이동 편의성을 평가하십시오.
+          2. 데이터가 부족하더라도 ${analysisScope}의 일반적인 지형 특성을 고려하여 전문가로서 추론하십시오.
+          3. 분석 리포트(text)는 반드시 '한 문장'으로, 군더더기 없이 심플하게 작성하십시오.
+          4. 분석 리포트 서두에 "${analysisScope} 편의시설 데이터와 방문록 ${bfReviews.length}건을 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
-            "text": "이동 약자의 관점에서 본 한 문장 전문 분석 리포트 (추론 근거 포함)",
-            "source": "분석의 근거 (예: 지역 편의시설 및 지형 분석)"
+            "text": "이동 약자의 관점에서 본 전문 분석 리포트",
+            "source": "${stationName}역 무장애 설비, 주변 편의시설(${facilityCount}곳) 및 ${bfReviews.length}건의 실제 리뷰"
           }
         `;
 
@@ -755,7 +837,7 @@ export function Home() {
 
     const timer = setTimeout(generateBarrierFreeInsight, 1200);
     return () => clearTimeout(timer);
-  }, [currentRegionName, mapCenterCoord, reviews]);
+  }, [currentRegionName, mapCenterCoord, analysisRadius, isAiAnalysisMode, reviews]);
 
   const calculateAverageRating = useCallback((reviewList: Review[]) => {
     if (!reviewList || reviewList.length === 0) return "0.0";
@@ -2734,14 +2816,28 @@ export function Home() {
           bottom: discoverySheetState === 'full' ? 'auto' : '192px',
           top: discoverySheetState === 'full' ? '80px' : 'auto'
         }}>
-          {/* AI 분석 모드 토글 버튼 */}
-          <button
-            className={`home-ai-toggle-btn ${isAiAnalysisMode ? 'active' : ''}`}
-            onClick={() => setIsAiAnalysisMode(!isAiAnalysisMode)}
-            title="AI 분석 리포트 모드"
-          >
-            <Sparkles size={24} strokeWidth={2} fill={isAiAnalysisMode ? "#3182F6" : "none"} />
-          </button>
+          {/* AI 분석 모드 토글 버튼 (툴팁 포함) */}
+          <div className="home-ai-toggle-wrapper">
+            <AnimatePresence>
+              {showAiTooltip && (
+                <motion.div 
+                  className="ai-toggle-tooltip"
+                  initial={{ opacity: 0, x: 10, scale: 0.9 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 10, scale: 0.9 }}
+                >
+                  이 버튼을 누르면 AI 지역 리포트를 범위별로 볼 수 있어요!
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <button
+              className={`home-ai-toggle-btn ${isAiAnalysisMode ? 'active' : ''}`}
+              onClick={() => setIsAiAnalysisMode(!isAiAnalysisMode)}
+              title="AI 분석 리포트 모드"
+            >
+              <Sparkles size={24} strokeWidth={2} />
+            </button>
+          </div>
 
           {/* 로드뷰 (스트릿뷰) 탐색 모드 토글 버튼 */}
           <button
