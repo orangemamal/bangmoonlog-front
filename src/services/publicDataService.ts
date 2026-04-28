@@ -14,24 +14,69 @@ const getProxyBase = () => {
   return '/api/publicData';
 };
 
+// 시도 코드 매핑 (지역명 → ctpv_cd)
+const CITY_CODE_MAP: Record<string, string> = {
+  '서울': '11', '부산': '26', '대구': '27', '인천': '28', '광주': '29',
+  '대전': '30', '울산': '31', '세종': '36', '경기': '41', '강원': '42',
+  '충북': '43', '충남': '44', '전북': '45', '전남': '46', '경북': '47',
+  '경남': '48', '제주': '50',
+};
+
 /**
- * 1. 서울시 지하철 실시간 혼잡도
+ * 1. 국토교통부 대중교통 이용인원수 (월별)
+ * 전국 버스/지하철 노선별 월간 이용객 수 조회
  */
-export const getSubwayCongestion = async (stationName: string) => {
+export const getTransitPassengerCount = async (regionName: string = '서울') => {
   try {
-    if (!stationName) return null;
-    const url = `${getProxyBase()}?type=subway&station=${encodeURIComponent(stationName)}`;
+    // 지역명에서 시도코드 추출
+    const ctpvCd = Object.entries(CITY_CODE_MAP).find(
+      ([key]) => regionName.includes(key)
+    )?.[1] || '11'; // 기본값: 서울
+
+    // 최근 2개월 전 데이터 조회 (당월/전월은 집계 중일 수 있음)
+    const now = new Date();
+    now.setMonth(now.getMonth() - 2);
+    const oprYm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const url = `${getProxyBase()}?type=transit&ctpvCd=${ctpvCd}&oprYm=${oprYm}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    // 서울시 API는 errorMessage가 없으면 정상 응답
-    if (data.errorMessage) return null;
-    return data;
+
+    // 응답에서 이용인원 데이터 추출
+    const items = data?.response?.body?.items?.item || data?.body?.items?.item || [];
+    if (items.length === 0 && data?.header?.resultCode !== '00') {
+      console.warn('[교통] 대중교통 이용인원 데이터 없음:', data);
+      return null;
+    }
+
+    // 총 이용인원 합산 및 노선 정보 집계
+    let totalPassengers = 0;
+    const lines: string[] = [];
+    (Array.isArray(items) ? items : [items]).forEach((item: any) => {
+      totalPassengers += parseInt(item.psngr_num || item.psngrNum || '0', 10);
+      if (item.line_nm || item.lineNm) {
+        const lineName = item.line_nm || item.lineNm;
+        if (!lines.includes(lineName)) lines.push(lineName);
+      }
+    });
+
+    return {
+      totalPassengers,
+      lines: lines.slice(0, 10), // 상위 10개 노선
+      period: oprYm,
+      cityCode: ctpvCd,
+      itemCount: Array.isArray(items) ? items.length : 1,
+      raw: items,
+    };
   } catch (error) {
-    console.warn('[교통] 지하철 혼잡도 조회 실패:', stationName, error);
+    console.warn('[교통] 대중교통 이용인원 조회 실패:', regionName, error);
     return null;
   }
 };
+
+// 기존 함수명 호환 (Home.tsx에서 사용 중)
+export const getSubwayCongestion = getTransitPassengerCount;
 
 /**
  * 2. 주변 CCTV 현황 (행정안전부)
@@ -42,8 +87,16 @@ export const getNearbyCCTV = async (lat: number, lng: number, radius: number = 3
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    // 다양한 공공데이터 응답 형식 처리
     if (data.response?.body) return data;
     if (data.items) return { response: { body: { totalCount: data.items.length, items: data.items } } };
+    if (data.totalCount !== undefined) return { response: { body: data } };
+    if (data.data) return { response: { body: { totalCount: data.data.length || 0, items: data.data } } };
+    // 어떤 형식이든 데이터가 있으면 래핑해서 반환
+    if (typeof data === 'object' && Object.keys(data).length > 0) {
+      console.log('[CCTV] 비표준 응답 형식, 래핑 처리:', Object.keys(data));
+      return { response: { body: { totalCount: 0, items: [], raw: data } } };
+    }
     throw new Error('Unexpected format');
   } catch (error) {
     console.warn('[안전] CCTV 조회 실패, 폴백 사용:', error);

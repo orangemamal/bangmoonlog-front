@@ -565,14 +565,15 @@ export function Home() {
           stationName = stationMapping[stationName];
         }
 
-        const publicData = await import('../services/publicDataService').then(s => s.getSubwayCongestion(stationName));
+        const publicData = await import('../services/publicDataService').then(s => s.getTransitPassengerCount(currentRegionName || '서울'));
         
-        let publicStat = "해당 지역의 실시간 교통 수치 데이터를 불러올 수 없습니다.";
-        if (publicData && publicData.RealtimeSubwayCongestion && publicData.RealtimeSubwayCongestion.row) {
-          const stat = publicData.RealtimeSubwayCongestion.row[0];
-          publicStat = `실시간 데이터 분석 결과: 현재 ${stationName}역의 혼잡도는 '${stat.CONGEST_LVL || '보통'}' 수준입니다. (수치: ${stat.CONGEST_LVL || 0}%)`;
-        } else if (stationName) {
-          publicStat = `${stationName} 인근 지하철역의 실시간 혼잡도 데이터를 조회했으나, 현재 제공되지 않는 구간입니다.`;
+        let publicStat = "해당 지역의 대중교통 이용 데이터를 불러올 수 없습니다.";
+        if (publicData && publicData.totalPassengers > 0) {
+          const formattedCount = (publicData.totalPassengers / 10000).toFixed(1);
+          const lineInfo = publicData.lines.length > 0 ? `주요 노선: ${publicData.lines.slice(0, 5).join(', ')}` : '';
+          publicStat = `${publicData.period.slice(0,4)}년 ${parseInt(publicData.period.slice(4))}월 기준, 해당 지역 대중교통 월간 이용객 약 ${formattedCount}만명. ${lineInfo}`;
+        } else if (publicData) {
+          publicStat = `${stationName} 인근 대중교통 이용인원 데이터를 조회했으나, 해당 기간 집계 데이터가 아직 없습니다.`;
         }
 
         // 방문록이 없고 공공데이터도 실패했을 때만 중단
@@ -611,7 +612,7 @@ export function Home() {
           {
             "score": 숫자(0~100),
             "text": "위 지침을 따른 전문적인 리포트",
-            "source": "${stationName}역 실시간 혼합도 및 ${analysisScope} 리뷰 ${commuteReviews.length}건"
+            "source": "국토교통부 대중교통 이용인원 통계 및 ${analysisScope} 리뷰 ${commuteReviews.length}건"
           }
         `;
 

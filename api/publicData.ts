@@ -14,10 +14,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let targetUrl = '';
 
     switch (type) {
-      case 'subway': {
-        // 서울시 지하철 혼잡도
-        const station = params.station as string;
-        targetUrl = `http://openapi.seoul.go.kr:8088/${SERVICE_KEY}/json/RealtimeSubwayCongestion/1/5/${encodeURIComponent(station)}`;
+      case 'transit': {
+        // 국토교통부 대중교통 이용인원수 (월별)
+        const { ctpvCd, oprYm } = params;
+        // 기본값: 서울(11), 최근 월
+        const now = new Date();
+        const defaultYm = `${now.getFullYear()}${String(now.getMonth()).padStart(2, '0')}`;
+        targetUrl = `https://apis.data.go.kr/1613000/PublicTransportationPassengerCount/getMonthlyPublicTransportationPassengerCount?serviceKey=${SERVICE_KEY}&pageNo=1&numOfRows=50&dataType=JSON&ctpv_cd=${ctpvCd || '11'}&opr_ym=${oprYm || defaultYm}`;
         break;
       }
       case 'cctv': {
