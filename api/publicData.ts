@@ -33,9 +33,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         break;
       }
       case 'cctv': {
-        // CCTV 현황
+        // CCTV 현황 (전체 타입: 교통+방범+기타)
         const { lat, lng, radius } = params;
-        targetUrl = `https://apis.data.go.kr/1741000/cctv_info/getCCTVList?serviceKey=${SERVICE_KEY}&type=json&cctvType=1&pageNo=1&numOfRows=10&coord_x=${lng}&coord_y=${lat}&buffer=${radius || 300}`;
+        targetUrl = `https://apis.data.go.kr/1741000/cctv_info/getCCTVList?serviceKey=${SERVICE_KEY}&type=json&pageNo=1&numOfRows=100&coord_x=${lng}&coord_y=${lat}&buffer=${radius || 300}`;
         break;
       }
       case 'accident': {

@@ -593,32 +593,34 @@ export function Home() {
           return;
         }
 
-        const reviewSummary = commuteReviews.length > 0 
+        const reviewCount = commuteReviews.length;
+        const reviewLabel = reviewCount > 0 ? `${reviewCount}건의 방문록` : '주변 방문록';
+        const reviewSummary = reviewCount > 0 
           ? commuteReviews.map(r => `- ${r.content}`).join('\n')
-          : `${analysisScope} 내에 교통 관련 거주자 리뷰가 아직 존재하지 않습니다. 공공 데이터 수치를 중심으로 분석해주세요.`;
+          : `${analysisScope} 내 교통 관련 방문록은 아직 없습니다. 공공 데이터를 중심으로 분석해주세요.`;
         
         const prompt = `
           당신은 주거 및 교통 데이터 분석 전문가입니다. 
-          아래는 ${analysisScope}에 대한 [공공 데이터 수치]와 [거주자 실제 리뷰 ${commuteReviews.length}건]입니다.
+          아래는 ${analysisScope}에 대한 [공공 데이터 수치]와 [거주자 방문록]입니다.
           이 데이터를 기반으로 '출퇴근 쾌적도 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
           
           [공공 데이터 팩트]:
           ${publicStat}
           
-          [거주자 실제 리뷰]:
+          [거주자 방문록]:
           ${reviewSummary}
           
           분석 지침:
-          1. 거주자 리뷰가 없더라도 제공된 [공공 데이터 팩트]만으로 해당 지역의 교통 편의성을 객관적으로 평가하십시오.
-          2. 리뷰가 있다면 공공 데이터와 비교하여 '체감 만족도'를 함께 분석하십시오.
-          3. 분석 리포트(text)는 반드시 '한 문장'으로, 사용자가 직관적으로 이해할 수 있게 '간결하고 심플하게' 작성하십시오. (불필요한 수식어나 긴 설명 금지)
-          4. 분석 리포트 서두에 "${analysisScope} 방문록 ${commuteReviews.length}건과 실시간 데이터를 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
+          1. 방문록이 없더라도 [공공 데이터 팩트]만으로 교통 편의성을 객관적으로 평가하십시오.
+          2. 방문록이 있다면 공공 데이터와 비교하여 '체감 만족도'를 함께 분석하십시오.
+          3. 분석 리포트(text)는 반드시 '한 문장'으로, 간결하고 심플하게 작성하십시오.
+          4. 분석 리포트 서두에 "${analysisScope} ${reviewLabel}과 공공데이터를 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
             "text": "위 지침을 따른 전문적인 리포트",
-            "source": "국토교통부 대중교통 이용인원 통계 및 ${analysisScope} 리뷰 ${commuteReviews.length}건"
+            "source": "국토교통부 대중교통 통계 및 ${analysisScope} ${reviewLabel}"
           }
         `;
 
@@ -697,32 +699,34 @@ export function Home() {
           safetyStat = "현재 해당 지역의 실시간 안전 지표 데이터를 수집 중입니다.";
         }
 
-        const reviewSummary = safetyReviews.length > 0 
+        const safetyReviewCount = safetyReviews.length;
+        const safetyReviewLabel = safetyReviewCount > 0 ? `${safetyReviewCount}건의 방문록` : '주변 방문록';
+        const reviewSummary = safetyReviewCount > 0 
           ? safetyReviews.map(r => `- ${r.content}`).join('\n')
-          : `${analysisScope} 내에 치안 관련 거주자 리뷰가 아직 존재하지 않습니다. 인프라 설치 현황과 사고 기록을 중심으로 분석해주세요.`;
+          : `${analysisScope} 내 치안 관련 방문록은 아직 없습니다. 인프라 현황을 중심으로 분석해주세요.`;
         
         const prompt = `
           당신은 도시 안전 및 치안 분석 전문가입니다. 
-          ${analysisScope}의 [보안 및 사고 데이터]와 [거주자 실제 리뷰 ${safetyReviews.length}건]를 기반으로 '안심 귀가 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          ${analysisScope}의 [보안 및 사고 데이터]와 [거주자 방문록]을 기반으로 '안심 귀가 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
           
           [보안 및 사고 데이터]:
           ${safetyStat}
           
-          [거주자 실제 리뷰]:
+          [거주자 방문록]:
           ${reviewSummary}
           
           분석 지침:
-          1. CCTV 대수(보안 시설)와 교통사고 다발지역(위험 요소) 데이터를 종합하여 안전 점수를 산출하십시오.
-          2. 거주자 리뷰가 없더라도 제공된 수치 데이터만으로 해당 지역의 객관적인 안전 등급을 산출하십시오.
-          3. 리뷰가 있는 경우, 실제 거주자들이 느끼는 '체감 안전도'와 인프라/사고 기록의 차이를 분석하십시오.
-          4. 분석 리포트(text)는 반드시 '한 문장'으로, 아주 간결하고 명확하게 작성하십시오. (사용자가 1초 만에 읽을 수 있도록)
-          5. 분석 리포트 서두에 "${analysisScope} CCTV 현황 및 사고 기록과 방문록 ${safetyReviews.length}건을 종합 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
+          1. CCTV 대수와 교통사고 다발지역 데이터를 종합하여 안전 점수를 산출하십시오.
+          2. 방문록이 없더라도 수치 데이터만으로 객관적인 안전 등급을 산출하십시오.
+          3. 방문록이 있다면 '체감 안전도'와 인프라 기록의 차이를 분석하십시오.
+          4. 분석 리포트(text)는 반드시 '한 문장'으로, 간결하고 명확하게 작성하십시오.
+          5. 분석 리포트 서두에 "${analysisScope} CCTV 현황과 ${safetyReviewLabel}을 분석한 결과," 와 같은 문구를 넣으십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
-            "text": "치안 및 사고 현황을 기반으로 한 전문적인 분석 리포트",
-            "source": "${analysisScope} 공공 CCTV(${cctvCount}대), 사고 기록(${accidentCount}건) 및 ${safetyReviews.length}건의 안전 리뷰"
+            "text": "치안 현황 기반 전문 분석 리포트",
+            "source": "${analysisScope} 공공 CCTV(${cctvCount}대), 사고 기록 및 ${safetyReviewLabel}"
           }
         `;
 
@@ -800,32 +804,34 @@ export function Home() {
           bfStat = "해당 지역의 상세 무장애 인프라 데이터를 수집 중입니다. 일반적인 보행 환경을 바탕으로 분석합니다.";
         }
 
-        const reviewSummary = bfReviews.length > 0 
+        const bfReviewCount = bfReviews.length;
+        const bfReviewLabel = bfReviewCount > 0 ? `${bfReviewCount}건의 방문록` : '주변 방문록';
+        const reviewSummary = bfReviewCount > 0 
           ? bfReviews.map(r => `- ${r.content}`).join('\n')
-          : `${analysisScope} 내에 이동 편의성 관련 거주자 리뷰가 아직 존재하지 않습니다.`;
+          : `${analysisScope} 내 이동 편의성 관련 방문록은 아직 없습니다.`;
         
         const prompt = `
           당신은 배리어 프리(Barrier-free) 도시 설계 전문가입니다. 
-          ${analysisScope}의 [무장애 인프라 데이터]와 [거주자 실제 리뷰 ${bfReviews.length}건]를 기반으로 '이동 편의성 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          ${analysisScope}의 [무장애 인프라 데이터]와 [거주자 방문록]을 기반으로 '이동 편의성 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
           휠체어, 유모차, 고령층의 시점에서 분석하십시오.
           
           [무장애 인프라 데이터]:
           ${bfStat}
           
-          [거주자 실제 리뷰]:
+          [거주자 방문록]:
           ${reviewSummary}
           
           분석 지침:
-          1. 건물 내 편의시설과 지하철역 역사 내 설비(엘리베이터 등) 데이터를 종합하여 이동 편의성을 평가하십시오.
-          2. 데이터가 부족하더라도 ${analysisScope}의 일반적인 지형 특성을 고려하여 전문가로서 추론하십시오.
-          3. 분석 리포트(text)는 반드시 '한 문장'으로, 군더더기 없이 심플하게 작성하십시오.
-          4. 분석 리포트 서두에 "${analysisScope} 편의시설 데이터와 방문록 ${bfReviews.length}건을 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
+          1. 건물 내 편의시설과 역사 내 설비 데이터를 종합하여 이동 편의성을 평가하십시오.
+          2. 데이터가 부족하더라도 지형 특성을 고려하여 전문가로서 추론하십시오.
+          3. 분석 리포트(text)는 반드시 '한 문장'으로, 심플하게 작성하십시오.
+          4. 분석 리포트 서두에 "${analysisScope} 편의시설 데이터와 ${bfReviewLabel}을 분석한 결과," 와 같은 문구를 넣으십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
             "text": "이동 약자의 관점에서 본 전문 분석 리포트",
-            "source": "${stationName}역 무장애 설비, 주변 편의시설(${facilityCount}곳) 및 ${bfReviews.length}건의 실제 리뷰"
+            "source": "${stationName}역 무장애 설비, 주변 편의시설(${facilityCount}곳) 및 ${bfReviewLabel}"
           }
         `;
 
