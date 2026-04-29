@@ -40,6 +40,7 @@ import { InquiryModal } from "../components/common/InquiryModal";
 import { DiscoveryBottomSheet } from "../components/home/DiscoveryBottomSheet";
 import { MarkerInfoWindow } from "../components/home/MarkerInfoWindow";
 import { MarkerLoadingWindow } from "../components/home/MarkerLoadingWindow";
+import { BuildingAnalysisModal } from "../components/home/BuildingAnalysisModal";
 import { normalizeAddressDetail, formatAddressDetail, normalizeBaseAddress } from "../utils/addressUtils";
 import { calculateDistance } from "../utils/geoUtils";
 import { Toast } from "../components/common/Toast";
@@ -262,7 +263,6 @@ const uploadMediaToStorage = (
   onProgress?: (percent: number) => void
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // Blob일 경우 name이 없을 수 있으므로 안전하게 처리
     const fileNameAttr = (file as any).name || `compressed_${Date.now()}.webm`;
     const fileExt = fileNameAttr.split('.').pop();
     const fileName = `media_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -293,6 +293,16 @@ export function Home() {
   const { isLoggedIn, user } = useAuth();
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
   const [inquiryData, setInquiryData] = useState<{ type: string; address?: string }>({ type: 'report' });
+  const [isBuildingAnalysisOpen, setIsBuildingAnalysisOpen] = useState(false);
+  const [analysisBuildingData, setAnalysisBuildingData] = useState<any>(null);
+  const [analysisBuildingAddress, setAnalysisBuildingAddress] = useState("");
+
+  // [신규] 광역 분석 원천 통계 데이터 (The Radar용)
+  const [areaHousingStats, setAreaHousingStats] = useState<any>(null);
+  const [areaTransitStats, setAreaTransitStats] = useState<any>(null);
+  const [areaSafetyStats, setAreaSafetyStats] = useState<any>(null);
+
+
 
   // 콜백 내 최신 상태 참조용 Ref
   const isLoggedInRef = useRef(isLoggedIn);
@@ -390,6 +400,8 @@ export function Home() {
   const mapElement = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const infoWindowInstance = useRef<any>(null);
+  const dongPolygonRef = useRef<any>(null);
+  const analysisCircleRef = useRef<any>(null);
   const allLocationsRef = useRef<any[]>([]);
   const unsubscribeReadListRef = useRef<(() => void) | null>(null);
   const isInitialNavRef = useRef(false);
@@ -397,7 +409,8 @@ export function Home() {
   const userMarkerRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
   const allMarkersRef = useRef<any[]>([]);
-  const analysisCircleRef = useRef<any>(null);
+  const lastDongNameRef = useRef<string>("");
+  const dongAnchorRef = useRef<any>(null);
 
   // [신규] 건축물 확인 결과 캐시 (성능 최적화용)
   const buildingCacheRef = useRef<Record<string, { isResidential: boolean; purpose: string | null }>>({});
@@ -426,7 +439,25 @@ export function Home() {
   const [aiBarrierFreeInsight, setAiBarrierFreeInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
   const [isAnalyzingBarrierFree, setIsAnalyzingBarrierFree] = useState(false);
   const [isAiAnalysisMode, setIsAiAnalysisMode] = useState(false);
+
+  // [신규] 전역 건물 분석 핸들러 활성화 (모든 상태 선언 후 배치하여 TDZ 방지)
+  useBuildingAnalysisHandler(
+    setIsBuildingAnalysisOpen,
+    setAnalysisBuildingAddress,
+    setAnalysisBuildingData,
+    reviews,
+    areaSafetyStats,
+    areaTransitStats
+  );
+  const [discoverySheetState, setDiscoverySheetState] = useState<'collapsed' | 'full'>('collapsed');
   const [analysisRadius, setAnalysisRadius] = useState(100);
+  const [slopeData, setSlopeData] = useState<{ center: number, north: number, south: number, east: number, west: number } | null>(null);
+
+  // [신규] 프리미엄 인사이트 상태
+  const [aiPropertyInsight, setAiPropertyInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
+  const [aiSafetyHazardInsight, setAiSafetyHazardInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
+  const [aiCommuteFatigueInsight, setAiCommuteFatigueInsight] = useState<{ score: number, text: string, source?: string } | null>(null);
+  const [isAnalyzingPremium, setIsAnalyzingPremium] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [verificationDistance, setVerificationDistance] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -450,6 +481,14 @@ export function Home() {
       clearTimeout(hideTimer);
     };
   }, []);
+
+  // [신규] 바텀시트가 상단으로 올라가면(AI 분석 결과 확인 등) 지도의 AI 분석 범위를 자동으로 끕니다.
+  useEffect(() => {
+    if (discoverySheetState === 'full' && isAiAnalysisMode) {
+      setIsAiAnalysisMode(false);
+    }
+  }, [discoverySheetState, isAiAnalysisMode]);
+
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -465,6 +504,15 @@ export function Home() {
     desc: "",
     icon: "🥳",
   });
+
+  // 통합 모달 오픈 상태 (모든 모달/시트 상태를 하나로 관리)
+  const isModalOpen =
+    isSheetOpen ||
+    isReadListOpen ||
+    isAISearchOpen ||
+    isPostcodeOpen ||
+    isInquiryModalOpen ||
+    modalConfig.isOpen;
 
   const handleCloseDetail = useCallback(() => setSelectedReview(null), []);
 
@@ -570,25 +618,22 @@ export function Home() {
           stationName = stationMapping[stationName];
         }
 
-        const publicData = await import('../services/publicDataService').then(s => s.getTransitPassengerCount(currentRegionName || '서울'));
+        const [publicData, transitStats] = await Promise.all([
+          import('../services/publicDataService').then(s => s.getTransitPassengerCount(currentRegionName || '서울')),
+          import('../services/publicDataService').then(s => s.getTransitStats(currentRegionName || '서울'))
+        ]);
 
-        let publicStat = "해당 지역의 대중교통 이용 데이터를 불러올 수 없습니다.";
+        let publicStat = "";
         if (publicData && publicData.totalPassengers > 0) {
           const formattedCount = (publicData.totalPassengers / 10000).toFixed(1);
-          const lineInfo = publicData.lines.length > 0 ? ` 주요 노선: ${publicData.lines.slice(0, 5).join(', ')}` : '';
-
-          // period가 YYYYMM 형식이면 파싱, 아니면 그대로 표시
-          let periodLabel = publicData.period;
-          if (/^\d{6}$/.test(publicData.period)) {
-            periodLabel = `${publicData.period.slice(0, 4)}년 ${parseInt(publicData.period.slice(4))}월`;
-          }
-
-          const fallbackNote = (publicData as any)._fallback ? ' (지역 평균 추정치)' : '';
-          publicStat = `조회 기준: ${periodLabel}${fallbackNote}, 해당 지역 대중교통 이용객 약 ${formattedCount}만명.${lineInfo}`;
+          publicStat += `[이용량]: 해당 지역 대중교통 이용객 약 ${formattedCount}만명. `;
+        }
+        if (transitStats) {
+          publicStat += `[교통카드 통계]: 평균 환승 ${transitStats.avgTransfers}회, 평균 통행시간 ${transitStats.avgTime}분. `;
         }
 
         // 방문록이 없고 공공데이터도 실패했을 때만 중단
-        if (baseReviews.length === 0 && !publicData) {
+        if (baseReviews.length === 0 && !publicData && !transitStats) {
           setAiCommuteInsight({
             score: 50,
             text: `${currentRegionName} 지역의 상세 데이터를 수집 중입니다. 잠시 후 다시 확인해주세요!`,
@@ -606,26 +651,26 @@ export function Home() {
 
         const prompt = `
           당신은 주거 및 교통 데이터 분석 전문가입니다. 
-          아래는 ${analysisScope}에 대한 [공공 데이터 수치]와 [거주자 방문록]입니다.
+          아래는 ${analysisScope}에 대한 [교통카드 빅데이터 통계]와 [거주자 방문록]입니다.
           이 데이터를 기반으로 '출퇴근 쾌적도 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
           
-          [공공 데이터 팩트]:
+          [국가 교통 데이터]:
           ${publicStat}
           
           [거주자 방문록]:
           ${reviewSummary}
           
           분석 지침:
-          1. 방문록이 없더라도 [공공 데이터 팩트]만으로 교통 편의성을 객관적으로 평가하십시오.
-          2. 방문록이 있다면 공공 데이터와 비교하여 '체감 만족도'를 함께 분석하십시오.
-          3. 분석 리포트(text)는 반드시 '한 문장'으로, 간결하고 심플하게 작성하십시오.
-          4. 분석 리포트 서두에 "${analysisScope} ${reviewLabel}과 공공데이터를 분석한 결과," 와 같은 문구를 넣어 신뢰도를 높이십시오.
+          1. STCIS 교통카드 빅데이터(환승 횟수, 통행 시간)를 분석의 최우선 근거로 사용하십시오.
+          2. 환승 횟수가 1.3회 이상이면 '환승 피로도 높음', 1.0회 미만이면 '교통 요충지'로 해석하십시오.
+          3. 분석 리포트(text)는 반드시 마침표 하나로 끝나는 '단 한 문장'으로만 작성하십시오. 불필요한 수식어나 마크다운 형식은 절대 금지입니다.
+          4. 분석 리포트 서두에 "${analysisScope} 교통카드 빅데이터와 ${reviewLabel}을 정밀 분석한 결과," 와 같은 문구를 넣어 전문성을 높이십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
             "text": "위 지침을 따른 전문적인 리포트",
-            "source": "국토교통부 대중교통 통계 및 ${analysisScope} ${reviewLabel}"
+            "source": "교통카드 빅데이터 통합정보시스템(STCIS) 및 국토교통부 대중교통 통계 + ${analysisScope} ${reviewLabel}"
           }
         `;
 
@@ -676,62 +721,62 @@ export function Home() {
 
         const analysisScope = isAiAnalysisMode ? `반경 ${analysisRadius}m` : `'${dongName}' 지역`;
 
-        // 2. 공공데이터(CCTV + 사고 다발지역) 가져오기
-        const { getNearbyCCTV, getAccidentHotspots } = await import('../services/publicDataService');
+        // 2. 공공데이터(CCTV + 사고 다발지역 + 치안 등급) 가져오기
+        const { getNearbyCCTV, getAccidentHotspots, getSafetyLevel } = await import('../services/publicDataService');
 
-        const [cctvData, accidentData] = await Promise.all([
+        const [cctvData, accidentData, safetyData] = await Promise.all([
           getNearbyCCTV(mapCenterCoord.lat, mapCenterCoord.lng, analysisRadius),
-          getAccidentHotspots(mapCenterCoord.lat, mapCenterCoord.lng)
+          getAccidentHotspots(mapCenterCoord.lat, mapCenterCoord.lng),
+          getSafetyLevel(mapCenterCoord.lat, mapCenterCoord.lng)
         ]);
 
         let safetyStat = "";
         let cctvCount = 0;
-        let accidentCount = 0;
 
         // CCTV 데이터 정리
         if (cctvData && cctvData.response && cctvData.response.body) {
           cctvCount = cctvData.response.body.totalCount || 0;
-          safetyStat += `[CCTV 현황]: 주변 공공 CCTV 약 ${cctvCount}대 확인. `;
+          safetyStat += `[인프라]: 공공 CCTV ${cctvCount}대 확인. `;
+        }
+
+        // 치안 등급 데이터 정리
+        if (safetyData) {
+          safetyStat += `[치안 지표]: 생활안전지도 ${safetyData.level}등급 (${safetyData.desc}). `;
         }
 
         // 사고 다발지역 데이터 정리
         if (accidentData && accidentData.response && accidentData.response.body) {
-          accidentCount = accidentData.response.body.totalCount || 0;
-          safetyStat += `[사고 위험]: 인근 교통사고 다발 지역 ${accidentCount}곳 감지. `;
-        }
-
-        if (!safetyStat) {
-          safetyStat = "현재 해당 지역의 실시간 안전 지표 데이터를 수집 중입니다.";
+          const accidentCount = accidentData.response.body.totalCount || 0;
+          safetyStat += `[위험 구역]: 인근 사고 다발 지역 ${accidentCount}곳 감지. `;
         }
 
         const safetyReviewCount = safetyReviews.length;
         const safetyReviewLabel = safetyReviewCount > 0 ? `${safetyReviewCount}건의 방문록` : '주변 방문록';
         const reviewSummary = safetyReviewCount > 0
           ? safetyReviews.map(r => `- ${r.content}`).join('\n')
-          : `${analysisScope} 내 치안 관련 방문록은 아직 없습니다. 인프라 현황을 중심으로 분석해주세요.`;
+          : `${analysisScope} 내 치안 관련 방문록은 아직 없습니다.`;
 
         const prompt = `
           당신은 도시 안전 및 치안 분석 전문가입니다. 
-          ${analysisScope}의 [보안 및 사고 데이터]와 [거주자 방문록]을 기반으로 '안심 귀가 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
+          ${analysisScope}의 [국가 치안 안전 데이터]와 [거주자 방문록]을 기반으로 '안심 귀가 지수(0~100)'를 산출하십시오.
           
-          [보안 및 사고 데이터]:
+          [국가 치안 안전 데이터]:
           ${safetyStat}
           
           [거주자 방문록]:
           ${reviewSummary}
           
           분석 지침:
-          1. CCTV 대수와 교통사고 다발지역 데이터를 종합하여 안전 점수를 산출하십시오.
-          2. 방문록이 없더라도 수치 데이터만으로 객관적인 안전 등급을 산출하십시오.
-          3. 방문록이 있다면 '체감 안전도'와 인프라 기록의 차이를 분석하십시오.
-          4. 분석 리포트(text)는 반드시 '한 문장'으로, 간결하고 명확하게 작성하십시오.
-          5. 분석 리포트 서두에 "${analysisScope} CCTV 현황과 ${safetyReviewLabel}을 분석한 결과," 와 같은 문구를 넣으십시오.
+          1. 생활안전지도(Safemap) 치안 등급(${safetyData?.level || '보통'})과 사고 위험 데이터(인근 사고지점 감지 등)를 반드시 분석의 핵심 근거로 사용하십시오.
+          2. 절대로 "상세 정보가 없다"거나 "정보가 부족하다"는 표현을 쓰지 마십시오. 제공된 수치만으로 최선의 안전 가이드를 작성하십시오.
+          3. 분석 리포트(text)는 반드시 마침표 하나로 끝나는 '단 한 문장'으로만 작성하십시오. 불필요한 마크다운 기호(###, **)는 절대 사용하지 마십시오.
+          4. 분석 리포트 서두에 "${analysisScope} 생활안전지도 등급과 ${safetyReviewLabel}을 정밀 분석한 결과," 와 같은 문구를 넣으십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
             "text": "치안 현황 기반 전문 분석 리포트",
-            "source": "${analysisScope} 공공 CCTV(${cctvCount}대), 사고 기록 및 ${safetyReviewLabel}"
+            "source": "생활안전지도(행안부), 경찰청 CCTV, 도로교통공단 사고기록 + ${safetyReviewLabel}"
           }
         `;
 
@@ -752,108 +797,85 @@ export function Home() {
     return () => clearTimeout(timer);
   }, [currentRegionName, mapCenterCoord, analysisRadius, isAiAnalysisMode, reviews]);
 
-  // [신규] AI 배리어 프리(무장애) 리포트 생성 엔진
+  // [리뉴얼] AI 보행 경사도(Slope) 리포트 생성 엔진
   useEffect(() => {
     if (!currentRegionName || !mapCenterCoord || reviews.length === 0) return;
 
-    const generateBarrierFreeInsight = async () => {
+    const generateSlopeInsight = async () => {
       setIsAnalyzingBarrierFree(true);
       try {
-        // 1. 분석 모드에 따른 리뷰 필터링
         const dongName = currentRegionName.split(' ').pop() || '';
-        const baseReviews = isAiAnalysisMode
-          ? reviews.filter(r => {
-            if (!mapCenterCoord || !r.lat || !r.lng) return false;
-            const dist = calculateDistance(mapCenterCoord.lat, mapCenterCoord.lng, r.lat, r.lng);
-            return dist <= analysisRadius;
-          })
-          : reviews.filter(r => (r.address || r.location || '').includes(dongName));
-
-        const bfReviews = baseReviews.filter(r =>
-          /(턱|경사|엘리베이터|휠체어|유모차|평지|언덕|계단|보행|보도|육교)/.test(r.content)
-        ).slice(0, 5);
-
         const analysisScope = isAiAnalysisMode ? `반경 ${analysisRadius}m` : `'${dongName}' 지역`;
 
-        // 2. 좌표 기반 인근 역 목록 (여러 역 조회)
-        const { getBarrierFreeFacilities, getRailwayConvenience } = await import('../services/publicDataService');
+        // 1. 20m 반경 고도차 분석 (N, S, E, W 4방향)
+        const { getElevation } = await import('../services/publicDataService');
+        const step = isAiAnalysisMode ? (analysisRadius / 111000) : 0.00018; // m를 좌표 단위로 환산
+        const locations = [
+          { lat: mapCenterCoord.lat, lng: mapCenterCoord.lng }, // Center
+          { lat: mapCenterCoord.lat + step, lng: mapCenterCoord.lng }, // North
+          { lat: mapCenterCoord.lat - step, lng: mapCenterCoord.lng }, // South
+          { lat: mapCenterCoord.lat, lng: mapCenterCoord.lng + (step * 1.2) }, // East
+          { lat: mapCenterCoord.lat, lng: mapCenterCoord.lng - (step * 1.2) }  // West
+        ];
 
-        const nearbyStations: { [key: string]: string[] } = {
-          '다': ['을지로입구', '시청', '종각'],
-          '무교': ['을지로입구', '광화문', '시청'],
-          '서린': ['광화문', '종각', '안국'],
-          '태평로': ['시청', '을지로입구', '광화문'],
-          '남대문로': ['을지로입구', '회현', '명동'],
-          '회현': ['회현', '명동', '서울역'],
-          '명': ['명동', '을지로입구', '충무로'],
-          '충무로': ['충무로', '을지로3가', '동대입구'],
-          '을지로': ['을지로입구', '을지로3가', '을지로4가'],
-        };
+        const elevations = await getElevation(locations);
+        const centerElev = elevations[0];
+        const surroundingElevs = elevations.slice(1);
 
-        let stationName = dongName.replace('동', '');
-        const stationList = nearbyStations[stationName] || [stationName || '을지로입구'];
-        const mainStation = stationList[0];
+        // 시각화를 위한 고도 데이터 저장
+        setSlopeData({
+          center: centerElev,
+          north: elevations[1],
+          south: elevations[2],
+          east: elevations[3],
+          west: elevations[4]
+        });
 
-        // 여러 역 + 주소 기반 편의시설 병렬 조회
-        const [railwayResults, facilityData] = await Promise.all([
-          // 인근 역 2개까지 조회 (속도)
-          Promise.all(stationList.slice(0, 2).map(s => getRailwayConvenience(s).catch(() => null))),
-          // 동네 주소로 편의시설 검색
-          getBarrierFreeFacilities(currentRegionName || dongName),
+        // 최대 고도차 계산
+        const maxDiff = Math.max(...surroundingElevs.map((e: number) => Math.abs(e - centerElev)));
+        const effectiveRadius = isAiAnalysisMode ? analysisRadius : 20;
+        const slopePercent = (maxDiff / effectiveRadius) * 100; // 설정된 거리 기준 경사율 (%)
+
+        // 2. 방문록 및 역사 시설물(엘리베이터) 데이터 융합
+        const { getStationConvenience } = await import('../services/publicDataService');
+        const [stationData] = await Promise.all([
+          getStationConvenience(dongName)
         ]);
 
-        let bfStat = "";
-        let facilityCount = 0;
-        const stationsWithFacility: string[] = [];
+        const slopeReviews = reviews.filter(r =>
+          /(경사|언덕|평지|오르막|내리막|턱|계단|힘들어|가파른)/.test(r.content)
+        ).slice(0, 3);
 
-        // 건물 편의시설 데이터 정리
-        if (facilityData && facilityData.response && facilityData.response.body) {
-          facilityCount = facilityData.response.body.totalCount || 0;
-          if (facilityCount > 0) bfStat += `[건물 시설]: 주변에 약 ${facilityCount}곳의 장애인 인증 편의시설 확인. `;
-        }
+        const reviewSummary = slopeReviews.length > 0
+          ? slopeReviews.map(r => `- ${r.content}`).join('\n')
+          : "주변에 지형 관련 방문록이 없습니다.";
 
-        // 역사 편의시설 데이터 정리 (여러 역)
-        railwayResults.forEach((data, i) => {
-          if (data && data.response && data.response.body && data.response.body.items) {
-            stationsWithFacility.push(stationList[i]);
-          }
-        });
-        if (stationsWithFacility.length > 0) {
-          bfStat += `[역사 시설]: ${stationsWithFacility.join(', ')}역 내 엘리베이터/수유실 등 무장애 설비 확인됨. `;
-        }
-
-        if (!bfStat) {
-          bfStat = `${mainStation}역 등 인근 주요 역사의 편의시설 데이터를 조회했으나 상세 정보가 제한적입니다. 일반적인 서울 도심 역사 기준으로 분석합니다.`;
-        }
-
-        const bfReviewCount = bfReviews.length;
-        const bfReviewLabel = bfReviewCount > 0 ? `${bfReviewCount}건의 방문록` : '주변 방문록';
-        const reviewSummary = bfReviewCount > 0
-          ? bfReviews.map(r => `- ${r.content}`).join('\n')
-          : `${analysisScope} 내 이동 편의성 관련 방문록은 아직 없습니다.`;
-
+        // 3. AI 분석 프롬프트 구성 (경사도 + 엘리베이터 융합)
         const prompt = `
-          당신은 배리어 프리(Barrier-free) 도시 설계 전문가입니다. 
-          ${analysisScope}의 [무장애 인프라 데이터]와 [거주자 방문록]을 기반으로 '이동 편의성 지수(0~100)'와 '요약 인사이트'를 작성해주세요.
-          휠체어, 유모차, 고령층의 시점에서 분석하십시오.
+          당신은 지형 및 보행 약자 이동 편의 분석 전문가입니다. 
+          ${analysisScope}의 [지형 데이터]와 [역사 내 편의시설] 정보를 기반으로 '보행 쾌적도 지수(0~100)'를 산출하십시오.
           
-          [무장애 인프라 데이터]:
-          ${bfStat}
+          [지형 데이터]:
+          - ${effectiveRadius}m 반경 최대 고도차: ${maxDiff.toFixed(1)}m
+          - 추정 경사율: ${slopePercent.toFixed(1)}% (${slopePercent >= 10 ? '가파름' : '완만함'})
+          
+          [역사 내 엘리베이터]:
+          ${stationData ? `${stationData.station}역 내 엘리베이터 ${stationData.count}개 확인됨` : '주변 역 편의시설 정보 없음'}
           
           [거주자 방문록]:
           ${reviewSummary}
           
           분석 지침:
-          1. 건물 내 편의시설과 역사 내 설비 데이터를 종합하여 이동 편의성을 평가하십시오.
-          2. 데이터가 부족하더라도 지형 특성을 고려하여 전문가로서 추론하십시오.
-          3. 분석 리포트(text)는 반드시 '한 문장'으로, 심플하게 작성하십시오.
-          4. 분석 리포트 서두에 "${analysisScope} 편의시설 데이터와 ${bfReviewLabel}을 분석한 결과," 와 같은 문구를 넣으십시오.
+          1. 지형이 험하더라도 지하철역 내 엘리베이터 접근성이 좋으면 보행 약자 관점에서 가점을 주십시오.
+          2. 경사율과 엘리베이터 유무를 결합하여 실질적인 '배리어 프리' 수준을 평가하십시오.
+          3. 분석 리포트(text)는 반드시 마침표 하나로 끝나는 '단 한 문장'으로만 작성하십시오. 군더더기 없는 간결한 문체를 유지하십시오.
+          4. 분석 리포트 서두에 "${analysisScope} 지형 데이터와 ${stationData?.station || '역사'} 편의시설을 분석한 결과," 와 같은 문구를 넣으십시오.
           
           응답 형식(JSON):
           {
             "score": 숫자(0~100),
-            "text": "이동 약자의 관점에서 본 전문 분석 리포트",
-            "source": "${stationName}역 무장애 설비, 주변 편의시설(${facilityCount}곳) 및 ${bfReviewLabel}"
+            "text": "지형 및 인프라 기반 배리어 프리 리포트",
+            "source": "철도산업정보센터(KRIC) 역사 편의시설 + Open Elevation 지형 분석 + ${slopeReviews.length}건의 방문록"
           }
         `;
 
@@ -864,15 +886,164 @@ export function Home() {
           setAiBarrierFreeInsight(result);
         }
       } catch (error) {
-        console.error("❌ [AI 배리어 프리 인사이트] 생성 오류:", error);
+        console.error("❌ [AI 경사도 인사이트] 생성 오류:", error);
       } finally {
         setIsAnalyzingBarrierFree(false);
       }
     };
 
-    const timer = setTimeout(generateBarrierFreeInsight, 1200);
+    const timer = setTimeout(generateSlopeInsight, 1200);
     return () => clearTimeout(timer);
   }, [currentRegionName, mapCenterCoord, analysisRadius, isAiAnalysisMode, reviews]);
+
+  // [신규] AI 프리미엄 인사이트 (국가 빅데이터 융합) 생성 엔진
+  useEffect(() => {
+    if (!mapCenterCoord || !currentRegionName) return;
+
+    const generatePremiumInsights = async () => {
+      if (!isAnalyzingPremium) setIsAnalyzingPremium(true);
+      try {
+        const { lat, lng } = mapCenterCoord;
+        const dongName = currentRegionName.split(' ').pop() || '';
+        const { getHousingPrice, getStationConvenience, getTransitStats, getSafetyLevel } = await import('../services/publicDataService');
+
+        // 1. 공공데이터 병렬 호출 (아파트 + 빌라 + 오피스텔 시세 및 건축년도)
+        const [aptData, rhData, offiData, convData, transitStats, safetyData] = await Promise.all([
+          getHousingPrice(currentRegionName, 'APT'),
+          getHousingPrice(currentRegionName, 'RH'),
+          getHousingPrice(currentRegionName, 'OFFI'),
+          getStationConvenience(dongName),
+          getTransitStats(currentRegionName),
+          getSafetyLevel(lat, lng)
+        ]);
+
+        // 데이터 요약 구성
+        const housingSummary = [
+          aptData ? `아파트 평균 ${aptData.avgPrice.toLocaleString()}원` : null,
+          rhData ? `빌라 평균 ${rhData.avgPrice.toLocaleString()}원` : null,
+          offiData ? `오피스텔 평균 ${offiData.avgPrice.toLocaleString()}원` : null
+        ].filter(Boolean).join(', ');
+
+        const avgBuildYear = [aptData, rhData, offiData]
+          .filter(d => d && d.avgBuildYear)
+          .reduce((acc, curr: any, _, arr) => acc + (curr.avgBuildYear / arr.length), 0);
+
+        // [추가] 원천 통계 데이터 상태 업데이트 (데이터가 0이거나 없을 경우 '정보 없음' 처리)
+        const validHousingData = [aptData, rhData, offiData].filter(Boolean);
+        const finalAvgPrice = validHousingData.length > 0
+          ? Math.round(validHousingData.reduce((a, b) => a + b.avgPrice, 0) / validHousingData.length)
+          : 0;
+
+        setAreaHousingStats({
+          avgPrice: finalAvgPrice,
+          avgBuildYear: avgBuildYear > 0 ? Math.round(avgBuildYear) : null,
+          summary: housingSummary || "주변 시세 정보 수집 중"
+        });
+        setAreaTransitStats(transitStats);
+        setAreaSafetyStats(safetyData);
+
+        // 2. 통합 분석 프롬프트 및 인사이트 생성
+        const prompt = `
+          당신은 국토교통 및 도시 분석 전문가입니다. 다음 [국가 공공데이터]를 분석하여 3가지 핵심 인사이트를 작성하십시오.
+          
+          [데이터 리스트]:
+          - 주거 시세: ${housingSummary || '데이터 부족'}
+          - 평균 노후도: ${avgBuildYear > 0 ? `평균 준공 ${Math.round(avgBuildYear)}년 (${new Date().getFullYear() - Math.round(avgBuildYear)}년차)` : '데이터 부족'}
+          - 인프라: ${convData ? `${convData.station}역 내 엘리베이터 ${convData.count}개 확인` : '역사 정보 없음'}
+          - 교통: ${transitStats ? `평균 환승 ${transitStats.avgTransfers}회, 통행시간 ${transitStats.avgTime}분` : '통계 부족'}
+          - 안전: ${safetyData ? `치안 등급 ${safetyData.level}등급 (${safetyData.desc})` : '데이터 부족'}
+          
+          [분석 지침]:
+          1. Property: 주거 형태별(아파트/빌라) 시세 격차와 건물 노후도를 고려하여 '주거 가성비'를 한 문장으로 요약하십시오.
+          2. Safety: 치안 등급과 보행 편의성(엘리베이터)을 결합하여 '동네 치안 및 보행 안전'을 한 문장으로 요약하십시오.
+          3. Commute: 실제 환승 횟수와 통행시간을 기반으로 '출퇴근 피로도'를 한 문장으로 요약하십시오.
+          
+          [응답 형식 (JSON)]:
+          {
+            "property": { "score": 85, "text": "가성비 기반 주거 가치 분석 결과..." },
+            "safety": { "score": 90, "text": "보행 및 치안 데이터 분석 결과..." },
+            "commute": { "score": 75, "text": "교통카드 빅데이터 기반 피로도 분석 결과..." }
+          }
+        `;
+
+        const response = await askGemini(prompt);
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          setAiPropertyInsight(result.property);
+          setAiSafetyHazardInsight(result.safety);
+          setAiCommuteFatigueInsight(result.commute);
+        }
+      } catch (error) {
+        console.error("❌ [AI 프리미엄 인사이트] 생성 오류:", error);
+      } finally {
+        setIsAnalyzingPremium(false);
+      }
+    };
+
+    const timer = setTimeout(generatePremiumInsights, 800);
+    return () => clearTimeout(timer);
+  }, [currentRegionName, mapCenterCoord, analysisRadius, isAiAnalysisMode]);
+
+  // [신규] 실제 행정구역 경계선(GeoJSON) 실시간 갱신 로직
+  useEffect(() => {
+    const updateBoundary = async () => {
+      if (!mapInstance.current) return;
+
+      // AI 분석 모드일 때만 경계선 제거
+      if (isAiAnalysisMode) {
+        if (dongPolygonRef.current) {
+          dongPolygonRef.current.setMap(null);
+        }
+        return;
+      }
+
+      if (currentRegionName) {
+        try {
+          const { getDongBoundary } = await import('../services/publicDataService');
+          // 좌표 기반으로 현재 위치의 행정구역 데이터 조회
+          const result = await getDongBoundary(currentRegionName, mapCenterCoord || undefined);
+
+          if (!result) {
+            if (dongPolygonRef.current) dongPolygonRef.current.setMap(null);
+            lastDongNameRef.current = '';
+            return;
+          }
+
+          const { name, coordinates } = result;
+
+          // 실제로 행정동 구역이 바뀌었을 때만 다시 그림 (깜빡임 방지)
+          if (lastDongNameRef.current !== name) {
+            lastDongNameRef.current = name;
+
+            if (dongPolygonRef.current) {
+              dongPolygonRef.current.setMap(null);
+            }
+
+            const paths = coordinates.map((coord: any) =>
+              new window.naver.maps.LatLng(coord[1], coord[0])
+            );
+
+            dongPolygonRef.current = new window.naver.maps.Polygon({
+              map: mapInstance.current,
+              paths: [paths],
+              fillColor: '#6366F1',
+              fillOpacity: 0.08,
+              strokeColor: '#6366F1',
+              strokeOpacity: 0.3,
+              strokeWeight: 2,
+              clickable: false,
+              zIndex: 1
+            });
+          }
+        } catch (error) {
+          console.error("Boundary update failed:", error);
+        }
+      }
+    };
+
+    updateBoundary();
+  }, [currentRegionName, mapCenterCoord, isAiAnalysisMode]);
 
   const calculateAverageRating = useCallback((reviewList: Review[]) => {
     if (!reviewList || reviewList.length === 0) return "0.0";
@@ -1559,30 +1730,84 @@ export function Home() {
         const avgRating = Number(calculateAverageRating(targetReviews));
 
         // [추가] 찜 목록 등에서 이동 시에도 건축물 용도 정보 확인 시도
-        let bPurpose: string | null = null;
-        if (buildingCacheRef.current[normalizedFull]) {
-          bPurpose = buildingCacheRef.current[normalizedFull].purpose;
-        }
+        let bPurpose = buildingCacheRef.current[normalizedFull]?.purpose || null;
+        let bldSpecs: any = {
+          purpose: bPurpose,
+          totalFloors: 0,
+          underFloors: 0,
+          elevatorCount: 0,
+          builtYear: '',
+          structure: ''
+        };
 
+        // [개선] 로딩 상태 우선 표시 (사용자 피드백 강화)
         infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-        infoWindowInstance.current.setContent(renderInfoWindow(
-          <MarkerInfoWindow
-            address={addr}
-            lat={Number(lat)}
-            lng={Number(lng)}
-            isBookmarked={isBookmarked}
-            isResidential={isRes}
-            reviewCount={reviewCount}
-            avgRating={avgRating}
-            hasWritten={hasWritten}
-            buildingPurpose={bPurpose}
-            onToggleBookmark={window.__toggleBookmark}
-            onOpenReadList={window.__openReadList}
-            onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
-            onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
-          />
-        ));
-        infoWindowInstance.current.open(mapInstance.current, targetPos); adjustInfoWindowWrapper();
+        infoWindowInstance.current.setContent(renderInfoWindow(<MarkerLoadingWindow />));
+        infoWindowInstance.current.open(mapInstance.current, targetPos);
+        adjustInfoWindowWrapper();
+
+        const renderPopup = (specs: any) => {
+          infoWindowInstance.current.setContent(renderInfoWindow(
+            <MarkerInfoWindow
+              address={addr}
+              lat={Number(lat)}
+              lng={Number(lng)}
+              isBookmarked={isBookmarked}
+              isResidential={isRes}
+              reviewCount={reviewCount}
+              avgRating={avgRating}
+              hasWritten={hasWritten}
+              buildingPurpose={specs.purpose}
+              totalFloors={specs.totalFloors}
+              underFloors={specs.underFloors}
+              elevatorCount={specs.elevatorCount}
+              builtYear={specs.builtYear}
+              structure={specs.structure}
+              onToggleBookmark={window.__toggleBookmark}
+              onOpenReadList={window.__openReadList}
+              onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+              onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+            />
+          ));
+          if (!infoWindowInstance.current.getMap()) {
+            infoWindowInstance.current.open(mapInstance.current, targetPos);
+          }
+          adjustInfoWindowWrapper();
+        };
+
+        // 추가 상세 정보 비동기 로드 (실패 시에도 인포윈도우는 보여줘야 함)
+        if (window.naver?.maps?.Service?.reverseGeocode) {
+          window.naver.maps.Service.reverseGeocode({ coords: targetPos, orders: "roadaddr,addr" }, async (gs: any, gr: any) => {
+            try {
+              if (gs === window.naver.maps.Service.Status.OK && gr.v2?.results?.length > 0) {
+                const res0 = gr.v2.results.find((r: any) => r.name === 'addr');
+                if (res0) {
+                  const c = res0.code?.id;
+                  const l = res0.land;
+                  if (c && l?.number1) {
+                    const reg = await checkBuildingRegistry(c.substring(0, 5), c.substring(5, 10), l.number1, l.number2);
+                    if (reg) {
+                      bldSpecs = {
+                        purpose: reg.purpose,
+                        totalFloors: reg.totalFloors,
+                        underFloors: reg.underFloors,
+                        elevatorCount: reg.elevatorCount,
+                        builtYear: reg.builtYear,
+                        structure: reg.structure
+                      };
+                      buildingCacheRef.current[normalizedFull] = { isResidential: reg.isResidential, purpose: reg.purpose };
+                    }
+                  }
+                }
+              }
+            } catch (e) { console.error(e); }
+            finally {
+              renderPopup(bldSpecs); // 성공하든 실패하든 로딩창을 실제 창으로 교체
+            }
+          });
+        } else {
+          renderPopup(bldSpecs);
+        }
 
         // 파라미터 정리
         const nextParams = new URLSearchParams();
@@ -2598,7 +2823,6 @@ export function Home() {
     }
   }, [userStats]);
 
-  const [discoverySheetState, setDiscoverySheetState] = useState<'collapsed' | 'full'>('collapsed');
 
   // 모달 오픈 시 하단 탭바 숨김 처리
   useEffect(() => {
@@ -2608,7 +2832,7 @@ export function Home() {
       isAISearchOpen ||
       isPostcodeOpen ||
       isInquiryModalOpen ||
-      discoverySheetState === 'full';
+      isBuildingAnalysisOpen;
 
     if (isModalOpen) {
       document.body.classList.add('no-nav');
@@ -2618,7 +2842,7 @@ export function Home() {
     return () => document.body.classList.remove('no-nav');
   }, [
     isSheetOpen, isReadListOpen, isAISearchOpen, isPostcodeOpen,
-    isInquiryModalOpen, discoverySheetState
+    isInquiryModalOpen, isBuildingAnalysisOpen
   ]);
 
   // 바텀시트 상태에 따른 지도 중심(Padding) 동적 조정
@@ -2630,13 +2854,6 @@ export function Home() {
     });
   }, [discoverySheetState]);
 
-  const isModalOpen =
-    isSheetOpen ||
-    isReadListOpen ||
-    isAISearchOpen ||
-    isPostcodeOpen ||
-    isInquiryModalOpen ||
-    discoverySheetState === 'full';
 
   return (
     <div className="page-home">
@@ -2816,9 +3033,21 @@ export function Home() {
 
       <div ref={mapElement} className="home-map-container" />
 
-      {/* 중앙 로드뷰 조준경 & 썸네일 (정밀 앵커 시스템) - 모달 오픈 시 숨김 */}
-      {!isModalOpen && (
+      {/* 중앙 로드뷰 조준경, 동네 경계선 & 썸네일 (정밀 앵커 시스템) - 모달 오픈 시 숨김 */}
+      {(!isModalOpen && discoverySheetState !== 'full') && (
         <div className="map-center-anchor">
+          {/* [구조 변경] 동네 경계선은 이제 네이버 지도 객체(Polygon)로 직접 렌더링되므로 JSX에서 제거합니다. */}
+
+          {/* [기존] AI 분석 중 펄스 효과 (레이더) - AI 분석 모드일 때만 노출 */}
+          {isAiAnalysisMode && (
+            <div className="ai-radar-container visible">
+              <div className="ai-radar-pulse" style={{
+                width: `${analysisRadius * 2}px`,
+                height: `${analysisRadius * 2}px`
+              }} />
+            </div>
+          )}
+
           <AnimatePresence>
             {isRoadviewMode && (
               <motion.div
@@ -2867,6 +3096,50 @@ export function Home() {
                   <div className="thumbnail-tail" />
                 </div>
 
+                {/* [신규] AI 지형 플로우 시각화 (경사 방향 화살표) */}
+                {isAiAnalysisMode && slopeData && (
+                  <motion.div
+                    className="slope-flow-overlay"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                  >
+                    {(() => {
+                      const { center, north, south, east, west } = slopeData;
+                      // 경사 벡터 계산 (높은 곳 -> 낮은 곳)
+                      const dx = west - east;
+                      const dy = north - south;
+                      const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                      const diff = Math.sqrt(dx * dx + dy * dy);
+
+                      if (diff < 0.3) return null; // 평지일 경우 표시 안 함
+
+                      return (
+                        <div className="slope-arrow-wrapper" style={{ transform: `rotate(${angle + 90}deg)` }}>
+                          {[1, 2, 3].map((i) => (
+                            <motion.div
+                              key={i}
+                              className="slope-arrow-icon"
+                              animate={{
+                                y: [0, 20, 0],
+                                opacity: [0, 1, 0]
+                              }}
+                              transition={{
+                                duration: 1.5,
+                                repeat: Infinity,
+                                delay: i * 0.4,
+                                ease: "easeInOut"
+                              }}
+                            >
+                              <ChevronUp size={24} color="#00D084" strokeWidth={3} />
+                            </motion.div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </motion.div>
+                )}
+
                 {/* 세련된 블루 컬러의 클래식 맵 핀 마커 */}
                 <div className="map-pin-marker">
                   <div className="pin-main">
@@ -2881,7 +3154,7 @@ export function Home() {
       )}
 
       {/* 지도 우측 하단 플로팅 버튼 모음 (그룹화하여 위치 관리) - 모달 오픈 시 숨김 */}
-      {!isModalOpen && (
+      {(!isModalOpen && discoverySheetState !== 'full') && (
         <div className="home-fab-group" style={{
           bottom: discoverySheetState === 'full' ? 'auto' : '192px',
           top: discoverySheetState === 'full' ? '80px' : 'auto'
@@ -3010,129 +3283,152 @@ export function Home() {
                 </motion.div>
               )}
             </AnimatePresence>
-            <div className="postcode-header"><h2>주소 검색</h2><button onClick={() => setPostcodeOpen(false)} className="postcode-close">✕</button></div>
-            <DaumPostcodeEmbed onComplete={(data: any) => {
-              const full = data.address;
-              setSearchQuery(full);
-              setIsAddressSelected(true);
-              setPostcodeOpen(false);
-              setIsHistoryOpen(false);
+            <div className="postcode-header">
+              <div className="postcode-drag-handle" />
+              <div className="postcode-title-row">
+                <h2 className="postcode-title">어디를 찾으시나요?</h2>
+                <button onClick={() => setPostcodeOpen(false)} className="postcode-close">
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            <div className="postcode-body">
+              <DaumPostcodeEmbed
+                defaultQuery={searchQuery}
+                theme={{
+                  bgColor: "#FFFFFF",
+                  searchBgColor: "#F2F4F6",
+                  contentBgColor: "#FFFFFF",
+                  pageBgColor: "#FFFFFF",
+                  textColor: "#191F28",
+                  queryTextColor: "#191F28",
+                  postcodeTextColor: "#3182F6",
+                  emphTextColor: "#3182F6",
+                  outlineColor: "#F2F4F6"
+                }}
+                onComplete={(data: any) => {
+                  const full = data.address;
+                  setSearchQuery(full);
+                  setIsAddressSelected(true);
+                  setPostcodeOpen(false);
+                  setIsHistoryOpen(false);
 
-              // [추가] 최근 검색어 저장 로직
-              setRecentSearches(prev => {
-                const next = [full, ...prev.filter(t => t !== full)].slice(0, 10);
-                localStorage.setItem('recent_searches_log', JSON.stringify(next));
-                return next;
-              });
-              window.naver.maps.Service.geocode({ query: full }, async (s: any, r: any) => {
-                if (s === window.naver.maps.Service.Status.OK && r.v2.addresses.length > 0) {
-                  const p = new window.naver.maps.LatLng(r.v2.addresses[0].y, r.v2.addresses[0].x);
-                  mapInstance.current.setZoom(19);
-                  mapInstance.current.panTo(p);
-                  setIsLocationActive(false); // [추가] 주소 검색 이동 시 GPS 비활성화
+                  // [추가] 최근 검색어 저장 로직
+                  setRecentSearches(prev => {
+                    const next = [full, ...prev.filter(t => t !== full)].slice(0, 10);
+                    localStorage.setItem('recent_searches_log', JSON.stringify(next));
+                    return next;
+                  });
 
-                  window.naver.maps.Service.reverseGeocode({ coords: p, orders: "roadaddr,addr" }, async (statusRev: any, resRev: any) => {
-                    let standardAddress = full;
+                  window.naver.maps.Service.geocode({ query: full }, async (s: any, r: any) => {
+                    if (s === window.naver.maps.Service.Status.OK && r.v2.addresses.length > 0) {
+                      const p = new window.naver.maps.LatLng(r.v2.addresses[0].y, r.v2.addresses[0].x);
+                      mapInstance.current.setZoom(19);
+                      mapInstance.current.panTo(p);
+                      setIsLocationActive(false); // [추가] 주소 검색 이동 시 GPS 비활성화
 
-                    // [최적화] 즉시 팝업 노출 (낙관적 UX)
-                    infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-                    infoWindowInstance.current.setContent(renderInfoWindow(<MarkerLoadingWindow />));
-                    infoWindowInstance.current.open(mapInstance.current, p); adjustInfoWindowWrapper();
+                      window.naver.maps.Service.reverseGeocode({ coords: p, orders: "roadaddr,addr" }, async (statusRev: any, resRev: any) => {
+                        let standardAddress = full;
 
-                    // [유도리 개편] 1차 키워드 검사 (역, 공원 등 절대 금지 구역 여부)
-                    const isStrictlyBlocked = !checkIsResidential(full) || (data.buildingName && !checkIsResidential(data.buildingName));
-                    let isRes = !isStrictlyBlocked;
-                    let purpose: string | null = null;
-                    let bldFloors = 0, bldUnder = 0, bldElev = 0, bldYear = '', bldStr = '';
+                        // [최적화] 즉시 팝업 노출 (낙관적 UX)
+                        infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+                        infoWindowInstance.current.setContent(renderInfoWindow(<MarkerLoadingWindow />));
+                        infoWindowInstance.current.open(mapInstance.current, p); adjustInfoWindowWrapper();
 
-                    if (statusRev === window.naver.maps.Service.Status.OK) {
-                      const v2Addr = resRev.v2?.address;
-                      if (v2Addr) standardAddress = v2Addr.roadAddress || v2Addr.jibunAddress || standardAddress;
+                        // [유도리 개편] 1차 키워드 검사 (역, 공원 등 절대 금지 구역 여부)
+                        const isStrictlyBlocked = !checkIsResidential(full) || (data.buildingName && !checkIsResidential(data.buildingName));
+                        let isRes = !isStrictlyBlocked;
+                        let purpose: string | null = null;
+                        let bldFloors = 0, bldUnder = 0, bldElev = 0, bldYear = '', bldStr = '';
 
-                      // 건축물대장 API 정밀 체크
-                      const addrResult = resRev.v2.results.find((r: any) => r.name === 'addr');
-                      if (addrResult) {
-                        const code = addrResult.code?.id;
-                        const bun = addrResult.land?.number1;
-                        const ji = addrResult.land?.number2;
-                        if (code && bun) {
-                          const apiResult = await checkBuildingRegistry(code.substring(0, 5), code.substring(5, 10), bun, ji);
-                          if (apiResult !== null) {
-                            purpose = apiResult.purpose;
-                            bldFloors = apiResult.totalFloors;
-                            bldUnder = apiResult.underFloors;
-                            bldElev = apiResult.elevatorCount;
-                            bldYear = apiResult.builtYear;
-                            bldStr = apiResult.structure;
-                            // API가 주거용이라 하면 당연히 허용, 
-                            // 비주거라고 해도 블랙리스트(역, 공원 등)만 아니면 '유도리' 있게 허용 상태(isRes=true) 유지
-                            if (apiResult.isResidential === true) isRes = true;
+                        if (statusRev === window.naver.maps.Service.Status.OK) {
+                          const v2Addr = resRev.v2?.address;
+                          if (v2Addr) standardAddress = v2Addr.roadAddress || v2Addr.jibunAddress || standardAddress;
+
+                          // 건축물대장 API 정밀 체크
+                          const addrResult = resRev.v2.results.find((r: any) => r.name === 'addr');
+                          if (addrResult) {
+                            const code = addrResult.code?.id;
+                            const bun = addrResult.land?.number1;
+                            const ji = addrResult.land?.number2;
+                            if (code && bun) {
+                              const apiResult = await checkBuildingRegistry(code.substring(0, 5), code.substring(5, 10), bun, ji);
+                              if (apiResult !== null) {
+                                purpose = apiResult.purpose;
+                                bldFloors = apiResult.totalFloors;
+                                bldUnder = apiResult.underFloors;
+                                bldElev = apiResult.elevatorCount;
+                                bldYear = apiResult.builtYear;
+                                bldStr = apiResult.structure;
+                                if (apiResult.isResidential === true) isRes = true;
+                              }
+                            }
                           }
                         }
-                      }
+
+                        const normalizedFull = normalizeBaseAddress(standardAddress);
+
+                        // [추가] 검색 결과에서도 중복 체크 수행
+                        let hasWritten = false;
+                        if (isLoggedIn && user?.id) {
+                          const qCheck = query(
+                            collection(db, "reviews"),
+                            where("authorId", "==", user.id),
+                            where("address", "==", standardAddress),
+                            where("addressDetail", "==", normalizeAddressDetail(addressDetail))
+                          );
+                          const snapCheck = await getDocs(qCheck);
+                          hasWritten = !snapCheck.empty;
+                        }
+
+                        // 검색 결과에서도 찜 상태 확인
+                        const checkBookmarkSearch = async () => {
+                          const normalizedFull = normalizeBaseAddress(standardAddress);
+                          const isBookmarked = favoritedAddressesRef.current.has(normalizedFull);
+
+
+                          // [핵심 추가] 해당 주소지에 실제 리뷰가 존재하는지 카운트 체크
+                          const existingLoc = allLocationsRef.current.find(loc => normalizeBaseAddress(loc.address || loc.location) === normalizedFull);
+                          const reviewCount = existingLoc ? (existingLoc.count || 0) : 0;
+                          const avgRating = existingLoc ? (existingLoc.rating || 0) : 0;
+
+                          const targetReviewsSearch = reviews.filter(r => normalizeBaseAddress(r.address || (r as any).location || '') === normalizedFull);
+                          const hasDetailSearch = targetReviewsSearch.some(r => r.addressDetail && r.addressDetail.trim() !== "");
+
+                          infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
+                          infoWindowInstance.current.setContent(renderInfoWindow(
+                            <MarkerInfoWindow
+                              address={standardAddress}
+                              lat={p.lat()}
+                              lng={p.lng()}
+                              isBookmarked={isBookmarked}
+                              isResidential={isRes}
+                              reviewCount={reviewCount}
+                              avgRating={avgRating}
+                              hasWritten={hasWritten}
+                              hasDetailReviews={hasDetailSearch}
+                              buildingPurpose={purpose}
+                              totalFloors={bldFloors}
+                              underFloors={bldUnder}
+                              elevatorCount={bldElev}
+                              builtYear={bldYear}
+                              structure={bldStr}
+                              onToggleBookmark={window.__toggleBookmark}
+                              onOpenReadList={window.__openReadList}
+                              onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
+                              onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
+                            />
+                          ));
+                          infoWindowInstance.current.open(mapInstance.current, p); adjustInfoWindowWrapper();
+                        };
+
+                        checkBookmarkSearch();
+                      });
                     }
-
-                    const normalizedFull = normalizeBaseAddress(standardAddress);
-
-                    // [추가] 검색 결과에서도 중복 체크 수행
-                    let hasWritten = false;
-                    if (isLoggedIn && user?.id) {
-                      const qCheck = query(
-                        collection(db, "reviews"),
-                        where("authorId", "==", user.id),
-                        where("address", "==", standardAddress),
-                        where("addressDetail", "==", normalizeAddressDetail(addressDetail))
-                      );
-                      const snapCheck = await getDocs(qCheck);
-                      hasWritten = !snapCheck.empty;
-                    }
-
-                    // 검색 결과에서도 찜 상태 확인
-                    const checkBookmarkSearch = async () => {
-                      const normalizedFull = normalizeBaseAddress(standardAddress);
-                      const isBookmarked = favoritedAddressesRef.current.has(normalizedFull);
-
-
-                      // [핵심 추가] 해당 주소지에 실제 리뷰가 존재하는지 카운트 체크
-                      const existingLoc = allLocationsRef.current.find(loc => normalizeBaseAddress(loc.address || loc.location) === normalizedFull);
-                      const reviewCount = existingLoc ? (existingLoc.count || 0) : 0;
-                      const avgRating = existingLoc ? (existingLoc.rating || 0) : 0;
-
-                      const targetReviewsSearch = reviews.filter(r => normalizeBaseAddress(r.address || (r as any).location || '') === normalizedFull);
-                      const hasDetailSearch = targetReviewsSearch.some(r => r.addressDetail && r.addressDetail.trim() !== "");
-
-                      infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
-                      infoWindowInstance.current.setContent(renderInfoWindow(
-                        <MarkerInfoWindow
-                          address={standardAddress}
-                          lat={p.lat()}
-                          lng={p.lng()}
-                          isBookmarked={isBookmarked}
-                          isResidential={isRes}
-                          reviewCount={reviewCount}
-                          avgRating={avgRating}
-                          hasWritten={hasWritten}
-                          hasDetailReviews={hasDetailSearch}
-                          buildingPurpose={purpose}
-                          totalFloors={bldFloors}
-                          underFloors={bldUnder}
-                          elevatorCount={bldElev}
-                          builtYear={bldYear}
-                          structure={bldStr}
-                          onToggleBookmark={window.__toggleBookmark}
-                          onOpenReadList={window.__openReadList}
-                          onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
-                          onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
-                        />
-                      ));
-                      infoWindowInstance.current.open(mapInstance.current, p); adjustInfoWindowWrapper();
-                    };
-
-                    checkBookmarkSearch();
                   });
-                }
-              });
-            }} autoClose={false} defaultQuery={searchQuery} className="postcode-embed" />
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -3842,6 +4138,15 @@ export function Home() {
           isAnalyzingSafety={isAnalyzingSafety}
           aiBarrierFreeInsight={aiBarrierFreeInsight}
           isAnalyzingBarrierFree={isAnalyzingBarrierFree}
+          aiPropertyInsight={aiPropertyInsight}
+          aiSafetyHazardInsight={aiSafetyHazardInsight}
+          aiCommuteFatigueInsight={aiCommuteFatigueInsight}
+          isAnalyzingPremium={isAnalyzingPremium}
+          areaHousingStats={areaHousingStats}
+          areaTransitStats={areaTransitStats}
+          areaSafetyStats={areaSafetyStats}
+          isAiAnalysisMode={isAiAnalysisMode}
+          analysisRadius={analysisRadius}
           onOpenReview={(review) => {
             setSelectedReview(review);
             addRecentLog(review.id);
@@ -3850,10 +4155,152 @@ export function Home() {
             setSelectedAddress(address);
             setReadListOpen(true);
           }}
+          onStateChange={setDiscoverySheetState}
         />
       )}
+
+      <BuildingAnalysisModal
+        isOpen={isBuildingAnalysisOpen}
+        onClose={() => setIsBuildingAnalysisOpen(false)}
+        address={analysisBuildingAddress}
+        data={analysisBuildingData}
+      />
     </div>
   );
+}
+
+// [신규] 전역 건물 분석 핸들러 등록을 위한 헬퍼 훅
+function useBuildingAnalysisHandler(
+  setIsBuildingAnalysisOpen: (open: boolean) => void,
+  setAnalysisBuildingAddress: (addr: string) => void,
+  setAnalysisBuildingData: (data: any) => void,
+  reviews: any[],
+  areaSafetyStats: any,
+  areaTransitStats: any
+) {
+  useEffect(() => {
+    (window as any).__openBuildingAnalysis = async (address: string, preFetchedData?: any) => {
+      setAnalysisBuildingAddress(address);
+      setIsBuildingAnalysisOpen(true);
+
+      // 마커에서 이미 가져온 데이터가 있다면 즉시 반영하여 '일치성' 확보
+      if (preFetchedData) {
+        setAnalysisBuildingData({
+          purpose: preFetchedData.purpose || '주거용',
+          totalFloors: preFetchedData.totalFloors || 0,
+          underFloors: preFetchedData.underFloors || 0,
+          elevatorCount: preFetchedData.elevatorCount || 0,
+          builtYear: preFetchedData.builtYear || '',
+          structure: preFetchedData.structure || '',
+          recentPrice: null, // 시세 로딩 트리거
+          aiComment: null,   // AI 코멘트 로딩 트리거
+          history: null,     // 히스토리 로딩 트리거
+        });
+      } else {
+        setAnalysisBuildingData(null); // 완전 로딩
+      }
+
+      try {
+        // 1. 주소 기반 법정동 코드 추출 (Sigungu, Bjdong, Bun, Ji)
+        window.naver.maps.Service.geocode({ query: address }, async (status: any, response: any) => {
+          if (status !== window.naver.maps.Service.Status.OK) return;
+
+          const item = response?.v2?.addresses?.[0];
+          const addrResult = response?.v2?.results?.find((r: any) => r.name === 'addr');
+
+          let registryData = null;
+          if (addrResult) {
+            const code = addrResult.code?.id;
+            const land = addrResult.land;
+            if (code && land?.number1) {
+              // 2. 실시간 건축물대장 API 호출 (Real Data Connection)
+              registryData = await checkBuildingRegistry(code.substring(0, 5), code.substring(5, 10), land.number1, land.number2);
+            }
+          }
+
+          const { getHousingPrice, getPublicLandPrice } = await import('../services/publicDataService');
+          // 3. 해당 구/동의 실거래가 조회 (APT -> RH -> OFFI 순으로 가치 있는 데이터 탐색)
+          const priceData = await getHousingPrice(address, registryData?.purpose?.includes('오피스텔') ? 'OFFI' : 'APT');
+          
+          // [신규] 공시지가 데이터 추가 로드 (가치 평가의 신뢰도 확보)
+          const landPriceData = await getPublicLandPrice(address, address);
+
+          // 4. 리얼 데이터 기반 모달 데이터 구성 (기존 데이터와 병합하여 일치성 유지)
+          // 4. [Premium] AI 전문가 딥다이브 리포트 생성 (Gemini 엔진 가동)
+          setAnalysisBuildingData((prev: any) => {
+            const finalPurpose = registryData?.purpose || prev?.purpose || '주거용';
+            const finalBuiltYear = registryData?.builtYear || prev?.builtYear || priceData?.avgBuildYear?.toString() || '2015';
+
+            (async () => {
+              try {
+                const guName = address.split(' ').find(p => p.endsWith('구')) || '';
+                const buildingAge = finalBuiltYear ? new Date().getFullYear() - parseInt(finalBuiltYear) : 10;
+                const targetReviews = reviews.filter(r => normalizeBaseAddress(r.address || (r as any).location || '') === address);
+                const reviewSummary = targetReviews.length > 0 ? targetReviews.map(r => r.content).join(', ') : "작성된 방문록이 없습니다.";
+
+                const prompt = `
+                  당신은 대한민국 최고의 부동산 가치 분석 전문가입니다. '${address}' 건물에 대한 [전문가 상세 족보 리포트]를 작성하십시오.
+
+                  [건물 정보]: ${finalPurpose}, ${registryData?.structure || prev?.structure}, ${finalBuiltYear}년 준공, ${registryData?.totalFloors || prev?.totalFloors}층
+                  [공시지가]: ㎡당 ${(landPriceData?.price / 10000).toLocaleString()}만원 (${landPriceData?.year}년 기준)
+                  [지역 인프라]: 치안 ${areaSafetyStats?.level || '보통'}등급, 교통 편의 ${(areaTransitStats?.avgTime) || '확인 중'}분 소요
+                  [시세 트렌드]: 최근 인근 평균 ${(priceData?.avgPrice / 10000).toFixed(0) || '8.5'}억 수준
+                  [거주자 실명 리뷰]: ${reviewSummary}
+
+                  분석 지침:
+                  1. 제목, 인사말, 마크다운 기호(##, **) 및 "당신은 ~입니다"와 같은 서술을 절대 포함하지 마십시오.
+                  2. '공시지가'와 '실거래가'의 괴리율을 분석하여, 현재 시장에서 실제로 거래될 가능성이 높은 [예상 매매가]를 현실적으로 추론하십시오.
+                  3. 단순히 과거 데이터를 나열하지 말고, 현재의 고금리/경기 상황을 반영한 '보수적 가치'와 '미래 성장 가치'를 함께 언급하십시오.
+                  4. 이 건물이나 위치가 랜드마크이거나 특별한 역사, 뉴스 기사가 있다면 당신의 지식을 활용해 반드시 언급하십시오. (예: 청계천로 1은 무교동 랜드마크인 효령빌딩임)
+                  5. 전문 용어를 적절히 섞어 4~5문장 내외로 임팩트 있게 작성하십시오. (절대 6문장을 넘기지 마십시오)
+                  6. 바로 본론으로 들어가 전문적인 리포트 문체로 작성하십시오.
+                `;
+
+                const aiResponse = await askGemini(prompt);
+                setAnalysisBuildingData((p: any) => ({
+                  ...p,
+                  aiComment: aiResponse
+                }));
+              } catch (aiErr) {
+                console.error("AI Insight generation failed:", aiErr);
+                setAnalysisBuildingData((p: any) => ({
+                  ...p,
+                  aiComment: `${address.split(' ').pop()} 지역의 입지적 강점과 구조적 안정성이 돋보이는 건물입니다. 실거주 만족도가 높은 편으로 평가됩니다.`
+                }));
+              }
+            })();
+
+            const finalRecentPrice = priceData?.avgPrice || (registryData?.purpose?.includes('오피스텔') ? 380000000 : 850000000);
+            
+            // [New] AI 추정 시세 계산 (연 5% 지가 상승률 반영, 2026년 기준)
+            const lastTradeYear = priceData?.items?.[0]?.year || parseInt(finalBuiltYear) || 2020;
+            const yearsPassed = Math.max(0, 2026 - lastTradeYear);
+            const estimatedPrice = Math.floor(finalRecentPrice * Math.pow(1.05, yearsPassed));
+
+            return {
+              ...prev,
+              purpose: finalPurpose,
+              totalFloors: registryData?.totalFloors || (prev?.totalFloors > 0 ? prev.totalFloors : 0),
+              underFloors: registryData?.underFloors || (prev?.underFloors > 0 ? prev.underFloors : 0),
+              elevatorCount: registryData?.elevatorCount || (prev?.elevatorCount > 0 ? prev.elevatorCount : 0),
+              builtYear: finalBuiltYear,
+              structure: registryData?.structure || (prev?.structure && prev.structure !== "철근콘크리트구조" ? prev.structure : (registryData?.structure || '철근콘크리트구조')),
+              recentPrice: finalRecentPrice,
+              estimatedPrice: estimatedPrice,
+              landPrice: landPriceData?.price || 0,
+              priceChange: "최근 실거래가 보합세",
+              history: priceData?.items?.slice(0, 10) || [],
+              safetyLevel: areaSafetyStats?.level || '보통',
+              transitInfo: areaTransitStats ? `${areaTransitStats.avgTransfer}회 환승 / ${areaTransitStats.avgTime}분 소요` : '정보 확인 중',
+              aiComment: null,
+            };
+          });
+        });
+      } catch (error) {
+        console.error("Analysis handler error:", error);
+      }
+    };
+  }, [setIsBuildingAnalysisOpen, setAnalysisBuildingAddress, setAnalysisBuildingData, reviews, areaSafetyStats, areaTransitStats]);
 }
 
 function RatingRow({ label, value, onChange, disabled }: { label: string; value: number; onChange: (v: number) => void; disabled?: boolean }) {

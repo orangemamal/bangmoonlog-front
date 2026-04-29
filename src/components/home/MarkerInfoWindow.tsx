@@ -53,7 +53,41 @@ export const MarkerInfoWindow: React.FC<MarkerInfoWindowProps> = ({
   return (
     <div className="iw-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <div className="iw-title" style={{ marginBottom: 0 }}>{title}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="iw-title" style={{ marginBottom: 0 }}>{title}</div>
+            <button 
+              className="premium-ai-analysis-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.__openBuildingAnalysis?.(address, {
+                  purpose: buildingPurpose,
+                  totalFloors,
+                  underFloors,
+                  elevatorCount,
+                  builtYear,
+                  structure
+                });
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
+                border: 'none',
+                height: '28px',
+                padding: '0 10px 0 6px',
+                borderRadius: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)',
+              }}
+              title="AI 프리미엄 상세 분석 (건물 족보)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z"></path>
+              </svg>
+              <span style={{ fontSize: '11px', color: '#fff', fontWeight: 800, letterSpacing: '-0.5px' }}>족보</span>
+            </button>
+          </div>
           {isResidential && (
             <button 
               className={`iw-bookmark-icon-btn ${isBookmarked ? 'active' : ''}`} 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useAnimation, PanInfo, useMotionValue } from "framer-motion";
-import { MapPin, Heart, Eye, TrendingUp, Compass, ChevronUp, Sparkles, Map as MapIcon, Shield, Accessibility } from "lucide-react";
+import { MapPin, Heart, Eye, TrendingUp, Compass, ChevronUp, Sparkles, Map as MapIcon, Shield, Accessibility, ShieldCheck, Zap, Building, Clock } from "lucide-react";
 import { calculateDistance } from "../../utils/geoUtils";
 
 interface Review {
@@ -29,9 +29,18 @@ interface DiscoveryBottomSheetProps {
   isAnalyzingSafety?: boolean;
   aiBarrierFreeInsight?: { score: number, text: string, source?: string } | null;
   isAnalyzingBarrierFree?: boolean;
+  aiPropertyInsight?: { score: number, text: string, source?: string } | null;
+  aiSafetyHazardInsight?: { score: number, text: string, source?: string } | null;
+  aiCommuteFatigueInsight?: { score: number, text: string, source?: string } | null;
+  isAnalyzingPremium?: boolean;
+  areaHousingStats?: { avgPrice: number, avgBuildYear: number, summary: string } | null;
+  areaTransitStats?: { avgTransfers: number, avgTime: number } | null;
+  areaSafetyStats?: { level: number, desc: string } | null;
   onOpenReview: (review: Review) => void;
   onOpenReadList: (address: string) => void;
   onStateChange?: (state: 'collapsed' | 'full') => void;
+  isAiAnalysisMode?: boolean;
+  analysisRadius?: number;
 }
 
 // 상수 정의 - 네비게이션 및 여백 최적화
@@ -49,9 +58,18 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
   isAnalyzingSafety,
   aiBarrierFreeInsight,
   isAnalyzingBarrierFree,
+  aiPropertyInsight,
+  aiSafetyHazardInsight,
+  aiCommuteFatigueInsight,
+  isAnalyzingPremium,
+  areaHousingStats,
+  areaTransitStats,
+  areaSafetyStats,
   onOpenReview,
   onOpenReadList,
-  onStateChange
+  onStateChange,
+  isAiAnalysisMode = false,
+  analysisRadius = 100
 }) => {
   const controls = useAnimation();
   const [snapState, setSnapState] = useState<'collapsed' | 'full'>('collapsed');
@@ -212,7 +230,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                 </h2>
                 <div className="discovery-sheet__ai-trust-badge">
                   <span className="dot pulse" />
-                  AI가 공공데이터 • 방문록 분석 중
+                  AI가 {isAiAnalysisMode ? `${analysisRadius}m 반경` : `'${regionName?.split(' ').pop() || '주변'}' 영역`} 분석 중
                 </div>
               </div>
             </div>
@@ -235,13 +253,14 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
           {/* [신규] AI 주거 인사이트 컨테이너 (가로 스크롤 카드 시스템) */}
           {snapState === 'full' && (
             <section className="discovery-sheet__section discovery-sheet__ai-insight">
+
               <div className="ai-insight-scroll-container">
                 {/* 1. 출퇴근 리포트 카드 */}
                 <div className="ai-insight-card commute-card">
                   <div className="ai-insight-header">
                     <div className="ai-tag">
                       <Sparkles size={14} fill="#8B5CF6" color="#8B5CF6" className={isAnalyzing ? "animate-spin-slow" : ""} />
-                      <span>AI 출퇴근 리포트</span>
+                      <span>교통 분석 리포트</span>
                     </div>
                     {!isAnalyzing && aiInsight && (
                       <div
@@ -276,7 +295,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                     <div className="ai-data-source">
                       <div className="source-label">데이터 소스</div>
                       <div className="source-value">
-                        {isAnalyzing ? "교통 API & 방문록 융합 중..." : (aiInsight?.source || `교통 API + 방문록 분석`)}
+                        {isAnalyzing ? "교통카드 빅데이터(STCIS) 및 국토교통부 데이터 결합 중..." : (aiInsight?.source || `교통카드 빅데이터 통합정보시스템(STCIS) 및 국토교통부 대중교통 통계`)}
                       </div>
                     </div>
                   </div>
@@ -286,8 +305,8 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                 <div className="ai-insight-card safety-card">
                   <div className="ai-insight-header">
                     <div className="ai-tag">
-                      <Shield size={14} fill="#00D084" color="#00D084" className={isAnalyzingSafety ? "animate-pulse" : ""} />
-                      <span>AI 안심 귀가 리포트</span>
+                      <Shield size={14} fill="#00D084" color="#00D084" className={isAnalyzingSafety ? "animate-spin-slow" : ""} />
+                      <span>안심 귀가 리포트</span>
                     </div>
                     {!isAnalyzingSafety && aiSafetyInsight && (
                       <div
@@ -297,7 +316,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                           background: aiSafetyInsight.score >= 80 ? '#E6FBF3' : '#FFF0EB'
                         }}
                       >
-                        안심 지수 {aiSafetyInsight.score}점
+                        안심도 {aiSafetyInsight.score}점
                       </div>
                     )}
                   </div>
@@ -322,18 +341,18 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                     <div className="ai-data-source">
                       <div className="source-label">데이터 소스</div>
                       <div className="source-value">
-                        {isAnalyzingSafety ? "CCTV API & 방문록 융합 중..." : (aiSafetyInsight?.source || `CCTV API + 방문록 분석`)}
+                        {isAnalyzingSafety ? "생활안전지도 및 치안 안전 데이터 결합 중..." : (aiSafetyInsight?.source || `생활안전지도(행안부), 경찰청 CCTV, 도로교통공단 사고기록`)}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 3. 배리어 프리 리포트 카드 (신규 과제) */}
+                {/* 3. 보행 경사도 리포트 카드 (리뉴얼) */}
                 <div className="ai-insight-card barrier-free-card">
                   <div className="ai-insight-header">
                     <div className="ai-tag">
-                      <Accessibility size={14} fill="#3182F6" color="#3182F6" className={isAnalyzingBarrierFree ? "animate-bounce" : ""} />
-                      <span>AI 배리어 프리 리포트</span>
+                      <TrendingUp size={14} color="#3182F6" className={isAnalyzingBarrierFree ? "animate-spin-slow" : ""} />
+                      <span>지형 분석 리포트</span>
                     </div>
                     {!isAnalyzingBarrierFree && aiBarrierFreeInsight && (
                       <div
@@ -343,14 +362,14 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                           background: aiBarrierFreeInsight.score >= 80 ? '#E8F3FF' : '#FFF4E5'
                         }}
                       >
-                        이동 지수 {aiBarrierFreeInsight.score}점
+                        지형도 {aiBarrierFreeInsight.score}점
                       </div>
                     )}
                   </div>
 
                   <div className="ai-insight-content">
                     <h4 className="ai-insight-title">
-                      {isAnalyzingBarrierFree ? "보행 환경을 분석 중입니다..." : "휠체어·유모차도 편할까요?"}
+                      {isAnalyzingBarrierFree ? "지형 고도를 분석 중입니다..." : "이 동네, 경사가 심할까요?"}
                     </h4>
                     <div className={`ai-insight-text ${isAnalyzingBarrierFree ? 'is-loading' : ''}`}>
                       {isAnalyzingBarrierFree ? (
@@ -359,7 +378,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                           <div className="skeleton-line short" />
                         </div>
                       ) : (
-                        aiBarrierFreeInsight?.text || "주변 보행 환경 정보를 분석하고 있습니다."
+                        aiBarrierFreeInsight?.text || "주변 지형 및 경사 정보를 분석하고 있습니다."
                       )}
                     </div>
                   </div>
@@ -368,7 +387,7 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
                     <div className="ai-data-source">
                       <div className="source-label">데이터 소스</div>
                       <div className="source-value">
-                        {isAnalyzingBarrierFree ? "인프라 API & 방문록 융합 중..." : (aiBarrierFreeInsight?.source || `인프라 API + 방문록 분석`)}
+                        {isAnalyzingBarrierFree ? "KRIC 역사 편의시설 및 지형 고도 데이터 결합 중..." : (aiBarrierFreeInsight?.source || `철도산업정보센터(KRIC) 역사 편의시설 + Open Elevation 지형 분석`)}
                       </div>
                     </div>
                   </div>
@@ -377,47 +396,62 @@ export const DiscoveryBottomSheet: React.FC<DiscoveryBottomSheetProps> = ({
             </section>
           )}
 
-          {/* Section: 인기 장소 TOP 10 */}
-          <section className="discovery-sheet__section">
+          {/* Section: AI 지역 리얼타임 레이더 (The Radar) */}
+          <section className="discovery-sheet__section premium-insight-section">
             <div className="discovery-sheet__section-title-box">
-              <TrendingUp size={20} color="#3182F6" />
-              <h3 className="discovery-sheet__section-title">지금 인기 있는 장소</h3>
+              <div className="radar-sparkle-icon">
+                <Sparkles size={14} fill="#fff" color="#fff" />
+              </div>
+              <h3 className="discovery-sheet__section-title">AI 지역 리얼타임 레이더 (The Radar)</h3>
+              <div className="premium-badge">REAL-TIME</div>
             </div>
 
-            <div className="discovery-sheet__popular-list">
-              {popularPlaces.map((place, idx) => (
-                <motion.div
-                  key={place.address}
-                  className="discovery-sheet__card"
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => onOpenReadList(place.address)}
-                >
-                  <div className="discovery-sheet__card-thumb">
-                    {place.reviews[0]?.images[0] ? (
-                      <img
-                        src={place.reviews[0].images[0]}
-                        alt={place.address}
-                        loading="lazy"
-                        onError={(e) => {
-                          (e.target as any).style.display = 'none';
-                          (e.target as any).parentElement.style.background = 'linear-gradient(135deg, #F2F4F6 0%, #E5E8EB 100%)';
-                        }}
-                      />
-                    ) : (
-                      <MapIcon size={32} color="#ADB5BD" />
-                    )}
-                    <div className="discovery-sheet__card-rank">{idx + 1}</div>
-                  </div>
-                  <div className="discovery-sheet__card-info">
-                    <p className="discovery-sheet__card-address">{place.address}</p>
-                    <div className="discovery-sheet__card-stats">
-                      <span><Heart size={12} fill="#F04452" color="#F04452" /> {place.totalLikes}</span>
-                      <span className="divider">|</span>
-                      <span>리뷰 {place.reviews.length}</span>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+            <p className="premium-description">
+              국토교통부 실거래가, 대중교통 빅데이터(STCIS), 생활안전지도를 융합하여 이 영역의 주거 가성비와 치안, 출퇴근 피로도를 다각도로 진단합니다.
+            </p>
+
+            {/* 신규: 2x2 레이더 그리드 대시보드 */}
+            <div className={`radar-status-grid ${isAnalyzingPremium ? 'is-analyzing' : ''}`}>
+              <div className="radar-status-item">
+                <div className="status-label">평균 시세</div>
+                <div className="status-value">
+                  {isAnalyzingPremium ? (
+                    <div className="radar-skeleton-bar" />
+                  ) : areaHousingStats && areaHousingStats.avgPrice > 0 ? (
+                    <><span className="num">{Math.round(areaHousingStats.avgPrice / 10000)}</span><span className="unit">억</span></>
+                  ) : '---'}
+                </div>
+              </div>
+              <div className="radar-status-item">
+                <div className="status-label">평균 연식</div>
+                <div className="status-value">
+                  {isAnalyzingPremium ? (
+                    <div className="radar-skeleton-bar" />
+                  ) : areaHousingStats?.avgBuildYear ? (
+                    <><span className="num">{2026 - areaHousingStats.avgBuildYear}</span><span className="unit">년</span></>
+                  ) : '---'}
+                </div>
+              </div>
+              <div className="radar-status-item">
+                <div className="status-label">치안 등급</div>
+                <div className="status-value">
+                  {isAnalyzingPremium ? (
+                    <div className="radar-skeleton-bar" />
+                  ) : areaSafetyStats ? (
+                    <><span className="num">{areaSafetyStats.level}</span><span className="unit">등급</span></>
+                  ) : '---'}
+                </div>
+              </div>
+              <div className="radar-status-item">
+                <div className="status-label">평균 환승</div>
+                <div className="status-value">
+                  {isAnalyzingPremium ? (
+                    <div className="radar-skeleton-bar" />
+                  ) : areaTransitStats ? (
+                    <><span className="num">{areaTransitStats.avgTransfers}</span><span className="unit">회</span></>
+                  ) : '---'}
+                </div>
+              </div>
             </div>
           </section>
 
