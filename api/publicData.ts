@@ -39,9 +39,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         break;
       }
       case 'accident': {
-        // 교통사고 다발지역
+        // 교통사고 다발지역 (어린이+노인+전체)
         const { siDo, guGun } = params;
-        targetUrl = `https://apis.data.go.kr/B552061/frequentzoneChild/getRestFrequentzoneChild?ServiceKey=${SERVICE_KEY}&searchYearCd=2023&siDo=${siDo || '11'}&guGun=${guGun || '680'}&type=json&numOfRows=10&pageNo=1`;
+        targetUrl = `https://apis.data.go.kr/B552061/frequentzoneChild/getRestFrequentzoneChild?ServiceKey=${SERVICE_KEY}&searchYearCd=2025&siDo=${siDo || '11'}&guGun=${guGun || '680'}&type=json&numOfRows=20&pageNo=1`;
         break;
       }
       case 'barrier': {

@@ -147,12 +147,37 @@ export const getNearbyCCTV = async (lat: number, lng: number, radius: number = 3
   }
 };
 
+// 좌표 → 시도/구군 코드 매핑 (서울 주요 구)
+const getDistrictCode = (lat: number, lng: number): { siDo: string; guGun: string } => {
+  // 서울시 구별 대략적 좌표 범위 → 구군 코드
+  const districts = [
+    { name: '중구',     code: '680', latMin: 37.555, latMax: 37.575, lngMin: 126.97, lngMax: 127.01 },
+    { name: '종로구',   code: '110', latMin: 37.575, latMax: 37.60,  lngMin: 126.96, lngMax: 127.01 },
+    { name: '강남구',   code: '680', latMin: 37.49,  latMax: 37.53,  lngMin: 127.02, lngMax: 127.07 },
+    { name: '서초구',   code: '650', latMin: 37.47,  latMax: 37.50,  lngMin: 126.98, lngMax: 127.05 },
+    { name: '마포구',   code: '440', latMin: 37.54,  latMax: 37.57,  lngMin: 126.90, lngMax: 126.96 },
+    { name: '영등포구', code: '560', latMin: 37.51,  latMax: 37.54,  lngMin: 126.89, lngMax: 126.93 },
+    { name: '송파구',   code: '710', latMin: 37.49,  latMax: 37.52,  lngMin: 127.08, lngMax: 127.14 },
+    { name: '용산구',   code: '170', latMin: 37.52,  latMax: 37.55,  lngMin: 126.96, lngMax: 127.01 },
+    { name: '성동구',   code: '200', latMin: 37.55,  latMax: 37.57,  lngMin: 127.01, lngMax: 127.06 },
+    { name: '광진구',   code: '215', latMin: 37.53,  latMax: 37.56,  lngMin: 127.07, lngMax: 127.11 },
+  ];
+
+  for (const d of districts) {
+    if (lat >= d.latMin && lat <= d.latMax && lng >= d.lngMin && lng <= d.lngMax) {
+      return { siDo: '11', guGun: d.code };
+    }
+  }
+  return { siDo: '11', guGun: '680' }; // 기본: 서울 중구
+};
+
 /**
  * 3. 교통사고 다발지역 (도로교통공단)
  */
 export const getAccidentHotspots = async (lat: number, lng: number) => {
+  const { siDo, guGun } = getDistrictCode(lat, lng);
   try {
-    const url = `${getProxyBase()}?type=accident&siDo=11&guGun=680`;
+    const url = `${getProxyBase()}?type=accident&siDo=${siDo}&guGun=${guGun}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
