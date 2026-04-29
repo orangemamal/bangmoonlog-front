@@ -906,6 +906,7 @@ export function Home() {
       const targetReviewsCache = reviews.filter(r => normalizeBaseAddress(r.address || (r as any).location || '') === address);
       const reviewCountCache = targetReviewsCache.length;
       const avgRatingCache = Number(calculateAverageRating(targetReviewsCache));
+      const hasDetailCache = targetReviewsCache.some(r => r.addressDetail && r.addressDetail.trim() !== "");
 
       infoWindowInstance.current.setContent(renderInfoWindow(
         <MarkerInfoWindow
@@ -917,6 +918,7 @@ export function Home() {
           reviewCount={reviewCountCache}
           avgRating={avgRatingCache}
           hasWritten={hasWritten}
+          hasDetailReviews={hasDetailCache}
           buildingPurpose={purpose}
           onToggleBookmark={window.__toggleBookmark}
           onOpenReadList={window.__openReadList}
@@ -964,6 +966,7 @@ export function Home() {
       const targetReviewsGeo = reviews.filter(r => normalizeBaseAddress(r.address || (r as any).location || '') === address);
       const reviewCountGeo = targetReviewsGeo.length;
       const avgRatingGeo = Number(calculateAverageRating(targetReviewsGeo));
+      const hasDetailGeo = targetReviewsGeo.some(r => r.addressDetail && r.addressDetail.trim() !== "");
 
       infoWindowInstance.current.setContent(renderInfoWindow(
         <MarkerInfoWindow
@@ -975,12 +978,13 @@ export function Home() {
           reviewCount={reviewCountGeo}
           avgRating={avgRatingGeo}
           hasWritten={hasWritten}
+          hasDetailReviews={hasDetailGeo}
           buildingPurpose={purpose}
-                  totalFloors={bldFloors}
-                  underFloors={bldUnder}
-                  elevatorCount={bldElev}
-                  builtYear={bldYear}
-                  structure={bldStr}
+          totalFloors={bldFloors}
+          underFloors={bldUnder}
+          elevatorCount={bldElev}
+          builtYear={bldYear}
+          structure={bldStr}
           onToggleBookmark={window.__toggleBookmark}
           onOpenReadList={window.__openReadList}
           onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
@@ -2145,6 +2149,9 @@ export function Home() {
                 hasWritten = !snapCheck.empty;
               }
 
+              const targetReviewsEx = reviews.filter(r => normalizeBaseAddress(r.address || (r as any).location || '') === address);
+              const hasDetailEx = targetReviewsEx.some(r => r.addressDetail && r.addressDetail.trim() !== "");
+
               infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
               infoWindowInstance.current.setContent(renderInfoWindow(
                 <MarkerInfoWindow
@@ -2156,6 +2163,7 @@ export function Home() {
                   reviewCount={liveCount}
                   avgRating={liveRating}
                   hasWritten={hasWritten}
+                  hasDetailReviews={hasDetailEx}
                   buildingPurpose={buildingPurpose}
                   totalFloors={bldTotalFloors}
                   underFloors={bldUnderFloors}
@@ -2661,7 +2669,7 @@ export function Home() {
               }
             }}
             onFocus={() => setIsHistoryOpen(true)}
-            placeholder="어떤 집의 방문Log 궁금하세요?"
+            placeholder="방문Log 주소로 검색하기😝"
             className="home-search-input"
           />
           {searchQuery.length === 0 && (

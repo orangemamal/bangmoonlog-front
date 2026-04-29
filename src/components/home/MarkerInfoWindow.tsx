@@ -10,6 +10,7 @@ interface MarkerInfoWindowProps {
   reviewCount: number;
   avgRating: number;
   hasWritten: boolean;
+  hasDetailReviews?: boolean;
   buildingPurpose?: string | null;
   totalFloors?: number;
   underFloors?: number;
@@ -32,6 +33,7 @@ export const MarkerInfoWindow: React.FC<MarkerInfoWindowProps> = ({
   reviewCount,
   avgRating,
   hasWritten,
+  hasDetailReviews = false,
   buildingPurpose,
   totalFloors = 0,
   underFloors = 0,
@@ -120,7 +122,7 @@ export const MarkerInfoWindow: React.FC<MarkerInfoWindowProps> = ({
           </div>
         )}
         
-        {isResidential && reviewCount > 0 && (
+        {isResidential && hasDetailReviews && (
           <div style={{ marginBottom: '12px', fontSize: '11px', color: '#3182F6', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span>🏢</span> 상세 층/호수별 리뷰 정보 포함
           </div>
