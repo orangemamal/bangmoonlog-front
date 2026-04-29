@@ -73,16 +73,28 @@ export default async function handler(
     const buildings = itemList.map((item: any) => ({
       name: item.bldNm,
       purpose: item.mainPurpsCdNm,
-      isResidential: residentialKeywords.some(kw => item.mainPurpsCdNm?.includes(kw))
+      isResidential: residentialKeywords.some(kw => item.mainPurpsCdNm?.includes(kw)),
+      totalFloors: parseInt(item.grndFlrCnt || '0', 10),
+      underFloors: parseInt(item.ugrndFlrCnt || '0', 10),
+      elevatorCount: parseInt(item.rideUseElvtCnt || '0', 10),
+      builtYear: item.useAprDay ? item.useAprDay.substring(0, 4) : '',
+      structure: item.strctCdNm || '',
     }));
 
     // 하나라도 주거용 키워드가 포함되어 있으면 주거용으로 판단
     const isResidential = buildings.some(b => b.isResidential);
+    const main = buildings[0];
 
     return res.status(200).json({
       isResidential,
       buildings,
-      totalCount: data?.response?.body?.totalCount
+      totalCount: data?.response?.body?.totalCount,
+      // 메인 건물 요약
+      totalFloors: main?.totalFloors || 0,
+      underFloors: main?.underFloors || 0,
+      elevatorCount: main?.elevatorCount || 0,
+      builtYear: main?.builtYear || '',
+      structure: main?.structure || '',
     });
 
   } catch (error) {
