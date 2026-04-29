@@ -41,7 +41,9 @@ export default async function handler(
   url.searchParams.append('sigunguCd', sigunguCd as string);
   url.searchParams.append('bjdongCd', bjdongCd as string);
   url.searchParams.append('bun', formatLot(bun));
-  url.searchParams.append('ji', formatLot(ji));
+  if (ji && ji !== '0' && ji !== '0000') {
+    url.searchParams.append('ji', formatLot(ji));
+  }
   url.searchParams.append('_type', 'json');
   url.searchParams.append('numOfRows', '10');
 
