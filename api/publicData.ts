@@ -45,9 +45,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         break;
       }
       case 'barrier': {
-        // 장애인 편의시설
+        // 장애인 편의시설 (시설명 또는 주소 키워드)
         const name = params.name as string;
-        targetUrl = `https://apis.data.go.kr/B554287/DisabledPersonConvenientFacility/getDisConvFaclList?serviceKey=${SERVICE_KEY}&type=json&faclNm=${encodeURIComponent(name)}&numOfRows=10&pageNo=1`;
+        targetUrl = `https://apis.data.go.kr/B554287/DisabledPersonConvenientFacility/getDisConvFaclList?serviceKey=${SERVICE_KEY}&type=json&wfcltNm=${encodeURIComponent(name)}&numOfRows=20&pageNo=1`;
         break;
       }
       case 'railway': {

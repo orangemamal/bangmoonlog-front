@@ -770,38 +770,55 @@ export function Home() {
 
         const analysisScope = isAiAnalysisMode ? `반경 ${analysisRadius}m` : `'${dongName}' 지역`;
 
-        // 2. 공공데이터(장애인 편의시설 + 철도역사 편의시설) 가져오기
+        // 2. 좌표 기반 인근 역 목록 (여러 역 조회)
         const { getBarrierFreeFacilities, getRailwayConvenience } = await import('../services/publicDataService');
         
-        // 동네 이름에서 역 이름 추측 (교통 데이터와 연동)
-        let stationName = dongName.replace('동', '');
-        const stationMapping: {[key: string]: string} = {
-          '다': '을지로입구', '무교': '을지로입구', '서린': '광화문', '태평로': '시청', '남대문로': '을지로입구', '회현': '회현', '명': '명동'
+        const nearbyStations: {[key: string]: string[]} = {
+          '다': ['을지로입구', '시청', '종각'],
+          '무교': ['을지로입구', '광화문', '시청'],
+          '서린': ['광화문', '종각', '안국'],
+          '태평로': ['시청', '을지로입구', '광화문'],
+          '남대문로': ['을지로입구', '회현', '명동'],
+          '회현': ['회현', '명동', '서울역'],
+          '명': ['명동', '을지로입구', '충무로'],
+          '충무로': ['충무로', '을지로3가', '동대입구'],
+          '을지로': ['을지로입구', '을지로3가', '을지로4가'],
         };
-        if (stationMapping[stationName]) stationName = stationMapping[stationName];
+        
+        let stationName = dongName.replace('동', '');
+        const stationList = nearbyStations[stationName] || [stationName || '을지로입구'];
+        const mainStation = stationList[0];
 
-        const [facilityData, railwayData] = await Promise.all([
-          getBarrierFreeFacilities(dongName),
-          getRailwayConvenience(stationName)
+        // 여러 역 + 주소 기반 편의시설 병렬 조회
+        const [railwayResults, facilityData] = await Promise.all([
+          // 인근 역 2개까지 조회 (속도)
+          Promise.all(stationList.slice(0, 2).map(s => getRailwayConvenience(s).catch(() => null))),
+          // 동네 주소로 편의시설 검색
+          getBarrierFreeFacilities(currentRegionName || dongName),
         ]);
         
         let bfStat = "";
         let facilityCount = 0;
-        let railwayFeatures = [];
+        const stationsWithFacility: string[] = [];
 
         // 건물 편의시설 데이터 정리
         if (facilityData && facilityData.response && facilityData.response.body) {
           facilityCount = facilityData.response.body.totalCount || 0;
-          bfStat += `[건물 시설]: 주변에 약 ${facilityCount}곳의 장애인 인증 편의시설 확인. `;
+          if (facilityCount > 0) bfStat += `[건물 시설]: 주변에 약 ${facilityCount}곳의 장애인 인증 편의시설 확인. `;
         }
         
-        // 철도 역사 편의시설 데이터 정리
-        if (railwayData && railwayData.response && railwayData.response.body && railwayData.response.body.items) {
-          bfStat += `[역사 시설]: ${stationName}역 내 엘리베이터/수유실 등 무장애 설비 확인됨. `;
+        // 역사 편의시설 데이터 정리 (여러 역)
+        railwayResults.forEach((data, i) => {
+          if (data && data.response && data.response.body && data.response.body.items) {
+            stationsWithFacility.push(stationList[i]);
+          }
+        });
+        if (stationsWithFacility.length > 0) {
+          bfStat += `[역사 시설]: ${stationsWithFacility.join(', ')}역 내 엘리베이터/수유실 등 무장애 설비 확인됨. `;
         }
 
         if (!bfStat) {
-          bfStat = "해당 지역의 상세 무장애 인프라 데이터를 수집 중입니다. 일반적인 보행 환경을 바탕으로 분석합니다.";
+          bfStat = `${mainStation}역 등 인근 주요 역사의 편의시설 데이터를 조회했으나 상세 정보가 제한적입니다. 일반적인 서울 도심 역사 기준으로 분석합니다.`;
         }
 
         const bfReviewCount = bfReviews.length;
