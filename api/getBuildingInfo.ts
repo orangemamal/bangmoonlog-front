@@ -88,30 +88,32 @@ export default async function handler(
 
     // 하나라도 주거용 키워드가 포함되어 있으면 주거용으로 판단
     const isResidential = buildings.some(b => b.isResidential);
+
+    // [개선] 모든 항목의 승강기 수를 합산 (대형 빌딩은 여러 레코드에 분산될 수 있음)
+    const totalElevCount = buildings.reduce((sum, b) => sum + b.elevatorCount, 0);
     
-    // [개선] 가장 정보가 많은(이름이 있거나 승강기 수가 많은) 항목을 메인으로 선택
+    // [개선] 가장 층수가 높거나 정보가 많은 항목을 메인으로 선택
     const main = buildings.sort((a, b) => {
-      // 1순위: 이름이 있는 것
+      // 1순위: 층수가 높은 것
+      if (b.totalFloors !== a.totalFloors) return b.totalFloors - a.totalFloors;
+      // 2순위: 이름이 있는 것
       const aHasName = a.name && a.name.trim().length > 0;
       const bHasName = b.name && b.name.trim().length > 0;
       if (aHasName && !bHasName) return -1;
       if (!aHasName && bHasName) return 1;
-      
-      // 2순위: 승강기 수가 많은 것
-      return b.elevatorCount - a.elevatorCount;
+      return 0;
     })[0];
 
     return res.status(200).json({
       isResidential,
       buildings,
       totalCount: data?.response?.body?.totalCount,
-      // 메인 건물 요약
+      // 메인 건물 요약 (승강기는 합산값 사용)
       totalFloors: main?.totalFloors || 0,
       underFloors: main?.underFloors || 0,
-      elevatorCount: main?.elevatorCount || 0,
+      elevatorCount: Math.max(main?.elevatorCount || 0, totalElevCount), // 개별 항목 중 최대값 또는 합산값 중 큰 것
       builtYear: main?.builtYear || '',
       structure: main?.structure || '',
-      // 디버깅용 전체 데이터
       fullRaw: data
     });
 
