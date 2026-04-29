@@ -3042,6 +3042,8 @@ export function Home() {
                     // [유도리 개편] 1차 키워드 검사 (역, 공원 등 절대 금지 구역 여부)
                     const isStrictlyBlocked = !checkIsResidential(full) || (data.buildingName && !checkIsResidential(data.buildingName));
                     let isRes = !isStrictlyBlocked;
+                    let purpose: string | null = null;
+                    let bldFloors = 0, bldUnder = 0, bldElev = 0, bldYear = '', bldStr = '';
 
                     if (statusRev === window.naver.maps.Service.Status.OK) {
                       const v2Addr = resRev.v2?.address;
@@ -3055,9 +3057,17 @@ export function Home() {
                         const ji = addrResult.land?.number2;
                         if (code && bun) {
                           const apiResult = await checkBuildingRegistry(code.substring(0, 5), code.substring(5, 10), bun, ji);
-                          // API가 주거용이라 하면 당연히 허용, 
-                          // 비주거라고 해도 블랙리스트(역, 공원 등)만 아니면 '유도리' 있게 허용 상태(isRes=true) 유지
-                          if (apiResult === true) isRes = true;
+                          if (apiResult !== null) {
+                            purpose = apiResult.purpose;
+                            bldFloors = apiResult.totalFloors;
+                            bldUnder = apiResult.underFloors;
+                            bldElev = apiResult.elevatorCount;
+                            bldYear = apiResult.builtYear;
+                            bldStr = apiResult.structure;
+                            // API가 주거용이라 하면 당연히 허용, 
+                            // 비주거라고 해도 블랙리스트(역, 공원 등)만 아니면 '유도리' 있게 허용 상태(isRes=true) 유지
+                            if (apiResult.isResidential === true) isRes = true;
+                          }
                         }
                       }
                     }
@@ -3088,6 +3098,9 @@ export function Home() {
                       const reviewCount = existingLoc ? (existingLoc.count || 0) : 0;
                       const avgRating = existingLoc ? (existingLoc.rating || 0) : 0;
 
+                      const targetReviewsSearch = reviews.filter(r => normalizeBaseAddress(r.address || (r as any).location || '') === normalizedFull);
+                      const hasDetailSearch = targetReviewsSearch.some(r => r.addressDetail && r.addressDetail.trim() !== "");
+
                       infoWindowInstance.current.setOptions({ pixelOffset: new window.naver.maps.Point(0, -24) });
                       infoWindowInstance.current.setContent(renderInfoWindow(
                         <MarkerInfoWindow
@@ -3099,9 +3112,15 @@ export function Home() {
                           reviewCount={reviewCount}
                           avgRating={avgRating}
                           hasWritten={hasWritten}
+                          hasDetailReviews={hasDetailSearch}
+                          buildingPurpose={purpose}
+                          totalFloors={bldFloors}
+                          underFloors={bldUnder}
+                          elevatorCount={bldElev}
+                          builtYear={bldYear}
+                          structure={bldStr}
                           onToggleBookmark={window.__toggleBookmark}
                           onOpenReadList={window.__openReadList}
-
                           onOpenWriteSheet={(addr, lat, lng) => { setSelectedAddress(addr); setSelectedCoord({ lat, lng }); setSheetOpen(true); }}
                           onReportInaccuracy={(addr) => window.__reportInaccuracy(addr)}
                         />
