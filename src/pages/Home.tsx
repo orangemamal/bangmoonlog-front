@@ -570,10 +570,16 @@ export function Home() {
         let publicStat = "해당 지역의 대중교통 이용 데이터를 불러올 수 없습니다.";
         if (publicData && publicData.totalPassengers > 0) {
           const formattedCount = (publicData.totalPassengers / 10000).toFixed(1);
-          const lineInfo = publicData.lines.length > 0 ? `주요 노선: ${publicData.lines.slice(0, 5).join(', ')}` : '';
-          publicStat = `${publicData.period.slice(0,4)}년 ${parseInt(publicData.period.slice(4))}월 기준, 해당 지역 대중교통 월간 이용객 약 ${formattedCount}만명. ${lineInfo}`;
-        } else if (publicData) {
-          publicStat = `${stationName} 인근 대중교통 이용인원 데이터를 조회했으나, 해당 기간 집계 데이터가 아직 없습니다.`;
+          const lineInfo = publicData.lines.length > 0 ? ` 주요 노선: ${publicData.lines.slice(0, 5).join(', ')}` : '';
+          
+          // period가 YYYYMM 형식이면 파싱, 아니면 그대로 표시
+          let periodLabel = publicData.period;
+          if (/^\d{6}$/.test(publicData.period)) {
+            periodLabel = `${publicData.period.slice(0,4)}년 ${parseInt(publicData.period.slice(4))}월`;
+          }
+          
+          const fallbackNote = (publicData as any)._fallback ? ' (지역 평균 추정치)' : '';
+          publicStat = `조회 기준: ${periodLabel}${fallbackNote}, 해당 지역 대중교통 이용객 약 ${formattedCount}만명.${lineInfo}`;
         }
 
         // 방문록이 없고 공공데이터도 실패했을 때만 중단
