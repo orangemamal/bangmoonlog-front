@@ -70,20 +70,36 @@ export default async function handler(
       '교정 및 군사' // 군관사 등
     ];
     
-    const buildings = itemList.map((item: any) => ({
-      name: item.bldNm,
-      purpose: item.mainPurpsCdNm,
-      isResidential: residentialKeywords.some(kw => item.mainPurpsCdNm?.includes(kw)),
-      totalFloors: parseInt(item.grndFlrCnt || '0', 10),
-      underFloors: parseInt(item.ugrndFlrCnt || '0', 10),
-      elevatorCount: parseInt(item.rideUseElvtCnt || '0', 10),
-      builtYear: item.useAprDay ? item.useAprDay.substring(0, 4) : '',
-      structure: item.strctCdNm || '',
-    }));
+    const buildings = itemList.map((item: any) => {
+      const passengerElev = parseInt(item.rideUseElvtCnt || '0', 10);
+      const emergencyElev = parseInt(item.emgnUseElvtCnt || '0', 10);
+      const otherElev = parseInt(item.othElvtCnt || '0', 10);
+      return {
+        name: item.bldNm,
+        purpose: item.mainPurpsCdNm,
+        isResidential: residentialKeywords.some(kw => item.mainPurpsCdNm?.includes(kw)),
+        totalFloors: parseInt(item.grndFlrCnt || '0', 10),
+        underFloors: parseInt(item.ugrndFlrCnt || '0', 10),
+        elevatorCount: passengerElev + emergencyElev + otherElev,
+        builtYear: item.useAprDay ? item.useAprDay.substring(0, 4) : '',
+        structure: item.strctCdNm || '',
+      };
+    });
 
     // 하나라도 주거용 키워드가 포함되어 있으면 주거용으로 판단
     const isResidential = buildings.some(b => b.isResidential);
-    const main = buildings[0];
+    
+    // [개선] 가장 정보가 많은(이름이 있거나 승강기 수가 많은) 항목을 메인으로 선택
+    const main = buildings.sort((a, b) => {
+      // 1순위: 이름이 있는 것
+      const aHasName = a.name && a.name.trim().length > 0;
+      const bHasName = b.name && b.name.trim().length > 0;
+      if (aHasName && !bHasName) return -1;
+      if (!aHasName && bHasName) return 1;
+      
+      // 2순위: 승강기 수가 많은 것
+      return b.elevatorCount - a.elevatorCount;
+    })[0];
 
     return res.status(200).json({
       isResidential,
@@ -95,6 +111,8 @@ export default async function handler(
       elevatorCount: main?.elevatorCount || 0,
       builtYear: main?.builtYear || '',
       structure: main?.structure || '',
+      // 디버깅용 전체 데이터
+      fullRaw: data
     });
 
   } catch (error) {
