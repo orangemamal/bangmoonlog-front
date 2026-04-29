@@ -33,41 +33,61 @@ export const getTransitPassengerCount = async (regionName: string = '서울') =>
       ([key]) => regionName.includes(key)
     )?.[1] || '11'; // 기본값: 서울
 
-    // 최근 2개월 전 데이터 조회 (당월/전월은 집계 중일 수 있음)
+    // 월별 조회 시도 (3개월 전)
     const now = new Date();
-    now.setMonth(now.getMonth() - 2);
+    now.setMonth(now.getMonth() - 3);
     const oprYm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    const url = `${getProxyBase()}?type=transit&ctpvCd=${ctpvCd}&oprYm=${oprYm}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
+    let url = `${getProxyBase()}?type=transit&ctpvCd=${ctpvCd}&oprYm=${oprYm}`;
+    let response = await fetch(url);
+    let data: any = null;
+
+    if (response.ok) {
+      data = await response.json();
+    }
+
+    // 월별 실패 시 연간 데이터로 폴백
+    const items = data?.response?.body?.items?.item;
+    if (!items || (Array.isArray(items) && items.length === 0)) {
+      console.log('[교통] 월별 데이터 없음, 연간 데이터 조회 시도...');
+      const annualUrl = `${getProxyBase()}?type=transit&ctpvCd=${ctpvCd}&mode=annual`;
+      const annualRes = await fetch(annualUrl);
+      if (annualRes.ok) {
+        data = await annualRes.json();
+      }
+    }
 
     // 응답에서 이용인원 데이터 추출
-    const items = data?.response?.body?.items?.item || data?.body?.items?.item || [];
-    if (items.length === 0 && data?.header?.resultCode !== '00') {
-      console.warn('[교통] 대중교통 이용인원 데이터 없음:', data);
+    const finalItems = data?.response?.body?.items?.item || [];
+    const itemList = Array.isArray(finalItems) ? finalItems : [finalItems];
+    
+    if (itemList.length === 0 || !itemList[0]) {
+      console.warn('[교통] 대중교통 이용인원 데이터 없음');
       return null;
     }
 
     // 총 이용인원 합산 및 노선 정보 집계
     let totalPassengers = 0;
     const lines: string[] = [];
-    (Array.isArray(items) ? items : [items]).forEach((item: any) => {
-      totalPassengers += parseInt(item.psngr_num || item.psngrNum || '0', 10);
-      if (item.line_nm || item.lineNm) {
-        const lineName = item.line_nm || item.lineNm;
+    itemList.forEach((item: any) => {
+      // API 응답 필드: utztn_nope (이용건수)
+      totalPassengers += parseInt(item.utztn_nope || item.psngr_num || '0', 10);
+      if (item.rte_nm || item.line_nm) {
+        const lineName = item.rte_nm || item.line_nm;
         if (!lines.includes(lineName)) lines.push(lineName);
       }
     });
 
+    const period = data?.response?.body?.items?.item?.[0]?.opr_ym 
+      || data?.response?.body?.items?.item?.[0]?.opr_yr 
+      || oprYm;
+
     return {
       totalPassengers,
-      lines: lines.slice(0, 10), // 상위 10개 노선
-      period: oprYm,
+      lines: lines.slice(0, 10),
+      period: String(period),
       cityCode: ctpvCd,
-      itemCount: Array.isArray(items) ? items.length : 1,
-      raw: items,
+      itemCount: itemList.length,
     };
   } catch (error) {
     console.warn('[교통] 대중교통 이용인원 조회 실패:', regionName, error);

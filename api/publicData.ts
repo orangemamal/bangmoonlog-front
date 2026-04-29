@@ -15,12 +15,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     switch (type) {
       case 'transit': {
-        // 국토교통부 대중교통 이용인원수 (월별)
-        const { ctpvCd, oprYm } = params;
-        // 기본값: 서울(11), 최근 월
+        // 국토교통부 대중교통 이용인원수
+        const { ctpvCd, oprYm, mode } = params;
         const now = new Date();
-        const defaultYm = `${now.getFullYear()}${String(now.getMonth()).padStart(2, '0')}`;
-        targetUrl = `https://apis.data.go.kr/1613000/PublicTransportationPassengerCount/getMonthlyPublicTransportationPassengerCount?serviceKey=${SERVICE_KEY}&pageNo=1&numOfRows=50&dataType=JSON&ctpv_cd=${ctpvCd || '11'}&opr_ym=${oprYm || defaultYm}`;
+        
+        if (mode === 'annual') {
+          // 연간 조회 (더 안정적)
+          const year = (now.getFullYear() - 1).toString();
+          targetUrl = `https://apis.data.go.kr/1613000/PublicTransportationPassengerCount/getAnnualPublicTransportationPassengerCount?serviceKey=${SERVICE_KEY}&pageNo=1&numOfRows=50&dataType=JSON&ctpv_cd=${ctpvCd || '11'}&opr_yr=${year}`;
+        } else {
+          // 월별 조회 (3개월 전 데이터 사용 - 집계 안정성)
+          now.setMonth(now.getMonth() - 3);
+          const defaultYm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+          targetUrl = `https://apis.data.go.kr/1613000/PublicTransportationPassengerCount/getMonthlyPublicTransportationPassengerCount?serviceKey=${SERVICE_KEY}&pageNo=1&numOfRows=50&dataType=JSON&ctpv_cd=${ctpvCd || '11'}&opr_ym=${oprYm || defaultYm}`;
+        }
+        console.log('[transit proxy] URL:', targetUrl);
         break;
       }
       case 'cctv': {
