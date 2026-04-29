@@ -239,3 +239,73 @@ export const getNationalBusArrival = async (cityCode: string, stationId: string)
   // 추후 프록시에 bus 타입 추가 시 연동
   return null;
 };
+
+// 주소 → 법정동코드/지번 매핑 (서울 주요 구)
+const DISTRICT_MAP: Record<string, { sigungu: string; bjdong: Record<string, string> }> = {
+  '중구': { sigungu: '11140', bjdong: { '다동': '10300', '무교동': '10200', '을지로': '11500', '회현동': '12200', '명동': '11400', '남대문로': '10700', '서소문동': '10100' } },
+  '종로구': { sigungu: '11110', bjdong: { '종로': '15400', '청진동': '10200', '서린동': '10300', '수송동': '10400', '관철동': '14600' } },
+  '강남구': { sigungu: '11680', bjdong: { '역삼동': '10300', '삼성동': '10500', '대치동': '10700', '논현동': '10100' } },
+  '서초구': { sigungu: '11650', bjdong: { '서초동': '10800', '반포동': '10500', '잠원동': '10300', '방배동': '10100' } },
+  '마포구': { sigungu: '11440', bjdong: { '합정동': '10100', '망원동': '10200', '연남동': '10400', '상수동': '10300' } },
+  '용산구': { sigungu: '11170', bjdong: { '한남동': '10800', '이태원동': '10600', '용산동': '10100' } },
+  '송파구': { sigungu: '11710', bjdong: { '잠실동': '10400', '가락동': '10800', '문정동': '10600' } },
+  '영등포구': { sigungu: '11560', bjdong: { '여의도동': '10100', '영등포동': '10200', '당산동': '10400' } },
+};
+
+/**
+ * 8. 건축물대장 정보 (국토교통부)
+ * 주소에서 건물 층수, 승강기, 건축연도 등 조회
+ */
+export const getBuildingInfo = async (address: string) => {
+  try {
+    if (!address) return null;
+
+    // 주소 파싱: "서울 중구 다동 70-5" → sigunguCd, bjdongCd, bun, ji
+    const parts = address.replace(/특별시|광역시|도/g, '').trim().split(/\s+/);
+    const guName = parts.find(p => p.endsWith('구'));
+    const dongName = parts.find(p => p.endsWith('동') || p.endsWith('로'));
+    const lotPart = parts.find(p => /^\d/.test(p)); // "70-5" 등
+
+    if (!guName) return null;
+
+    const district = DISTRICT_MAP[guName];
+    if (!district) return null;
+
+    // 동 이름 매칭
+    const dongKey = dongName ? Object.keys(district.bjdong).find(k => dongName.includes(k)) : null;
+    const bjdongCd = dongKey ? district.bjdong[dongKey] : Object.values(district.bjdong)[0];
+
+    // 번지 파싱
+    let bun = '0000', ji = '0000';
+    if (lotPart) {
+      const [mainNum, subNum] = lotPart.split('-');
+      bun = (mainNum || '0').padStart(4, '0');
+      ji = (subNum || '0').padStart(4, '0');
+    }
+
+    const url = `${getProxyBase()}?type=building&sigunguCd=${district.sigungu}&bjdongCd=${bjdongCd}&bun=${bun}&ji=${ji}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const item = data?.response?.body?.items?.item;
+    const info = Array.isArray(item) ? item[0] : item;
+
+    if (!info) return null;
+
+    return {
+      buildingName: info.bldNm || '',           // 건물명
+      mainPurpose: info.mainPurpsCdNm || '',     // 주용도
+      totalFloors: parseInt(info.grndFlrCnt || '0', 10),  // 지상층수
+      underFloors: parseInt(info.ugrndFlrCnt || '0', 10), // 지하층수
+      hasElevator: parseInt(info.rideUseElvtCnt || '0', 10) > 0, // 승강기 유무
+      elevatorCount: parseInt(info.rideUseElvtCnt || '0', 10),    // 승강기 수
+      builtYear: info.useAprDay ? info.useAprDay.substring(0, 4) : '', // 사용승인년도
+      totalArea: parseFloat(info.totArea || '0'),  // 연면적
+      structure: info.strctCdNm || '',            // 구조
+    };
+  } catch (error) {
+    console.warn('[건물] 건축물대장 조회 실패:', address, error);
+    return null;
+  }
+};

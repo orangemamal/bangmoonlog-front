@@ -56,6 +56,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         targetUrl = `https://apis.data.go.kr/1613000/SubwayInfoService/getKwrdSubwaySttnList?serviceKey=${SERVICE_KEY}&_type=json&subwayStationName=${encodeURIComponent(station)}`;
         break;
       }
+      case 'building': {
+        // 건축물대장 표제부 (국토교통부)
+        const { sigunguCd, bjdongCd, bun, ji } = params;
+        targetUrl = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?serviceKey=${SERVICE_KEY}&sigunguCd=${sigunguCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun || '0000'}&ji=${ji || '0000'}&numOfRows=1&pageNo=1&_type=json`;
+        break;
+      }
       default:
         return res.status(400).json({ error: 'Invalid type parameter' });
     }

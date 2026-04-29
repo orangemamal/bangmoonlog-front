@@ -1,5 +1,17 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface BuildingData {
+  buildingName: string;
+  mainPurpose: string;
+  totalFloors: number;
+  underFloors: number;
+  hasElevator: boolean;
+  elevatorCount: number;
+  builtYear: string;
+  totalArea: number;
+  structure: string;
+}
 
 interface MarkerInfoWindowProps {
   address: string;
@@ -35,7 +47,20 @@ export const MarkerInfoWindow: React.FC<MarkerInfoWindowProps> = ({
   onReportInaccuracy,
 }) => {
   const [showReportTooltip, setShowReportTooltip] = React.useState(false);
+  const [buildingInfo, setBuildingInfo] = useState<BuildingData | null>(null);
+  const [loadingBuilding, setLoadingBuilding] = useState(false);
   const buttonText = hasWritten ? "작성 완료" : "방문록 쓰기";
+
+  useEffect(() => {
+    if (!address) return;
+    setLoadingBuilding(true);
+    import('../../services/publicDataService').then(s => 
+      s.getBuildingInfo(address)
+    ).then(data => {
+      setBuildingInfo(data);
+      setLoadingBuilding(false);
+    }).catch(() => setLoadingBuilding(false));
+  }, [address]);
 
   return (
     <div className="iw-card">
@@ -60,12 +85,40 @@ export const MarkerInfoWindow: React.FC<MarkerInfoWindowProps> = ({
           <span>{address}</span>
         </div>
         
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: '#F2F4F6', borderRadius: '6px', marginBottom: '12px' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: '#F2F4F6', borderRadius: '6px', marginBottom: '8px' }}>
           <span style={{ fontSize: '11px', color: '#4E5968', fontWeight: 600 }}>공공데이터 기준:</span>
           <span style={{ fontSize: '11px', color: '#3182F6', fontWeight: 700 }}>
             {buildingPurpose || '정보 없음'}
           </span>
         </div>
+
+        {/* 건축물대장 건물 정보 */}
+        {loadingBuilding ? (
+          <div style={{ padding: '8px', background: '#F2F4F6', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', color: '#8B95A1', textAlign: 'center' }}>
+            🏗️ 건물 정보 조회 중...
+          </div>
+        ) : buildingInfo ? (
+          <div style={{ padding: '10px 12px', background: '#F2F4F6', borderRadius: '10px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', background: '#fff', padding: '3px 8px', borderRadius: '6px', color: '#333D4B', fontWeight: 600 }}>
+                🏢 {buildingInfo.totalFloors}층{buildingInfo.underFloors > 0 ? ` (B${buildingInfo.underFloors})` : ''}
+              </span>
+              <span style={{ fontSize: '11px', background: buildingInfo.hasElevator ? '#E8F5E9' : '#FFF3E0', padding: '3px 8px', borderRadius: '6px', color: buildingInfo.hasElevator ? '#2E7D32' : '#E65100', fontWeight: 600 }}>
+                {buildingInfo.hasElevator ? `🛗 승강기 ${buildingInfo.elevatorCount}대` : '🚫 승강기 없음'}
+              </span>
+              {buildingInfo.builtYear && (
+                <span style={{ fontSize: '11px', background: '#fff', padding: '3px 8px', borderRadius: '6px', color: '#333D4B', fontWeight: 600 }}>
+                  📅 {buildingInfo.builtYear}년
+                </span>
+              )}
+            </div>
+            {buildingInfo.buildingName && (
+              <div style={{ marginTop: '6px', fontSize: '10px', color: '#8B95A1' }}>
+                {buildingInfo.buildingName} · {buildingInfo.structure || buildingInfo.mainPurpose}
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {reviewCount > 0 ? (
           <div className="iw-stats">
